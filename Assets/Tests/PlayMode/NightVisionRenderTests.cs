@@ -166,6 +166,83 @@ public sealed class NightVisionRenderTests
     }
 
     [UnityTest]
+    public IEnumerator PanicDarkensEdgesAndAddsVerticalScratchesWithoutChangingTheVolume()
+    {
+        effects.pixelation = false;
+        texture.SetPixels(Enumerable.Repeat(new Color(0.5f, 0.5f, 0.5f, 1f), 1024).ToArray());
+        texture.Apply();
+        yield return null;
+        yield return null;
+        Color32[] clear = ReadPixels();
+        PlayerFearEffects fear = camera.gameObject.AddComponent<PlayerFearEffects>();
+        fear.fovShudder = 0f;
+        fear.buildUpSpeed = 1000f;
+        fear.recoverySpeed = 1000f;
+        fear.verticalGrainStrength = 0f;
+        GameObject quad = objects.OfType<GameObject>().Single(obj => obj.GetComponent<MeshFilter>() != null);
+        quad.AddComponent<EnemyFearSource>();
+        Physics.SyncTransforms();
+        yield return new WaitForSeconds(0.02f);
+        yield return null;
+        yield return null;
+        Assert.That(fear.CurrentIntensity, Is.GreaterThan(0.8f));
+        Color32[] vignette = ReadPixels();
+        int edge = 72 * 256 + 12;
+        Assert.That(vignette[edge].r, Is.LessThan(clear[edge].r * 0.8f));
+        Assert.That(CenterBrightness(vignette), Is.EqualTo(CenterBrightness(clear)).Within(0.02f));
+
+        fear.vignetteStrength = 0f;
+        fear.verticalGrainStrength = 1f;
+        fear.verticalLineCount = 16f;
+        fear.filmJitterSpeed = 0f;
+        yield return null;
+        yield return null;
+        Color32[] scratches = ReadPixels();
+        float horizontalDifference = 0f;
+        float verticalDifference = 0f;
+        for (int y = 10; y < 133; y++)
+        {
+            for (int x = 10; x < 245; x++)
+            {
+                int pixel = y * 256 + x;
+                horizontalDifference += Mathf.Abs(scratches[pixel].r - scratches[pixel + 1].r);
+                verticalDifference += Mathf.Abs(scratches[pixel].r - scratches[pixel + 256].r);
+            }
+        }
+        Assert.That(Variance(scratches), Is.GreaterThan(Variance(clear) + 0.0001f));
+        Assert.That(horizontalDifference, Is.GreaterThan(verticalDifference * 2f),
+            "Scratches must be elongated vertically rather than horizontal scanlines.");
+        Assert.That(grain.intensity.value, Is.Zero, "Panic must not mutate the shared Volume.");
+
+        GameObject otherViewer = Track(new GameObject("Independent panic render viewer"));
+        Camera otherCamera = otherViewer.AddComponent<Camera>();
+        otherCamera.transform.SetPositionAndRotation(camera.transform.position, camera.transform.rotation);
+        otherCamera.cullingMask = camera.cullingMask;
+        otherCamera.clearFlags = CameraClearFlags.SolidColor;
+        otherCamera.backgroundColor = Color.black;
+        otherViewer.AddComponent<PlayerCameraEffects>().pixelHeight = 144;
+        UniversalAdditionalCameraData otherData = otherCamera.GetUniversalAdditionalCameraData();
+        otherData.volumeLayerMask = 1 << 30;
+        otherData.renderPostProcessing = true;
+        RenderTexture otherTarget = Track(new RenderTexture(256, 144, 24,
+            RenderTextureFormat.ARGB32, RenderTextureReadWrite.Linear));
+        otherTarget.Create();
+        otherCamera.targetTexture = otherTarget;
+        yield return null;
+        yield return null;
+        Assert.That(Variance(ReadPixels(otherTarget)), Is.EqualTo(Variance(clear)).Within(0.00001f),
+            "The renderer material must not leak panic to another camera.");
+        Assert.That(Variance(ReadPixels()), Is.GreaterThan(Variance(clear) + 0.0001f));
+        otherCamera.targetTexture = null;
+        otherTarget.Release();
+        otherCamera.enabled = false;
+        fear.enabled = false;
+        yield return null;
+        yield return null;
+        Assert.That(Variance(ReadPixels()), Is.EqualTo(Variance(clear)).Within(0.00001f));
+    }
+
+    [UnityTest]
     public IEnumerator OverlayUiKeepsItsFullResolutionWhileWorldPixelationIsEnabled()
     {
         if (Application.isBatchMode)
@@ -183,8 +260,16 @@ public sealed class NightVisionRenderTests
         rect.offsetMin = Vector2.zero;
         rect.offsetMax = Vector2.zero;
         imageObject.GetComponent<RawImage>().texture = texture;
+        PlayerFearEffects fear = camera.gameObject.AddComponent<PlayerFearEffects>();
+        fear.fovShudder = 0f;
+        fear.buildUpSpeed = 1000f;
+        objects.OfType<GameObject>().Single(obj => obj.GetComponent<MeshFilter>() != null)
+            .AddComponent<EnemyFearSource>();
+        Physics.SyncTransforms();
+        yield return new WaitForSeconds(0.02f);
         yield return null;
         yield return null;
+        Assert.That(fear.CurrentIntensity, Is.GreaterThan(0.8f));
         Canvas.ForceUpdateCanvases();
         yield return new WaitForEndOfFrame();
         Texture2D screenshot = ScreenCapture.CaptureScreenshotAsTexture();
@@ -196,10 +281,86 @@ public sealed class NightVisionRenderTests
             Assert.That(colors, Is.GreaterThan(80),
                 $"Overlay UI must remain crisp ({screenshot.width}x{screenshot.height}, canvas {rect.rect}).");
         }
+
         finally
         {
             Object.DestroyImmediate(screenshot);
         }
+    }
+
+    [UnityTest]
+    public IEnumerator ScratchThicknessChangesRenderedWidthWithoutChangingLineCountOrPanic()
+    {
+        texture.SetPixels(Enumerable.Repeat(new Color(0.5f, 0.5f, 0.5f, 1f), 1024).ToArray());
+        texture.Apply();
+        PlayerFearEffects fear = camera.gameObject.AddComponent<PlayerFearEffects>();
+        fear.fovShudder = 0f;
+        fear.buildUpSpeed = 1000f;
+        fear.vignetteStrength = 0f;
+        fear.verticalGrainStrength = 1f;
+        fear.verticalLineCount = 8f;
+        fear.filmJitterSpeed = 0f;
+        objects.OfType<GameObject>().Single(obj => obj.GetComponent<MeshFilter>() != null)
+            .AddComponent<EnemyFearSource>();
+        Physics.SyncTransforms();
+        yield return new WaitForSeconds(0.02f);
+        yield return null;
+        float intensity = fear.CurrentIntensity;
+        Assert.That(intensity, Is.GreaterThan(0.8f));
+        foreach (bool pixelation in new[] { false, true })
+        {
+            effects.pixelation = pixelation;
+            fear.verticalGrainStrength = 0f;
+            yield return null;
+            yield return null;
+            Color32[] clear = ReadPixels();
+            fear.verticalGrainStrength = 1f;
+            fear.verticalLineThickness = 1f;
+            yield return null;
+            yield return null;
+            bool[] originalColumns = ScratchColumns(ReadPixels(), clear);
+            fear.verticalLineThickness = 0.5f;
+            yield return null;
+            yield return null;
+            bool[] thinColumns = ScratchColumns(ReadPixels(), clear);
+            Assert.That(thinColumns.Count(changed => changed), Is.GreaterThan(0));
+            Assert.That(thinColumns.Count(changed => changed),
+                Is.LessThan(originalColumns.Count(changed => changed) * 0.75f),
+                "Half thickness must visibly reduce the width, even with world pixelation enabled.");
+            Assert.That(ScratchGroups(thinColumns), Is.EqualTo(ScratchGroups(originalColumns)),
+                "Thickness must not change the number of scratch bands.");
+            Assert.That(fear.CurrentIntensity, Is.EqualTo(intensity));
+            Assert.That(fear.verticalLineCount, Is.EqualTo(8f));
+        }
+    }
+
+    private static bool[] ScratchColumns(Color32[] image, Color32[] clear)
+    {
+        bool[] columns = new bool[256];
+        for (int x = 0; x < 256; x++)
+        {
+            for (int y = 0; y < 144; y++)
+            {
+                int pixel = y * 256 + x;
+                if (Mathf.Abs(image[pixel].r - clear[pixel].r) > 3)
+                {
+                    columns[x] = true;
+                    break;
+                }
+            }
+        }
+        return columns;
+    }
+
+    private static int ScratchGroups(bool[] columns)
+    {
+        int groups = 0;
+        for (int x = 0; x < columns.Length; x++)
+        {
+            if (columns[x] && (x == 0 || !columns[x - 1]))
+                groups++;
+        }
+        return groups;
     }
 
     [UnityTest]
@@ -240,13 +401,13 @@ public sealed class NightVisionRenderTests
         return instance;
     }
 
-    private Color32[] ReadPixels()
+    private Color32[] ReadPixels(RenderTexture surface = null)
     {
         RenderTexture previous = RenderTexture.active;
         Texture2D image = new Texture2D(256, 144, TextureFormat.RGBA32, false, true);
         try
         {
-            RenderTexture.active = target;
+            RenderTexture.active = surface != null ? surface : target;
             image.ReadPixels(new Rect(0, 0, 256, 144), 0, 0);
             image.Apply();
             return image.GetPixels32();

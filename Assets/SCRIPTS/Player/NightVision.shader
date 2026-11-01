@@ -9,6 +9,9 @@ Shader "Hidden/Capstone/NightVision"
         #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
         #include "Packages/com.unity.render-pipelines.core/Runtime/Utilities/Blit.hlsl"
         float4 _PixelGrid;
+        float4 _Panic;
+        float _FilmTime;
+        float _FilmLineThickness;
         ENDHLSL
 
         Pass
@@ -97,11 +100,36 @@ Shader "Hidden/Capstone/NightVision"
             #pragma vertex Vert
             #pragma fragment PixelFragment
 
+            float FilmHash(float2 seed)
+            {
+                return frac(sin(dot(seed, float2(127.1, 311.7))) * 43758.5453);
+            }
+
             half4 PixelFragment(Varyings input) : SV_Target
             {
                 UNITY_SETUP_STEREO_EYE_INDEX_POST_VERTEX(input);
-                float2 uv = (floor(input.texcoord * _PixelGrid.xy) + 0.5) / _PixelGrid.xy;
-                return SAMPLE_TEXTURE2D_X(_BlitTexture, sampler_PointClamp, uv);
+                float2 uv = input.texcoord;
+                if (_PixelGrid.z > 0.5)
+                    uv = (floor(uv * _PixelGrid.xy) + 0.5) / _PixelGrid.xy;
+                half4 scene = SAMPLE_TEXTURE2D_X(_BlitTexture, sampler_PointClamp, uv);
+                float2 centered = (input.texcoord - 0.5) * 2.0;
+                float vignette = smoothstep(0.25, 1.2, length(centered));
+                scene.rgb *= 1.0 - vignette * _Panic.x * _Panic.y;
+
+                // Narrow, broken vertical scratches drift between film frames, not horizontal scanlines.
+                float frame = floor(_FilmTime);
+                float drift = FilmHash(float2(frame, 7.0));
+                float column = input.texcoord.x * max(_Panic.w, 1.0) + drift;
+                float lineSeed = FilmHash(float2(floor(column), frame));
+                float scratchMask = 1.0 - smoothstep(0.015 * _FilmLineThickness,
+                    0.11 * _FilmLineThickness, abs(frac(column) - 0.5));
+                float broken = smoothstep(0.2, 0.65,
+                    FilmHash(float2(floor(column), floor(input.texcoord.y * 9.0) + frame)));
+                float scratches = scratchMask * step(0.4, lineSeed) * broken;
+                float amount = scratches * _Panic.x * _Panic.z;
+                float tone = step(0.75, lineSeed) * 0.65;
+                scene.rgb = lerp(scene.rgb, tone.xxx, amount);
+                return scene;
             }
             ENDHLSL
         }

@@ -251,6 +251,36 @@ public sealed class NetworkPlayerTests : InputTestFixture
     }
 
     [UnityTest]
+    public IEnumerator PanicOnlyAffectsTheOwnerEvenIfARemoteCameraIsActivated()
+    {
+        SpawnPlayers();
+        yield return null;
+        Camera localCamera = localPlayer.GetComponentInChildren<Camera>(true);
+        Camera remoteCamera = remotePlayer.GetComponentInChildren<Camera>(true);
+        localPlayer.GetComponent<PlayerLook>().enabled = false;
+        PlayerFearEffects localFear = localCamera.GetComponent<PlayerFearEffects>();
+        PlayerFearEffects remoteFear = remoteCamera.GetComponent<PlayerFearEffects>();
+        localFear.buildUpSpeed = 1000f;
+        inviteTarget = GameObject.CreatePrimitive(PrimitiveType.Cube);
+        inviteTarget.name = "Fear test enemy";
+        inviteTarget.transform.position = localCamera.transform.position + Vector3.forward * 2f;
+        inviteTarget.AddComponent<EnemyFearSource>();
+        remoteCamera.transform.position = localCamera.transform.position;
+        remoteCamera.transform.rotation = localCamera.transform.rotation;
+        ViewRoot(remotePlayer, "firstPersonView").SetActive(true);
+        remoteCamera.GetComponent<AudioListener>().enabled = false;
+        Physics.SyncTransforms();
+        yield return null;
+        yield return null;
+        Assert.That(localFear.CurrentIntensity, Is.GreaterThan(0.9f));
+        Assert.That(remoteFear.CurrentIntensity, Is.Zero);
+        Assert.That(remoteCamera.fieldOfView, Is.EqualTo(65f));
+        localPlayer.GetComponent<PlayerPresentation>().enabled = false;
+        Assert.That(localFear.CurrentIntensity, Is.Zero);
+        Assert.That(localCamera.fieldOfView, Is.EqualTo(65f));
+    }
+
+    [UnityTest]
     public IEnumerator CameraFacingAndStatesSyncWhileArtworkAndBillboardsStayLocal()
     {
         SpawnPlayers();

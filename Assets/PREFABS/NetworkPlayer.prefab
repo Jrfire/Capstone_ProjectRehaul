@@ -13,6 +13,7 @@ GameObject:
   - component: {fileID: 6880050320229717931}
   - component: {fileID: 2400176252537241034}
   - component: {fileID: 2400176252537241035}
+  - component: {fileID: 2400176252537241036}
   m_Layer: 0
   m_Name: PlayerCamera
   m_TagString: MainCamera
@@ -152,6 +153,30 @@ MonoBehaviour:
   m_EditorClassIdentifier: Capstone.Player::PlayerCameraEffects
   pixelation: 1
   pixelHeight: 270
+--- !u!114 &2400176252537241036
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 540132781317581925}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e9b7b3081a1b4232a8702c772a45be0a, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Capstone.Player::PlayerFearEffects
+  buildUpSpeed: 5
+  recoverySpeed: 2
+  occlusionMask:
+    serializedVersion: 2
+    m_Bits: 51
+  vignetteStrength: 0.65
+  verticalGrainStrength: 0.25
+  verticalLineCount: 80
+  verticalLineThickness: 0.1
+  filmJitterSpeed: 24
+  fovShudder: 1.25
+  shudderFrequency: 9
 --- !u!1 &3271051443644085654
 GameObject:
   m_ObjectHideFlags: 0

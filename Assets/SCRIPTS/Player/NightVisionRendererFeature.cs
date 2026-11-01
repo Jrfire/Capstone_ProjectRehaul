@@ -40,7 +40,8 @@ public sealed class NightVisionRendererFeature : ScriptableRendererFeature
         NightFog fog = VolumeManager.instance.stack.GetComponent<NightFog>();
         if (fog != null && fog.active && fog.enabled.value && fog.density.value > 0f)
             renderer.EnqueuePass(fogPass);
-        if (effects.pixelation)
+        PlayerFearEffects fear = camera.GetComponent<PlayerFearEffects>();
+        if (effects.pixelation || (fear != null && fear.CanAffectCamera && fear.CurrentIntensity > 0f))
             renderer.EnqueuePass(pixelPass);
     }
 
@@ -98,16 +99,24 @@ public sealed class NightVisionRendererFeature : ScriptableRendererFeature
             }
             else
             {
-                int height = Mathf.Min(cameraData.camera.GetComponent<PlayerCameraEffects>().pixelHeight,
+                PlayerCameraEffects effects = cameraData.camera.GetComponent<PlayerCameraEffects>();
+                int height = Mathf.Clamp(effects.pixelHeight, 1,
                     cameraData.cameraTargetDescriptor.height);
                 int width = Mathf.Max(1, Mathf.RoundToInt(height *
                     (float)cameraData.cameraTargetDescriptor.width / cameraData.cameraTargetDescriptor.height));
-                material.SetVector("_PixelGrid", new Vector4(width, Mathf.Max(1, height), 0f, 0f));
+                material.SetVector("_PixelGrid", new Vector4(width, height, effects.pixelation ? 1f : 0f, 0f));
+                PlayerFearEffects fear = cameraData.camera.GetComponent<PlayerFearEffects>();
+                bool panic = fear != null && fear.CanAffectCamera;
+                material.SetVector("_Panic", panic ? new Vector4(fear.CurrentIntensity,
+                    Mathf.Clamp01(fear.vignetteStrength), Mathf.Clamp01(fear.verticalGrainStrength),
+                    Mathf.Max(1f, fear.verticalLineCount)) : Vector4.zero);
+                material.SetFloat("_FilmTime", panic ? Time.time * Mathf.Max(0f, fear.filmJitterSpeed) : 0f);
+                material.SetFloat("_FilmLineThickness", panic ? Mathf.Clamp(fear.verticalLineThickness, 0.05f, 2f) : 1f);
             }
 
             TextureHandle source = resources.activeColorTexture;
             TextureDesc descriptor = graph.GetTextureDesc(source);
-            descriptor.name = shaderPass == 0 ? "Night Volumetrics" : "Pixelated World";
+            descriptor.name = shaderPass == 0 ? "Night Volumetrics" : "Pixelated World and Panic";
             descriptor.clearBuffer = false;
             TextureHandle destination = graph.CreateTexture(descriptor);
             using (var builder = graph.AddRasterRenderPass<PassData>(descriptor.name, out var data))

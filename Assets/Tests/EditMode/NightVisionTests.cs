@@ -15,6 +15,8 @@ public sealed class NightVisionTests
         Camera camera = player.GetComponentInChildren<Camera>(true);
         Assert.That(camera.GetComponent<PlayerCameraEffects>().pixelation, Is.True);
         Assert.That(camera.GetComponent<PlayerCameraEffects>().pixelHeight, Is.EqualTo(270));
+        Assert.That(camera.GetComponent<PlayerFearEffects>(), Is.Not.Null);
+        Assert.That(camera.GetComponent<PlayerFearEffects>().verticalLineThickness, Is.EqualTo(0.5f));
         Assert.That(camera.farClipPlane, Is.EqualTo(40f));
         Assert.That(camera.GetUniversalAdditionalCameraData().renderPostProcessing, Is.True);
         Assert.That(camera.GetUniversalAdditionalCameraData().requiresDepthTexture, Is.True);
@@ -53,6 +55,32 @@ public sealed class NightVisionTests
                 root.GetComponentsInChildren<Light>(true)).Single(light => light.type == LightType.Directional);
             Assert.That(moon.intensity, Is.EqualTo(0.25f));
             Assert.That(moon.shadows, Is.Not.EqualTo(LightShadows.None));
+        }
+
+        finally
+        {
+            EditorSceneManager.CloseScene(scene, true);
+        }
+    }
+
+    [Test]
+    public void SampleSceneHasAVisibleFearTestObjectWithDistanceControls()
+    {
+        var scene = EditorSceneManager.OpenScene("Assets/Scenes/SampleScene.unity", OpenSceneMode.Additive);
+        try
+        {
+            EnemyFearSource source = scene.GetRootGameObjects().SelectMany(root =>
+                root.GetComponentsInChildren<EnemyFearSource>(true)).Single();
+            Assert.That(source.name, Is.EqualTo("EnemyFearTest"));
+            Assert.That(source.visibilityRenderer, Is.EqualTo(source.GetComponent<Renderer>()));
+            Assert.That(source.visibilityRenderer.enabled, Is.True);
+            Assert.That(source.GetComponent<Collider>(), Is.Not.Null);
+            Assert.That(source.GetComponent<MeshFilter>().sharedMesh, Is.Not.Null);
+            Assert.That(source.fullIntensityDistance, Is.EqualTo(2f));
+            Assert.That(source.maxDistance, Is.EqualTo(25f));
+            Assert.That(source.StrengthAtDistance(2f), Is.EqualTo(1f));
+            Assert.That(source.StrengthAtDistance(13.5f), Is.EqualTo(0.5f));
+            Assert.That(source.StrengthAtDistance(25f), Is.Zero);
         }
         finally
         {
