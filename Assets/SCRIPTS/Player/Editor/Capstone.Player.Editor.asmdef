@@ -1,0 +1,10 @@
+{
+    "name": "Capstone.Player.Editor",
+    "references": [
+        "Capstone.Player",
+        "Unity.2D.Sprite.Editor"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ]
+}

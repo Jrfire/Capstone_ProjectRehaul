@@ -6,7 +6,7 @@
             "id": "df70fa95-8a34-4494-b137-73ab6b9c7d37",
             "actions": [
                 {
-                    "name": "Move",
+                    "name": "Movement",
                     "type": "Value",
                     "id": "351f2ccd-1f9f-44bf-9bec-d62ac5c5f408",
                     "expectedControlType": "Vector2",
@@ -27,6 +27,15 @@
                     "name": "Attack",
                     "type": "Button",
                     "id": "6c2ab1b8-8984-453a-af3d-a3c78ae1679a",
+                    "expectedControlType": "Button",
+                    "processors": "",
+                    "interactions": "",
+                    "initialStateCheck": false
+                },
+                {
+                    "name": "Use",
+                    "type": "Button",
+                    "id": "758b8161-bdcc-4135-8706-81f81a8b1230",
                     "expectedControlType": "Button",
                     "processors": "",
                     "interactions": "",
@@ -90,23 +99,34 @@
             "bindings": [
                 {
                     "name": "",
+                    "id": "4807eafe-1109-4e60-81e8-f4b6bc5d260b",
+                    "path": "<Keyboard>/e",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "Keyboard&Mouse",
+                    "action": "Use",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "",
                     "id": "978bfe49-cc26-4a3d-ab7b-7d7a29327403",
                     "path": "<Gamepad>/leftStick",
                     "interactions": "",
                     "processors": "",
                     "groups": ";Gamepad",
-                    "action": "Move",
+                    "action": "Movement",
                     "isComposite": false,
                     "isPartOfComposite": false
                 },
                 {
                     "name": "WASD",
                     "id": "00ca640b-d935-4593-8157-c05846ea39b3",
-                    "path": "Dpad",
+                    "path": "2DVector",
                     "interactions": "",
                     "processors": "",
                     "groups": "",
-                    "action": "Move",
+                    "action": "Movement",
                     "isComposite": true,
                     "isPartOfComposite": false
                 },
@@ -117,7 +137,7 @@
                     "interactions": "",
                     "processors": "",
                     "groups": ";Keyboard&Mouse",
-                    "action": "Move",
+                    "action": "Movement",
                     "isComposite": false,
                     "isPartOfComposite": true
                 },
@@ -128,7 +148,7 @@
                     "interactions": "",
                     "processors": "",
                     "groups": ";Keyboard&Mouse",
-                    "action": "Move",
+                    "action": "Movement",
                     "isComposite": false,
                     "isPartOfComposite": true
                 },
@@ -139,7 +159,7 @@
                     "interactions": "",
                     "processors": "",
                     "groups": ";Keyboard&Mouse",
-                    "action": "Move",
+                    "action": "Movement",
                     "isComposite": false,
                     "isPartOfComposite": true
                 },
@@ -150,7 +170,7 @@
                     "interactions": "",
                     "processors": "",
                     "groups": ";Keyboard&Mouse",
-                    "action": "Move",
+                    "action": "Movement",
                     "isComposite": false,
                     "isPartOfComposite": true
                 },
@@ -161,7 +181,7 @@
                     "interactions": "",
                     "processors": "",
                     "groups": ";Keyboard&Mouse",
-                    "action": "Move",
+                    "action": "Movement",
                     "isComposite": false,
                     "isPartOfComposite": true
                 },
@@ -172,7 +192,7 @@
                     "interactions": "",
                     "processors": "",
                     "groups": ";Keyboard&Mouse",
-                    "action": "Move",
+                    "action": "Movement",
                     "isComposite": false,
                     "isPartOfComposite": true
                 },
@@ -183,7 +203,7 @@
                     "interactions": "",
                     "processors": "",
                     "groups": ";Keyboard&Mouse",
-                    "action": "Move",
+                    "action": "Movement",
                     "isComposite": false,
                     "isPartOfComposite": true
                 },
@@ -194,7 +214,7 @@
                     "interactions": "",
                     "processors": "",
                     "groups": ";Keyboard&Mouse",
-                    "action": "Move",
+                    "action": "Movement",
                     "isComposite": false,
                     "isPartOfComposite": true
                 },
@@ -205,7 +225,7 @@
                     "interactions": "",
                     "processors": "",
                     "groups": "XR",
-                    "action": "Move",
+                    "action": "Movement",
                     "isComposite": false,
                     "isPartOfComposite": false
                 },
@@ -216,7 +236,7 @@
                     "interactions": "",
                     "processors": "",
                     "groups": "Joystick",
-                    "action": "Move",
+                    "action": "Movement",
                     "isComposite": false,
                     "isPartOfComposite": false
                 },

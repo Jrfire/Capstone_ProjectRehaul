@@ -1,0 +1,25 @@
+{
+    "name": "Capstone.Player.Editor.Tests",
+    "references": [
+        "Capstone.Player",
+        "Capstone.Player.Editor",
+        "Mirror",
+        "FizzySteamworks",
+        "com.rlabrecque.steamworks.net",
+        "Unity.InputSystem",
+        "Unity.2D.Sprite.Editor",
+        "UnityEngine.TestRunner",
+        "UnityEditor.TestRunner"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "overrideReferences": true,
+    "precompiledReferences": [
+        "nunit.framework.dll"
+    ],
+    "autoReferenced": false,
+    "defineConstraints": [
+        "UNITY_INCLUDE_TESTS"
+    ]
+}

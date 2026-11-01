@@ -1,0 +1,9 @@
+{
+    "name": "Capstone.Player",
+    "references": [
+        "Mirror",
+        "Unity.InputSystem",
+        "FizzySteamworks",
+        "com.rlabrecque.steamworks.net"
+    ]
+}
