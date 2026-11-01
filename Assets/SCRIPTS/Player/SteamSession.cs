@@ -7,18 +7,30 @@ using UnityEngine;
 
 [DefaultExecutionOrder(-1000)]
 [DisallowMultipleComponent]
-[RequireComponent(typeof(NetworkManager), typeof(NetworkManagerHUD), typeof(FizzySteamworks))]
+[RequireComponent(typeof(SteamNetworkManager), typeof(NetworkManagerHUD), typeof(FizzySteamworks))]
 public sealed class SteamSession : MonoBehaviour
 {
+    public const string LobbyProjectKey = "capstone_project";
+    public const string LobbyProjectValue = "rehaul_v1";
+    public const string LobbyHostKey = "host_steam_id";
+
     private NetworkManager manager;
     private Callback<GameRichPresenceJoinRequested_t> joinRequested;
     private Callback<GameOverlayActivated_t> overlayActivated;
+    private Callback<GameLobbyJoinRequested_t> lobbyJoinRequested;
+    private CallResult<LobbyCreated_t> lobbyCreated;
+    private CallResult<LobbyEnter_t> lobbyEntered;
+    private bool creatingLobby;
+    private ulong joiningLobby;
+    private bool joinNetworkAfterLobby;
+    private int publishedPlayerCount = -1;
     private string failureMessage;
 
     public static SteamSession Instance { get; private set; }
     public bool Initialized { get; private set; }
     public bool OverlayActive { get; private set; }
     public string LocalSteamId { get; private set; }
+    public ulong LobbyId { get; private set; }
 
     private void Awake()
     {
@@ -46,6 +58,10 @@ public sealed class SteamSession : MonoBehaviour
             joinRequested = Callback<GameRichPresenceJoinRequested_t>.Create(OnJoinRequested);
             overlayActivated = Callback<GameOverlayActivated_t>.Create(
                 callback => OverlayActive = callback.m_bActive != 0);
+            lobbyJoinRequested = Callback<GameLobbyJoinRequested_t>.Create(
+                callback => AcceptLobbyInvite(callback.m_steamIDLobby.m_SteamID));
+            lobbyCreated = CallResult<LobbyCreated_t>.Create(OnLobbyCreated);
+            lobbyEntered = CallResult<LobbyEnter_t>.Create(OnLobbyEntered);
         }
         catch (DllNotFoundException exception)
         {
@@ -70,6 +86,17 @@ public sealed class SteamSession : MonoBehaviour
         string[] arguments = string.IsNullOrWhiteSpace(launchArguments)
             ? Environment.GetCommandLineArgs()
             : launchArguments.Split((char[])null, StringSplitOptions.RemoveEmptyEntries);
+        int lobbyIndex = Array.IndexOf(arguments, "+connect_lobby");
+        if (lobbyIndex >= 0)
+        {
+            if (lobbyIndex + 1 < arguments.Length &&
+                ulong.TryParse(arguments[lobbyIndex + 1], NumberStyles.None, CultureInfo.InvariantCulture, out ulong id) &&
+                IsValidLobbyId(id))
+                AcceptLobbyInvite(id);
+            else
+                Debug.LogError("Steam launch invite has an invalid +connect_lobby ID.", this);
+            return;
+        }
         int connectIndex = Array.IndexOf(arguments, "+connect");
         if (connectIndex < 0)
             return;
@@ -85,7 +112,181 @@ public sealed class SteamSession : MonoBehaviour
     private void Update()
     {
         if (Initialized)
+        {
             SteamAPI.RunCallbacks();
+            if (LobbyId != 0)
+            {
+                int count = NetworkServer.active ? NetworkServer.connections.Count :
+                    SteamMatchmaking.GetNumLobbyMembers(new CSteamID(LobbyId));
+                if (publishedPlayerCount != count)
+                    PublishSessionPresence();
+            }
+        }
+    }
+
+    public void CreateSessionLobby()
+    {
+        if (!Initialized)
+        {
+            Debug.LogError("Cannot create a Steam invite lobby before Steam initialization.", this);
+            return;
+        }
+        if (creatingLobby || LobbyId != 0)
+            return;
+        creatingLobby = true;
+        lobbyCreated.Set(SteamMatchmaking.CreateLobby(ELobbyType.k_ELobbyTypeFriendsOnly, manager.maxConnections));
+    }
+
+    private void OnLobbyCreated(LobbyCreated_t callback, bool ioFailure)
+    {
+        creatingLobby = false;
+        if (ioFailure || callback.m_eResult != EResult.k_EResultOK)
+        {
+            Debug.LogError($"Steam invite lobby creation failed: {callback.m_eResult} (I/O failure: {ioFailure}).", this);
+            return;
+        }
+        var lobby = new CSteamID(callback.m_ulSteamIDLobby);
+        if (!NetworkServer.active)
+        {
+            SteamMatchmaking.LeaveLobby(lobby);
+            return;
+        }
+        LobbyId = lobby.m_SteamID;
+        if (!SteamMatchmaking.SetLobbyData(lobby, LobbyProjectKey, LobbyProjectValue) ||
+            !SteamMatchmaking.SetLobbyData(lobby, LobbyHostKey, LocalSteamId))
+        {
+            Debug.LogError("Steam could not publish the invite lobby's project/host metadata.", this);
+            LeaveSessionLobby();
+            return;
+        }
+        PublishSessionPresence();
+        NetworkServer.SendToAll(new SteamLobbyMessage { lobbyId = LobbyId });
+    }
+
+    public static bool IsValidLobbyId(ulong value)
+    {
+        var id = new CSteamID(value);
+        return id.IsValid() && id.GetEAccountType() == EAccountType.k_EAccountTypeChat && id.IsLobby();
+    }
+
+    public static bool TryParseLobbyHost(string project, string host, ulong owner, out string hostId)
+    {
+        hostId = null;
+        if (project != LobbyProjectValue || !TryParseHostId(host, out string parsedHost) ||
+            owner.ToString(CultureInfo.InvariantCulture) != parsedHost)
+            return false;
+        hostId = parsedHost;
+        return true;
+    }
+
+    public void AcceptLobbyInvite(ulong id)
+    {
+        if (NetworkServer.active || NetworkClient.active)
+        {
+            Debug.LogWarning("Disconnect your current session before accepting a Steam invite.", this);
+            return;
+        }
+        JoinLobby(id, true);
+    }
+
+    public void JoinSessionLobby(ulong id)
+    {
+        if (id == LobbyId)
+            return;
+        JoinLobby(id, false);
+    }
+
+    private void JoinLobby(ulong id, bool connectAfterEntry)
+    {
+        if (!Initialized || !IsValidLobbyId(id))
+        {
+            Debug.LogError("Cannot join a Steam lobby: Steam is not initialized or the lobby ID is invalid.", this);
+            return;
+        }
+        if (joiningLobby != 0)
+        {
+            Debug.LogWarning("A Steam lobby join is already in progress.", this);
+            return;
+        }
+        LeaveSessionLobby();
+        joiningLobby = id;
+        joinNetworkAfterLobby = connectAfterEntry;
+        lobbyEntered.Set(SteamMatchmaking.JoinLobby(new CSteamID(id)));
+    }
+
+    private void OnLobbyEntered(LobbyEnter_t callback, bool ioFailure)
+    {
+        ulong expectedLobby = joiningLobby;
+        bool connectAfterEntry = joinNetworkAfterLobby;
+        joiningLobby = 0;
+        joinNetworkAfterLobby = false;
+        var lobby = new CSteamID(callback.m_ulSteamIDLobby);
+        if (ioFailure || callback.m_EChatRoomEnterResponse != (uint)EChatRoomEnterResponse.k_EChatRoomEnterResponseSuccess)
+        {
+            Debug.LogError($"Steam lobby entry failed: {(EChatRoomEnterResponse)callback.m_EChatRoomEnterResponse} (I/O failure: {ioFailure}).", this);
+            return;
+        }
+        string host = SteamMatchmaking.GetLobbyData(lobby, LobbyHostKey);
+        if (expectedLobby != lobby.m_SteamID ||
+            !TryParseLobbyHost(SteamMatchmaking.GetLobbyData(lobby, LobbyProjectKey), host,
+                SteamMatchmaking.GetLobbyOwner(lobby).m_SteamID, out string hostId) ||
+            (!connectAfterEntry && !NetworkClient.active))
+        {
+            Debug.LogWarning("Rejected a stale lobby or a lobby without this project's active host.", this);
+            SteamMatchmaking.LeaveLobby(lobby);
+            return;
+        }
+        if (!connectAfterEntry && manager.networkAddress != hostId)
+        {
+            Debug.LogError("The Steam lobby host does not match the connected network session.", this);
+            SteamMatchmaking.LeaveLobby(lobby);
+            return;
+        }
+        LobbyId = lobby.m_SteamID;
+        if (connectAfterEntry && !TryJoinHost("+connect " + hostId))
+            LeaveSessionLobby();
+        else
+            PublishSessionPresence();
+    }
+
+    private void PublishSessionPresence()
+    {
+        if (LobbyId == 0)
+            return;
+        string host = NetworkServer.active ? LocalSteamId : manager.networkAddress;
+        int count = NetworkServer.active ? NetworkServer.connections.Count :
+            SteamMatchmaking.GetNumLobbyMembers(new CSteamID(LobbyId));
+        if (!SteamFriends.SetRichPresence("connect", "+connect " + host) ||
+            !SteamFriends.SetRichPresence("steam_player_group", LobbyId.ToString(CultureInfo.InvariantCulture)) ||
+            !SteamFriends.SetRichPresence("steam_player_group_size", count.ToString(CultureInfo.InvariantCulture)))
+            Debug.LogError("Steam could not publish joinable session presence.", this);
+        if (NetworkServer.active &&
+            !SteamMatchmaking.SetLobbyJoinable(new CSteamID(LobbyId), count < manager.maxConnections))
+            Debug.LogError("Steam could not update lobby joinability.", this);
+        publishedPlayerCount = count;
+    }
+
+    public void LeaveSessionLobby()
+    {
+        if (!Initialized)
+            return;
+        if (LobbyId != 0)
+        {
+            var lobby = new CSteamID(LobbyId);
+            if (SteamMatchmaking.GetLobbyOwner(lobby) == SteamUser.GetSteamID())
+            {
+                if (!SteamMatchmaking.SetLobbyJoinable(lobby, false))
+                    Debug.LogWarning("Steam could not close the departing host's lobby.", this);
+                if (!SteamMatchmaking.DeleteLobbyData(lobby, LobbyHostKey))
+                    Debug.LogWarning("Steam could not remove the departing host's lobby address.", this);
+            }
+            SteamMatchmaking.LeaveLobby(lobby);
+        }
+        // Keep pending API results alive so late successes can leave rather than leak a lobby.
+        joinNetworkAfterLobby = false;
+        LobbyId = 0;
+        publishedPlayerCount = -1;
+        SteamFriends.ClearRichPresence();
     }
 
     public bool OpenInviteDialog()
@@ -113,7 +314,14 @@ public sealed class SteamSession : MonoBehaviour
             return false;
         }
 
-        SteamFriends.ActivateGameOverlayInviteDialogConnectString("+connect " + hostId);
+        if (LobbyId == 0)
+        {
+            if (NetworkServer.active && !creatingLobby)
+                CreateSessionLobby();
+            Debug.LogWarning("The Steam invite lobby is not ready. Wait for lobby creation/entry, then try E again.", this);
+            return false;
+        }
+        SteamFriends.ActivateGameOverlayInviteDialog(new CSteamID(LobbyId));
         return true;
     }
 
@@ -182,6 +390,9 @@ public sealed class SteamSession : MonoBehaviour
         {
             joinRequested?.Dispose();
             overlayActivated?.Dispose();
+            lobbyJoinRequested?.Dispose();
+            lobbyCreated?.Dispose();
+            lobbyEntered?.Dispose();
             SteamAPI.Shutdown();
             Initialized = false;
         }
@@ -232,6 +443,10 @@ public sealed class SteamSession : MonoBehaviour
 
             joinRequested?.Dispose();
             overlayActivated?.Dispose();
+            LeaveSessionLobby();
+            lobbyJoinRequested?.Dispose();
+            lobbyCreated?.Dispose();
+            lobbyEntered?.Dispose();
             SteamAPI.Shutdown();
             Initialized = false;
         }

@@ -12,6 +12,7 @@ GameObject:
   - component: {fileID: 8864935223497675231}
   - component: {fileID: 6880050320229717931}
   - component: {fileID: 2400176252537241034}
+  - component: {fileID: 2400176252537241035}
   m_Layer: 0
   m_Name: PlayerCamera
   m_TagString: MainCamera
@@ -43,8 +44,8 @@ Camera:
   m_GameObject: {fileID: 540132781317581925}
   m_Enabled: 1
   serializedVersion: 2
-  m_ClearFlags: 1
-  m_BackGroundColor: {r: 0.19215687, g: 0.3019608, b: 0.4745098, a: 0}
+  m_ClearFlags: 2
+  m_BackGroundColor: {r: 0.015, g: 0.02, b: 0.035, a: 1}
   m_projectionMatrixMode: 1
   m_GateFitMode: 2
   m_FOVAxisMode: 0
@@ -66,7 +67,7 @@ Camera:
     width: 1
     height: 1
   near clip plane: 0.05
-  far clip plane: 1000
+  far clip plane: 40
   field of view: 65
   orthographic: 0
   orthographic size: 5
@@ -106,7 +107,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Unity.RenderPipelines.Universal.Runtime::UnityEngine.Rendering.Universal.UniversalAdditionalCameraData
   m_RenderShadows: 1
-  m_RequiresDepthTextureOption: 2
+  m_RequiresDepthTextureOption: 1
   m_RequiresOpaqueTextureOption: 2
   m_CameraType: 0
   m_Cameras: []
@@ -137,6 +138,20 @@ MonoBehaviour:
     m_VarianceClampScale: 0.9
     m_ContrastAdaptiveSharpening: 0
   m_Version: 2
+--- !u!114 &2400176252537241035
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 540132781317581925}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e286c8657733466a90ecc4f2a3a5a002, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Capstone.Player::PlayerCameraEffects
+  pixelation: 1
+  pixelHeight: 270
 --- !u!1 &3271051443644085654
 GameObject:
   m_ObjectHideFlags: 0
@@ -163,8 +178,8 @@ Transform:
   m_GameObject: {fileID: 3271051443644085654}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 1, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 0.3, y: 0.3, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 2223601340540682519}
@@ -223,7 +238,7 @@ SpriteRenderer:
   m_FlipX: 0
   m_FlipY: 0
   m_DrawMode: 0
-  m_Size: {x: 1, y: 1}
+  m_Size: {x: 3.3600001, y: 5.604375}
   m_AdaptiveModeThreshold: 0.5
   m_SpriteTileMode: 0
   m_WasSpriteAssigned: 0
@@ -390,7 +405,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: ef117e5da82f4b01ba266f4d21f5fb47, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Capstone.Player::PlayerVision
   syncDirection: 0
   syncMode: 0
@@ -408,7 +423,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: b7b7d2b95ccc4f0cb59dca7c4b4f287b, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Capstone.Player::PlayerInteraction
   syncDirection: 0
   syncMode: 0
@@ -429,7 +444,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 31c2d604727b461f93a4d85d62474c99, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Capstone.Player::PlayerLook
   syncDirection: 0
   syncMode: 0

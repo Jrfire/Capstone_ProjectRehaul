@@ -22,6 +22,7 @@ public sealed class SteamSceneTests
             Assert.That(managers.Length, Is.EqualTo(1));
             NetworkManager manager = managers[0];
             Assert.That(manager.name, Is.EqualTo("NetworkManager"));
+            Assert.That(manager, Is.TypeOf<SteamNetworkManager>());
             Assert.That(manager.GetComponent<NetworkManagerHUD>().enabled, Is.True);
             Assert.That(manager.GetComponent<SteamSession>().enabled, Is.True);
             Assert.That(manager.transport, Is.SameAs(manager.GetComponent<FizzySteamworks>()));
@@ -52,8 +53,11 @@ public sealed class SteamSceneTests
             SteamInviteInteractable terminal = roots.SelectMany(root =>
                 root.GetComponentsInChildren<SteamInviteInteractable>(true)).Single();
             Assert.That(terminal.GetComponent<Collider>().isTrigger, Is.False);
-            Assert.That(roots.SelectMany(root => root.GetComponentsInChildren<Camera>(true)), Is.Empty);
-            Assert.That(roots.SelectMany(root => root.GetComponentsInChildren<AudioListener>(true)), Is.Empty);
+            Camera[] cameras = roots.SelectMany(root => root.GetComponentsInChildren<Camera>(true)).ToArray();
+            Assert.That(cameras.Where(camera => camera.GetComponentInParent<NetworkIdentity>() == null), Is.Empty);
+            Assert.That(cameras.Where(camera => camera.gameObject.activeInHierarchy), Is.Empty);
+            Assert.That(roots.SelectMany(root => root.GetComponentsInChildren<AudioListener>(true))
+                .Where(listener => listener.gameObject.activeInHierarchy), Is.Empty);
         }
         finally
         {
@@ -94,5 +98,26 @@ public sealed class SteamSceneTests
     {
         Assert.That(SteamSession.TryParseConnectString(value, out string hostId), Is.EqualTo(valid));
         Assert.That(hostId, Is.EqualTo(valid ? "76561198000000001" : null));
+    }
+
+    [TestCase("rehaul_v1", "76561198000000001", 76561198000000001ul, true)]
+    [TestCase("another_spacewar_game", "76561198000000001", 76561198000000001ul, false)]
+    [TestCase("", "76561198000000001", 76561198000000001ul, false)]
+    [TestCase("rehaul_v1", "localhost", 76561198000000001ul, false)]
+    [TestCase("rehaul_v1", "76561198000000001", 76561198000000002ul, false)]
+    public void LobbyMetadataRequiresThisProjectAndTheOriginalHost(string project, string host, ulong owner, bool valid)
+    {
+        Assert.That(SteamSession.TryParseLobbyHost(project, host, owner, out string hostId), Is.EqualTo(valid));
+        Assert.That(hostId, Is.EqualTo(valid ? host : null));
+    }
+
+    [Test]
+    public void LobbyIdsUseSteamLobbyIdsNotPlayerIds()
+    {
+        var lobby = new CSteamID(new AccountID_t(1234), (uint)EChatSteamIDInstanceFlags.k_EChatInstanceFlagLobby,
+            EUniverse.k_EUniversePublic, EAccountType.k_EAccountTypeChat);
+        Assert.That(SteamSession.IsValidLobbyId(lobby.m_SteamID), Is.True);
+        Assert.That(SteamSession.IsValidLobbyId(76561198000000001ul), Is.False);
+        Assert.That(SteamSession.IsValidLobbyId(0), Is.False);
     }
 }

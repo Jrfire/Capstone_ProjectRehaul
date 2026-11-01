@@ -4,6 +4,8 @@
         "Mirror",
         "Unity.InputSystem",
         "FizzySteamworks",
-        "com.rlabrecque.steamworks.net"
+        "com.rlabrecque.steamworks.net",
+        "Unity.RenderPipelines.Core.Runtime",
+        "Unity.RenderPipelines.Universal.Runtime"
     ]
 }
