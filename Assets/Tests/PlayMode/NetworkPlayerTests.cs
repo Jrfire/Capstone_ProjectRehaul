@@ -181,6 +181,189 @@ public sealed class NetworkPlayerTests : InputTestFixture
     }
 
     [UnityTest]
+    public IEnumerator EitherShiftSprintsOnlyWhileMovingAndDrainsFifteenPerSecond()
+    {
+        InputAction sprint = AssetDatabase.LoadAssetAtPath<InputActionAsset>(InputPath).FindAction("Player/Sprint", true);
+        Assert.That(sprint.type, Is.EqualTo(InputActionType.Button));
+        Assert.That(sprint.bindings, Has.Some.Matches<InputBinding>(binding => binding.path == "<Keyboard>/shift"));
+        Keyboard keyboard = InputSystem.AddDevice<Keyboard>();
+        SpawnPlayers();
+        yield return null;
+        yield return null;
+        PlayerMovement movement = localPlayer.GetComponent<PlayerMovement>();
+        PlayerStamina stamina = localPlayer.GetComponent<PlayerStamina>();
+        stamina.enabled = false;
+
+        Press(keyboard.leftShiftKey);
+        InputSystem.Update();
+        StepMovement(localPlayer);
+        Assert.That(movement.IsSprinting, Is.False);
+        Assert.That(stamina.CurrentStamina, Is.EqualTo(100f), "Holding Shift while standing still must not drain.");
+
+        foreach (KeyControl shift in new[] { keyboard.leftShiftKey, keyboard.rightShiftKey })
+        {
+            Release(keyboard.leftShiftKey);
+            Press(shift);
+            Press(keyboard.wKey);
+            InputSystem.Update();
+            float staminaBefore = stamina.CurrentStamina;
+            Vector3 before = localPlayer.transform.position;
+            StepMovement(localPlayer);
+            Assert.That(movement.IsSprinting, Is.True, shift.name);
+            Assert.That(Horizontal(localPlayer.transform.position - before),
+                Is.EqualTo(7.5f * Time.deltaTime).Within(0.001f), "Sprint must be 1.5x the 5 m/s walk speed.");
+            Assert.That(staminaBefore - stamina.CurrentStamina, Is.EqualTo(15f * Time.deltaTime).Within(0.0001f));
+            Release(shift);
+            Release(keyboard.wKey);
+            InputSystem.Update();
+        }
+
+        Press(keyboard.wKey);
+        InputSystem.Update();
+        float walkingStamina = stamina.CurrentStamina;
+        StepMovement(localPlayer);
+        Assert.That(movement.IsSprinting, Is.False);
+        Assert.That(stamina.CurrentStamina, Is.EqualTo(walkingStamina));
+        Release(keyboard.wKey);
+        InputSystem.Update();
+    }
+
+    [UnityTest]
+    public IEnumerator ExhaustedStaminaWaitsBeforeRegeneratingAndLocksSprintUntilThirtyPercent()
+    {
+        Keyboard keyboard = InputSystem.AddDevice<Keyboard>();
+        SpawnPlayers();
+        yield return null;
+        yield return null;
+        PlayerMovement movement = localPlayer.GetComponent<PlayerMovement>();
+        PlayerStamina stamina = localPlayer.GetComponent<PlayerStamina>();
+        stamina.enabled = false;
+        Assert.That(stamina.TryUseStamina(1000f), Is.True);
+        Assert.That(stamina.CurrentStamina, Is.Zero);
+        Assert.That(stamina.IsExhausted, Is.True);
+        Assert.That(stamina.TryUseStamina(1f), Is.False);
+
+        Press(keyboard.leftShiftKey);
+        Press(keyboard.wKey);
+        InputSystem.Update();
+        Vector3 before = localPlayer.transform.position;
+        StepMovement(localPlayer);
+        Assert.That(movement.IsSprinting, Is.False);
+        Assert.That(Horizontal(localPlayer.transform.position - before), Is.EqualTo(5f * Time.deltaTime).Within(0.001f));
+
+        Regenerate(stamina, 0.79f);
+        Assert.That(stamina.CurrentStamina, Is.Zero, "Regeneration waits 0.8 seconds after use.");
+        Regenerate(stamina, 0.11f);
+        Assert.That(stamina.CurrentStamina, Is.EqualTo(1f).Within(0.001f), "Regenerates 10 per second after the delay.");
+        Regenerate(stamina, 1.89f);
+        Assert.That(stamina.CurrentStamina, Is.LessThan(30f));
+        Assert.That(stamina.IsExhausted, Is.True);
+        StepMovement(localPlayer);
+        Assert.That(movement.IsSprinting, Is.False, "Sprint stays locked below 30%.");
+        Regenerate(stamina, 0.99f);
+        Assert.That(stamina.CurrentStamina, Is.EqualTo(29.8f).Within(0.001f));
+        Assert.That(stamina.IsExhausted, Is.True);
+        Regenerate(stamina, 0.03f);
+        Assert.That(stamina.CurrentStamina, Is.GreaterThanOrEqualTo(30f));
+        Assert.That(stamina.IsExhausted, Is.False);
+        float beforeSprint = stamina.CurrentStamina;
+        StepMovement(localPlayer);
+        Assert.That(movement.IsSprinting, Is.True);
+        float afterSprint = stamina.CurrentStamina;
+        Assert.That(afterSprint, Is.EqualTo(beforeSprint - 15f * Time.deltaTime).Within(0.0001f));
+
+        Regenerate(stamina, 0.79f);
+        Assert.That(stamina.CurrentStamina, Is.EqualTo(afterSprint), "Using stamina restarts the regeneration delay.");
+        Regenerate(stamina, 1.01f);
+        Assert.That(stamina.CurrentStamina, Is.EqualTo(afterSprint + 10f).Within(0.01f));
+        Regenerate(stamina, 100f);
+        Assert.That(stamina.CurrentStamina, Is.EqualTo(100f));
+        Release(keyboard.leftShiftKey);
+        Release(keyboard.wKey);
+        InputSystem.Update();
+    }
+
+    [Test]
+    public void StaminaIsOwnerSimulatedAndSyncedThroughMirror()
+    {
+        GameObject prefab = LoadPrefab();
+        PlayerStamina prefabStamina = prefab.GetComponent<PlayerStamina>();
+        Assert.That(prefabStamina, Is.Not.Null);
+        Assert.That(prefab.GetComponentInChildren<PlayerSprintFov>(true).GetComponent<Camera>(), Is.Not.Null);
+        SpawnPlayers();
+        PlayerStamina stamina = localPlayer.GetComponent<PlayerStamina>();
+        Assert.That(stamina.syncDirection, Is.EqualTo(SyncDirection.ClientToServer));
+        Assert.That(stamina.TryUseStamina(1000f), Is.True);
+        GameObject replicaObject = new GameObject("Stamina replica");
+        try
+        {
+            PlayerStamina replica = replicaObject.AddComponent<PlayerStamina>();
+            NetworkWriter writer = new NetworkWriter();
+            stamina.OnSerialize(writer, true);
+            replica.OnDeserialize(new NetworkReader(writer.ToArray()), true);
+            Assert.That(replica.CurrentStamina, Is.Zero);
+            Assert.That(replica.IsExhausted, Is.True);
+        }
+        finally
+        {
+            Object.DestroyImmediate(replicaObject);
+        }
+    }
+
+    [UnityTest]
+    public IEnumerator SprintingWidensOnlyTheOwnersFovAndRestoresIt()
+    {
+        Keyboard keyboard = InputSystem.AddDevice<Keyboard>();
+        SpawnPlayers();
+        yield return null;
+        yield return null;
+        Camera localCamera = localPlayer.GetComponentInChildren<Camera>(true);
+        Camera remoteCamera = remotePlayer.GetComponentInChildren<Camera>(true);
+        PlayerSprintFov sprintFov = localCamera.GetComponent<PlayerSprintFov>();
+        float baseFov = localCamera.fieldOfView;
+        float remoteFov = remoteCamera.fieldOfView;
+        PlayerVision vision = localPlayer.GetComponent<PlayerVision>();
+
+        Press(keyboard.leftShiftKey);
+        Press(keyboard.wKey);
+        InputSystem.Update();
+        yield return new WaitForSeconds(0.4f);
+        Assert.That(localPlayer.GetComponent<PlayerMovement>().IsSprinting, Is.True);
+        Assert.That(localCamera.fieldOfView, Is.EqualTo(baseFov + sprintFov.fovIncrease).Within(0.01f));
+        Assert.That(remoteCamera.fieldOfView, Is.EqualTo(remoteFov));
+        CharacterAnimationState expected = new SerializedObject(vision).FindProperty("characterDefinition")
+            .objectReferenceValue is CharacterDefinition definition &&
+            definition.GetAnimation(CharacterAnimationState.Run).IsReady
+            ? CharacterAnimationState.Run : CharacterAnimationState.Walk;
+        yield return WaitForAnimationState(vision, expected);
+
+        Release(keyboard.leftShiftKey);
+        InputSystem.Update();
+        yield return new WaitForSeconds(0.4f);
+        Assert.That(localCamera.fieldOfView, Is.EqualTo(baseFov).Within(0.001f));
+        Press(keyboard.leftShiftKey);
+        InputSystem.Update();
+        yield return new WaitForSeconds(0.1f);
+        Assert.That(localCamera.fieldOfView, Is.GreaterThan(baseFov));
+        sprintFov.enabled = false;
+        Assert.That(localCamera.fieldOfView, Is.EqualTo(baseFov).Within(0.001f));
+        yield return null;
+        Assert.That(localCamera.fieldOfView, Is.EqualTo(baseFov).Within(0.001f),
+            "Panic FOV handling must not restore the removed sprint offset.");
+        Release(keyboard.leftShiftKey);
+        Release(keyboard.wKey);
+        InputSystem.Update();
+    }
+
+    private static float Horizontal(Vector3 delta) => new Vector2(delta.x, delta.z).magnitude;
+
+    private static void Regenerate(PlayerStamina stamina, float deltaTime)
+    {
+        typeof(PlayerStamina).GetMethod("Regenerate", BindingFlags.Instance | BindingFlags.NonPublic)
+            .Invoke(stamina, new object[] { deltaTime });
+    }
+
+    [UnityTest]
     public IEnumerator OwnerAndRemoteViewsStaySeparateAcrossEnableDisableAndDespawn()
     {
         SpawnPlayers();

@@ -139,6 +139,12 @@ public sealed class PlayerFearEffects : MonoBehaviour
         ResetEffects();
     }
 
+    internal void ShiftBaseFov(float delta)
+    {
+        baseFov += delta;
+        appliedFov += delta;
+    }
+
     private void ResetEffects()
     {
         CurrentIntensity = 0f;

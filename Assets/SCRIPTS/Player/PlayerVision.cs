@@ -130,10 +130,18 @@ public sealed class PlayerVision : NetworkBehaviour
             Debug.LogError($"The {animationState} animation contains a missing sprite. Regenerate its sheet.", this);
     }
 
+    private CharacterAnimationState MovementAnimationState()
+    {
+        if (!movement.IsMoving)
+            return CharacterAnimationState.Idle;
+        // Fall back to Walk until Run frames are configured so sprinting players never turn invisible.
+        return movement.IsSprinting && characterDefinition.GetAnimation(CharacterAnimationState.Run).IsReady
+            ? CharacterAnimationState.Run : CharacterAnimationState.Walk;
+    }
+
     private void PublishVision()
     {
-        CharacterAnimationState state = requestedState ??
-            (movement.IsMoving ? CharacterAnimationState.Walk : CharacterAnimationState.Idle);
+        CharacterAnimationState state = requestedState ?? MovementAnimationState();
         float yaw = playerCamera.transform.eulerAngles.y;
         bool stateChanged = !hasSentVision || state != lastSentState || restartRequested;
         if (!stateChanged && (NetworkTime.time < nextSendTime ||

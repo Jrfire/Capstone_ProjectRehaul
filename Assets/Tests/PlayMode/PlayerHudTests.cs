@@ -12,7 +12,7 @@ using UnityEngine.TestTools;
 using UnityEngine.UI;
 using Object = UnityEngine.Object;
 
-public sealed class PlayerHealthTests
+public sealed class PlayerHudTests
 {
     private readonly List<Object> objects = new List<Object>();
     private Transport previousTransport;
@@ -21,7 +21,7 @@ public sealed class PlayerHealthTests
     private bool previousCursorVisible;
     private PlayerHealth local;
     private PlayerHealth remote;
-    private PlayerHealthHUD hud;
+    private PlayerHud hud;
     private Sprite[] sprites;
     private Scene temporaryScene;
 
@@ -42,7 +42,7 @@ public sealed class PlayerHealthTests
         Assert.That(NetworkServer.AddPlayerForConnection(NetworkServer.localConnection, local.gameObject), Is.True);
         NetworkServer.Spawn(remote.gameObject);
 
-        hud = Track(Object.Instantiate(HudPrefab())).GetComponent<PlayerHealthHUD>();
+        hud = Track(Object.Instantiate(HudPrefab())).GetComponent<PlayerHud>();
         Texture2D texture = Track(new Texture2D(3, 1));
         sprites = new Sprite[3];
         for (int index = 0; index < sprites.Length; index++)
@@ -97,9 +97,91 @@ public sealed class PlayerHealthTests
         yield return null;
         Assert.That(remote.CurrentHealth, Is.Zero);
         AssertHearts(5);
-        Assert.That(local.GetComponentInChildren<PlayerHealthHUD>(true), Is.Null);
+        Assert.That(local.GetComponentInChildren<PlayerHud>(true), Is.Null);
         Assert.That(hud.GetComponent<Canvas>().renderMode, Is.EqualTo(RenderMode.ScreenSpaceOverlay));
         Assert.That(hud.GetComponentsInChildren<Image>(true).All(image => !image.raycastTarget), Is.True);
+    }
+
+    [UnityTest]
+    public IEnumerator StaminaFillTracksTheLocalPlayerAndBlinksBelowThirtyPercent()
+    {
+        yield return null;
+        yield return null;
+        PlayerStamina stamina = local.GetComponent<PlayerStamina>();
+        PlayerStamina remoteStamina = remote.GetComponent<PlayerStamina>();
+        SerializedObject serialized = new SerializedObject(hud);
+        GameObject panel = (GameObject)serialized.FindProperty("staminaPanel").objectReferenceValue;
+        Image fill = (Image)serialized.FindProperty("staminaFill").objectReferenceValue;
+        float baseAlpha = fill.color.a;
+        Assert.That(panel.activeSelf, Is.True);
+        Assert.That(fill.fillAmount, Is.EqualTo(1f));
+        Assert.That(hud.StaminaBlinking, Is.False);
+
+        Assert.That(remoteStamina.TryUseStamina(10f), Is.False, "Only the owner may spend its stamina.");
+        Assert.That(stamina.TryUseStamina(50f), Is.True);
+        yield return null;
+        Assert.That(fill.fillAmount, Is.EqualTo(0.5f).Within(0.001f));
+        Assert.That(hud.StaminaBlinking, Is.False);
+        Assert.That(fill.color.a, Is.EqualTo(baseAlpha));
+
+        Assert.That(stamina.TryUseStamina(20f), Is.True);
+        Image background = panel.GetComponent<Image>();
+        float backgroundAlpha = background.color.a;
+        yield return null;
+        Assert.That(fill.fillAmount, Is.EqualTo(0.3f).Within(0.001f));
+        Assert.That(hud.StaminaBlinking, Is.False, "Exactly 30% is not below 30% and must not blink.");
+        Assert.That(fill.color.a, Is.EqualTo(baseAlpha));
+
+        Assert.That(stamina.TryUseStamina(1f), Is.True);
+        float minimumAlpha = float.MaxValue;
+        float maximumAlpha = float.MinValue;
+        float until = Time.realtimeSinceStartup + 0.4f;
+        while (Time.realtimeSinceStartup < until)
+        {
+            yield return null;
+            Assert.That(hud.StaminaBlinking, Is.True, "Below 30% the fill must blink.");
+            Assert.That(hud.StaminaPanelBlinking, Is.False, "Low but not depleted stamina blinks only the fill.");
+            Assert.That(background.color.a, Is.EqualTo(backgroundAlpha));
+            minimumAlpha = Mathf.Min(minimumAlpha, fill.color.a);
+            maximumAlpha = Mathf.Max(maximumAlpha, fill.color.a);
+        }
+        Assert.That(fill.fillAmount, Is.EqualTo(0.29f).Within(0.001f));
+        Assert.That(maximumAlpha - minimumAlpha, Is.GreaterThan(baseAlpha * 0.4f));
+
+        Assert.That(stamina.TryUseStamina(1000f), Is.True);
+        float backgroundMinimum = float.MaxValue;
+        float backgroundMaximum = float.MinValue;
+        until = Time.realtimeSinceStartup + 0.4f;
+        while (Time.realtimeSinceStartup < until)
+        {
+            yield return null;
+            Assert.That(hud.StaminaPanelBlinking, Is.True, "Full depletion blinks the whole bar.");
+            backgroundMinimum = Mathf.Min(backgroundMinimum, background.color.a);
+            backgroundMaximum = Mathf.Max(backgroundMaximum, background.color.a);
+        }
+        Assert.That(backgroundMaximum - backgroundMinimum, Is.GreaterThan(backgroundAlpha * 0.4f));
+        until = Time.realtimeSinceStartup + 5f;
+        while (stamina.IsExhausted && Time.realtimeSinceStartup < until)
+        {
+            Assert.That(hud.StaminaPanelBlinking, Is.True, "The whole bar blinks until 30% refills.");
+            yield return null;
+        }
+        yield return null;
+        Assert.That(stamina.IsExhausted, Is.False);
+        Assert.That(hud.StaminaPanelBlinking, Is.False);
+        Assert.That(background.color.a, Is.EqualTo(backgroundAlpha), "The background stops blinking once unlocked.");
+
+        until = Time.realtimeSinceStartup + 3f;
+        while (stamina.NormalizedStamina < 0.3f && Time.realtimeSinceStartup < until)
+            yield return null;
+        yield return null;
+        Assert.That(hud.StaminaBlinking, Is.False);
+        Assert.That(fill.color.a, Is.EqualTo(baseAlpha), "The fill must stop blinking at 30%.");
+
+        NetworkServer.RemovePlayerForConnection(NetworkServer.localConnection, RemovePlayerOptions.Destroy);
+        yield return null;
+        yield return null;
+        Assert.That(panel.activeSelf, Is.False);
     }
 
     [Test]
@@ -144,7 +226,7 @@ public sealed class PlayerHealthTests
         yield return SceneManager.UnloadSceneAsync(temporaryScene);
         Assert.That(hud != null && hud.gameObject.activeInHierarchy, Is.True);
         Assert.That(hud.gameObject.scene.name, Is.EqualTo("DontDestroyOnLoad"));
-        Assert.That(Object.FindObjectsByType<PlayerHealthHUD>(FindObjectsSortMode.None).Length, Is.EqualTo(1));
+        Assert.That(Object.FindObjectsByType<PlayerHud>(FindObjectsSortMode.None).Length, Is.EqualTo(1));
 
         NetworkServer.RemovePlayerForConnection(NetworkServer.localConnection, RemovePlayerOptions.Destroy);
         yield return null;
@@ -213,7 +295,7 @@ public sealed class PlayerHealthTests
         AssetDatabase.LoadAssetAtPath<GameObject>("Assets/PREFABS/NetworkPlayer.prefab");
 
     private static GameObject HudPrefab() =>
-        AssetDatabase.LoadAssetAtPath<GameObject>("Assets/PREFABS/PlayerHealthHUD.prefab");
+        AssetDatabase.LoadAssetAtPath<GameObject>("Assets/PREFABS/PlayerHud.prefab");
 
     private T Track<T>(T obj) where T : Object
     {

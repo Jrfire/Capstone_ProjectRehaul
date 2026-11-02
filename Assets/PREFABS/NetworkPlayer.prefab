@@ -14,6 +14,7 @@ GameObject:
   - component: {fileID: 2400176252537241034}
   - component: {fileID: 2400176252537241035}
   - component: {fileID: 2400176252537241036}
+  - component: {fileID: 2400176252537241037}
   m_Layer: 0
   m_Name: PlayerCamera
   m_TagString: MainCamera
@@ -152,7 +153,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Capstone.Player::PlayerCameraEffects
   pixelation: 1
-  pixelHeight: 120
+  pixelHeight: 170
 --- !u!114 &2400176252537241036
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -177,6 +178,20 @@ MonoBehaviour:
   filmJitterSpeed: 64
   fovShudder: 2.5
   shudderFrequency: 10
+--- !u!114 &2400176252537241037
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 540132781317581925}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 2c07ce010f5c4603911459633c7c3e2f, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Capstone.Player::PlayerSprintFov
+  fovIncrease: 12
+  transitionSpeed: 40
 --- !u!1 &3271051443644085654
 GameObject:
   m_ObjectHideFlags: 0
@@ -286,6 +301,7 @@ GameObject:
   - component: {fileID: 845073521691756212}
   - component: {fileID: 845073521691756213}
   - component: {fileID: 7975279330383797870}
+  - component: {fileID: 7975279330383797871}
   m_Layer: 0
   m_Name: NetworkPlayer
   m_TagString: Untagged
@@ -403,6 +419,7 @@ MonoBehaviour:
   syncInterval: 0
   inputActions: {fileID: -944628639613478452, guid: 052faaac586de48259a63d0c4782560b, type: 3}
   movementSpeed: 5
+  sprintMultiplier: 1.5
   gravity: 20
 --- !u!114 &63311494271888338
 MonoBehaviour:
@@ -495,6 +512,25 @@ MonoBehaviour:
   syncMode: 0
   syncInterval: 0
   currentHealth: 6
+--- !u!114 &7975279330383797871
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3831809166821954726}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ebf5eefc97234e47a2a3eed1a95b2e9c, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Capstone.Player::PlayerStamina
+  syncDirection: 1
+  syncMode: 0
+  syncInterval: 0.1
+  sprintDrainPerSecond: 15
+  regenPerSecond: 10
+  regenDelay: 0.8
+  exhaustionRecoveryFraction: 0.3
 --- !u!1 &5437688195085614544
 GameObject:
   m_ObjectHideFlags: 0

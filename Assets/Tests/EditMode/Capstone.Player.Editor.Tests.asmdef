@@ -3,6 +3,8 @@
     "references": [
         "Capstone.Player",
         "Capstone.Player.Editor",
+        "Capstone.Level",
+        "Capstone.Level.Editor",
         "Mirror",
         "FizzySteamworks",
         "com.rlabrecque.steamworks.net",

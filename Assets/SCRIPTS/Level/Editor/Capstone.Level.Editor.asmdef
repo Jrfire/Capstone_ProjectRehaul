@@ -1,0 +1,9 @@
+{
+    "name": "Capstone.Level.Editor",
+    "references": [
+        "Capstone.Level"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ]
+}

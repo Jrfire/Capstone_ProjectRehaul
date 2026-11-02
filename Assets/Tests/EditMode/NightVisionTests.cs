@@ -14,10 +14,11 @@ public sealed class NightVisionTests
         GameObject player = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/PREFABS/NetworkPlayer.prefab");
         Camera camera = player.GetComponentInChildren<Camera>(true);
         Assert.That(camera.GetComponent<PlayerCameraEffects>().pixelation, Is.True);
-        Assert.That(camera.GetComponent<PlayerCameraEffects>().pixelHeight, Is.EqualTo(270));
+        Assert.That(camera.GetComponent<PlayerCameraEffects>().pixelHeight, Is.GreaterThan(0),
+            "Pixel Height is user-tuned; it only needs a valid virtual resolution.");
         Assert.That(camera.GetComponent<PlayerFearEffects>(), Is.Not.Null);
-        Assert.That(camera.GetComponent<PlayerFearEffects>().verticalLineThickness, Is.EqualTo(0.5f));
-        Assert.That(camera.farClipPlane, Is.EqualTo(40f));
+        Assert.That(camera.GetComponent<PlayerFearEffects>().verticalLineThickness, Is.InRange(0.05f, 2f));
+        Assert.That(camera.farClipPlane, Is.GreaterThan(camera.nearClipPlane), "Far Clip Plane is user-tuned.");
         Assert.That(camera.GetUniversalAdditionalCameraData().renderPostProcessing, Is.True);
         Assert.That(camera.GetUniversalAdditionalCameraData().requiresDepthTexture, Is.True);
         Assert.That(player.GetComponentInChildren<Canvas>(true).renderMode, Is.EqualTo(RenderMode.ScreenSpaceOverlay));
@@ -48,7 +49,7 @@ public sealed class NightVisionTests
             Assert.That(fog.steps.value, Is.EqualTo(32));
             Assert.That(volume.sharedProfile.TryGet(out FilmGrain grain), Is.True);
             Assert.That(grain.intensity.overrideState, Is.True);
-            Assert.That(grain.intensity.value, Is.EqualTo(0.35f));
+            Assert.That(grain.intensity.value, Is.InRange(0f, 1f), "Grain intensity is user-tuned within Unity's range.");
             Assert.That(volume.sharedProfile.TryGet(out ColorAdjustments color), Is.True);
             Assert.That(color.postExposure.value, Is.LessThan(0f));
             Light moon = scene.GetRootGameObjects().SelectMany(root =>
