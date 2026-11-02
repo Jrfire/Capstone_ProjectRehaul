@@ -108,7 +108,7 @@ MonoBehaviour:
     m_Value: 0.08
   ambientColor:
     m_OverrideState: 1
-    m_Value: {r: 0.025, g: 0.035, b: 0.06, a: 1}
+    m_Value: {r: 0.011124947, g: 0.013705936, b: 0.01886791, a: 1}
   lightScattering:
     m_OverrideState: 1
     m_Value: 0.8

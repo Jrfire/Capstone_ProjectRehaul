@@ -101,6 +101,11 @@ public sealed class NightVisionRenderTests
         Assert.That(originalColors, Is.GreaterThan(80));
         Assert.That(RowColors(pixelated), Is.InRange(15, 30));
         Assert.That(pixelated[72 * 256 + 120], Is.EqualTo(pixelated[72 * 256 + 121]));
+        effects.pixelHeight = 32;
+        yield return null;
+        yield return null;
+        Assert.That(RowColors(ReadPixels()), Is.GreaterThan(RowColors(pixelated) * 1.4f),
+            "Increasing the exposed Pixel Height must produce finer world pixels at runtime.");
         effects.enabled = false;
         yield return null;
         yield return null;
@@ -322,8 +327,20 @@ public sealed class NightVisionRenderTests
             fear.verticalLineThickness = 0.5f;
             yield return null;
             yield return null;
-            bool[] thinColumns = ScratchColumns(ReadPixels(), clear);
+            Color32[] thinImage = ReadPixels();
+            bool[] thinColumns = ScratchColumns(thinImage, clear);
             Assert.That(thinColumns.Count(changed => changed), Is.GreaterThan(0));
+            for (int x = 0; x < 256; x++)
+            {
+                if (!thinColumns[x])
+                    continue;
+                for (int y = 0; y < 144; y++)
+                {
+                    int pixel = y * 256 + x;
+                    Assert.That(Mathf.Abs(thinImage[pixel].r - clear[pixel].r), Is.GreaterThan(3),
+                        $"Scratch column {x} must remain connected at row {y}, including both screen edges.");
+                }
+            }
             Assert.That(thinColumns.Count(changed => changed),
                 Is.LessThan(originalColumns.Count(changed => changed) * 0.75f),
                 "Half thickness must visibly reduce the width, even with world pixelation enabled.");

@@ -10,6 +10,7 @@
         "Unity.2D.Sprite.Editor",
         "Unity.RenderPipelines.Core.Runtime",
         "Unity.RenderPipelines.Universal.Runtime",
+        "Unity.ugui",
         "UnityEngine.TestRunner",
         "UnityEditor.TestRunner"
     ],

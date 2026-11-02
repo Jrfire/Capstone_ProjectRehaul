@@ -68,7 +68,7 @@ Camera:
     width: 1
     height: 1
   near clip plane: 0.05
-  far clip plane: 40
+  far clip plane: 35
   field of view: 65
   orthographic: 0
   orthographic size: 5
@@ -152,7 +152,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Capstone.Player::PlayerCameraEffects
   pixelation: 1
-  pixelHeight: 270
+  pixelHeight: 120
 --- !u!114 &2400176252537241036
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -170,13 +170,13 @@ MonoBehaviour:
   occlusionMask:
     serializedVersion: 2
     m_Bits: 51
-  vignetteStrength: 0.65
+  vignetteStrength: 0.8
   verticalGrainStrength: 0.25
   verticalLineCount: 80
   verticalLineThickness: 0.1
-  filmJitterSpeed: 24
-  fovShudder: 1.25
-  shudderFrequency: 9
+  filmJitterSpeed: 64
+  fovShudder: 2.5
+  shudderFrequency: 10
 --- !u!1 &3271051443644085654
 GameObject:
   m_ObjectHideFlags: 0
@@ -285,6 +285,7 @@ GameObject:
   - component: {fileID: 845073521691756211}
   - component: {fileID: 845073521691756212}
   - component: {fileID: 845073521691756213}
+  - component: {fileID: 7975279330383797870}
   m_Layer: 0
   m_Name: NetworkPlayer
   m_TagString: Untagged
@@ -478,6 +479,22 @@ MonoBehaviour:
   playerCamera: {fileID: 8864935223497675231}
   mouseSensitivity: 0.15
   pitchLimit: 85
+--- !u!114 &7975279330383797870
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3831809166821954726}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 5c273c8d10f6d1f4ab46879069eef181, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Capstone.Player::PlayerHealth
+  syncDirection: 0
+  syncMode: 0
+  syncInterval: 0
+  currentHealth: 6
 --- !u!1 &5437688195085614544
 GameObject:
   m_ObjectHideFlags: 0

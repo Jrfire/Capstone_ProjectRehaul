@@ -3,6 +3,7 @@
     "references": [
         "Mirror",
         "Unity.InputSystem",
+        "Unity.ugui",
         "FizzySteamworks",
         "com.rlabrecque.steamworks.net",
         "Unity.RenderPipelines.Core.Runtime",
