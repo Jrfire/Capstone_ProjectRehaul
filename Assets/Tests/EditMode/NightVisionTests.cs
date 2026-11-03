@@ -51,10 +51,24 @@ public sealed class NightVisionTests
             Assert.That(grain.intensity.overrideState, Is.True);
             Assert.That(grain.intensity.value, Is.InRange(0f, 1f), "Grain intensity is user-tuned within Unity's range.");
             Assert.That(volume.sharedProfile.TryGet(out ColorAdjustments color), Is.True);
-            Assert.That(color.postExposure.value, Is.LessThan(0f));
+            Assert.That(color.postExposure.value, Is.LessThan(-0.9f), "The endless night is very dark.");
+            Assert.That(Mathf.Abs(color.colorFilter.value.b - color.colorFilter.value.r), Is.LessThan(0.05f),
+                "The night palette is neutral rather than tinted blue.");
+            Assert.That(System.IO.File.ReadAllText("Assets/Scenes/SampleScene.unity"),
+                Does.Contain("m_AmbientSkyColor: {r: 0.005, g: 0.005, b: 0.006, a: 1}"));
+            string streets = System.IO.File.ReadAllText("Assets/Scenes/StreetsTest.unity");
+            Assert.That(streets, Does.Contain("m_AmbientSkyColor: {r: 0.0015, g: 0.0015, b: 0.0018, a: 1}"),
+                "The streets are darker than the base so flashlights matter.");
+            foreach (string path in new[] { "Assets/Scenes/SampleScene.unity", "Assets/Scenes/StreetsTest.unity" })
+            {
+                string text = System.IO.File.ReadAllText(path);
+                Assert.That(text, Does.Contain("m_DefaultReflectionMode: 1"), path);
+                Assert.That(text, Does.Contain("m_ReflectionIntensity: 0\n"), path + " has no grey default reflections.");
+            }
             Light moon = scene.GetRootGameObjects().SelectMany(root =>
                 root.GetComponentsInChildren<Light>(true)).Single(light => light.type == LightType.Directional);
-            Assert.That(moon.intensity, Is.EqualTo(0.25f));
+            Assert.That(moon.intensity, Is.EqualTo(0.08f).Within(0.0001f));
+            Assert.That(moon.color.b - moon.color.r, Is.LessThan(0.1f));
             Assert.That(moon.shadows, Is.Not.EqualTo(LightShadows.None));
         }
 
@@ -65,27 +79,29 @@ public sealed class NightVisionTests
     }
 
     [Test]
-    public void SampleSceneHasAVisibleFearTestObjectWithDistanceControls()
+    public void FearSourcesAreWiredAndTheTikbalangHasDistanceControls()
     {
+        // The EnemyFearTest cube was removed from SampleScene once the Tikbalang existed; any remaining sources must be valid.
         var scene = EditorSceneManager.OpenScene("Assets/Scenes/SampleScene.unity", OpenSceneMode.Additive);
         try
         {
-            EnemyFearSource source = scene.GetRootGameObjects().SelectMany(root =>
-                root.GetComponentsInChildren<EnemyFearSource>(true)).Single();
-            Assert.That(source.name, Is.EqualTo("EnemyFearTest"));
-            Assert.That(source.visibilityRenderer, Is.EqualTo(source.GetComponent<Renderer>()));
-            Assert.That(source.visibilityRenderer.enabled, Is.True);
-            Assert.That(source.GetComponent<Collider>(), Is.Not.Null);
-            Assert.That(source.GetComponent<MeshFilter>().sharedMesh, Is.Not.Null);
-            Assert.That(source.fullIntensityDistance, Is.EqualTo(2f));
-            Assert.That(source.maxDistance, Is.EqualTo(25f));
-            Assert.That(source.StrengthAtDistance(2f), Is.EqualTo(1f));
-            Assert.That(source.StrengthAtDistance(13.5f), Is.EqualTo(0.5f));
-            Assert.That(source.StrengthAtDistance(25f), Is.Zero);
+            foreach (EnemyFearSource sceneSource in scene.GetRootGameObjects().SelectMany(root =>
+                         root.GetComponentsInChildren<EnemyFearSource>(true)))
+                Assert.That(sceneSource.visibilityRenderer, Is.Not.Null, sceneSource.name);
         }
         finally
         {
             EditorSceneManager.CloseScene(scene, true);
         }
+
+        GameObject tikbalang = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/PREFABS/Enemies/Tikbalang.prefab");
+        EnemyFearSource source = tikbalang.GetComponent<EnemyFearSource>();
+        Assert.That(source, Is.Not.Null);
+        Assert.That(source.visibilityRenderer, Is.Not.Null);
+        Assert.That(source.fullIntensityDistance, Is.EqualTo(2f));
+        Assert.That(source.maxDistance, Is.EqualTo(25f));
+        Assert.That(source.StrengthAtDistance(2f), Is.EqualTo(1f));
+        Assert.That(source.StrengthAtDistance(13.5f), Is.EqualTo(0.5f));
+        Assert.That(source.StrengthAtDistance(25f), Is.Zero);
     }
 }

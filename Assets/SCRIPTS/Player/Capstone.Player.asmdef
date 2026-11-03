@@ -2,6 +2,8 @@
     "name": "Capstone.Player",
     "references": [
         "Mirror",
+        "Mirror.Components",
+        "Capstone.Level",
         "Unity.InputSystem",
         "Unity.ugui",
         "FizzySteamworks",

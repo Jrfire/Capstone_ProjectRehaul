@@ -16,6 +16,7 @@ public sealed class PlayerVision : NetworkBehaviour
     [SyncVar] private double animationStartedAt;
 
     private PlayerMovement movement;
+    private PlayerHealth health;
     private CharacterAnimationState? requestedState;
     private bool restartRequested;
     private bool hasSentVision;
@@ -28,10 +29,13 @@ public sealed class PlayerVision : NetworkBehaviour
     public float FacingYaw => facingYaw;
     public CharacterAnimationState AnimationState => animationState;
     public CharacterDirection DisplayedDirection { get; private set; }
+    public Camera PlayerCamera => playerCamera;
+    public SpriteRenderer WorldSprites => worldSprites;
 
     private void Awake()
     {
         movement = GetComponent<PlayerMovement>();
+        health = GetComponent<PlayerHealth>();
         if (characterDefinition == null || playerCamera == null || worldSprites == null ||
             !playerCamera.transform.IsChildOf(transform) || !worldSprites.transform.IsChildOf(transform) ||
             worldSprites.transform == transform)
@@ -92,6 +96,9 @@ public sealed class PlayerVision : NetworkBehaviour
 
         if (!isClient || isLocalPlayer || !worldSprites.gameObject.activeInHierarchy)
             return;
+
+        // Dead players vanish for everyone; the spectated player is hidden locally so it doesn't block their POV.
+        worldSprites.forceRenderingOff = (health != null && health.IsDead) || PlayerDeathScreen.SpectatedPlayer == gameObject;
 
         NetworkIdentity localPlayer = NetworkClient.localPlayer;
         if (localPlayer == null || !localPlayer.TryGetComponent(out PlayerVision viewer) ||

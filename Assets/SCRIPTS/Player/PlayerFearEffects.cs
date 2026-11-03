@@ -24,8 +24,13 @@ public sealed class PlayerFearEffects : MonoBehaviour
     public float fovShudder = 1.25f;
     [Min(0f)] public float shudderFrequency = 9f;
 
+    /// <summary>Sight-driven panic (drives the FOV shudder). Hidden or occluded enemies never raise it.</summary>
     public float CurrentIntensity { get; private set; }
     public float VisibleIntensity { get; private set; }
+    /// <summary>Unsmoothed strength of the closest enemy, ignoring sight.</summary>
+    public float ProximityIntensity { get; private set; }
+    /// <summary>Smoothed max of sight and proximity panic; drives only the vignette and vertical lines.</summary>
+    public float OverlayIntensity { get; private set; }
     internal bool CanAffectCamera => isActiveAndEnabled && viewCamera != null &&
         viewCamera.isActiveAndEnabled && (identity == null || identity.isLocalPlayer);
 
@@ -64,17 +69,33 @@ public sealed class PlayerFearEffects : MonoBehaviour
         viewCamera.fieldOfView = baseFov;
         GeometryUtility.CalculateFrustumPlanes(viewCamera, frustum);
         VisibleIntensity = 0f;
+        ProximityIntensity = 0f;
         foreach (EnemyFearSource source in EnemyFearSource.ActiveSources)
+        {
             VisibleIntensity = Mathf.Max(VisibleIntensity, EvaluateSource(source));
+            ProximityIntensity = Mathf.Max(ProximityIntensity, EvaluateProximity(source));
+        }
 
         float speed = VisibleIntensity > CurrentIntensity ? buildUpSpeed : recoverySpeed;
         CurrentIntensity = Mathf.MoveTowards(CurrentIntensity, VisibleIntensity,
             Mathf.Max(0.1f, speed) * Time.deltaTime);
+        float overlayTarget = Mathf.Max(VisibleIntensity, ProximityIntensity);
+        float overlaySpeed = overlayTarget > OverlayIntensity ? buildUpSpeed : recoverySpeed;
+        OverlayIntensity = Mathf.Max(CurrentIntensity, Mathf.MoveTowards(OverlayIntensity, overlayTarget,
+            Mathf.Max(0.1f, overlaySpeed) * Time.deltaTime));
         float time = Time.time * Mathf.Max(0f, shudderFrequency) * Mathf.PI * 2f;
         float oscillation = (Mathf.Sin(time) + 0.35f * Mathf.Sin(time * 2.37f)) / 1.35f;
         appliedFov = Mathf.Clamp(baseFov + oscillation * Mathf.Clamp(fovShudder, 0f, 5f) *
             CurrentIntensity, 1f, 179f);
         viewCamera.fieldOfView = appliedFov;
+    }
+
+    private float EvaluateProximity(EnemyFearSource source)
+    {
+        Renderer body = source.visibilityRenderer;
+        if (body == null || !body.gameObject.activeInHierarchy)
+            return 0f;
+        return source.ProximityStrengthAtDistance(Vector3.Distance(viewCamera.transform.position, body.bounds.center));
     }
 
     private float EvaluateSource(EnemyFearSource source)
@@ -149,6 +170,8 @@ public sealed class PlayerFearEffects : MonoBehaviour
     {
         CurrentIntensity = 0f;
         VisibleIntensity = 0f;
+        ProximityIntensity = 0f;
+        OverlayIntensity = 0f;
         if (viewCamera != null)
         {
             if (Mathf.Approximately(viewCamera.fieldOfView, appliedFov))

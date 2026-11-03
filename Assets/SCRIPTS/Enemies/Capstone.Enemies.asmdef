@@ -1,0 +1,8 @@
+{
+    "name": "Capstone.Enemies",
+    "references": [
+        "Mirror",
+        "Capstone.Level",
+        "Capstone.Player"
+    ]
+}

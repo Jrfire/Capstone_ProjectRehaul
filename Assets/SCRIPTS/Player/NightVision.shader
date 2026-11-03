@@ -1,5 +1,9 @@
 Shader "Hidden/Capstone/NightVision"
 {
+    Properties
+    {
+        [HideInInspector] _MainTex ("Mask Shape (sprite texture)", 2D) = "white" {}
+    }
     SubShader
     {
         Tags { "RenderPipeline" = "UniversalPipeline" }
@@ -12,6 +16,9 @@ Shader "Hidden/Capstone/NightVision"
         float4 _Panic;
         float _FilmTime;
         float _FilmLineThickness;
+        float4 _EnemyDetail;
+        float4 _EnemyMaskSize;
+        TEXTURE2D(_EnemyMask);
         ENDHLSL
 
         Pass
@@ -110,7 +117,20 @@ Shader "Hidden/Capstone/NightVision"
                 UNITY_SETUP_STEREO_EYE_INDEX_POST_VERTEX(input);
                 float2 uv = input.texcoord;
                 if (_PixelGrid.z > 0.5)
-                    uv = (floor(uv * _PixelGrid.xy) + 0.5) / _PixelGrid.xy;
+                {
+                    float2 coarseUv = (floor(uv * _PixelGrid.xy) + 0.5) / _PixelGrid.xy;
+                    uv = coarseUv;
+                    if (_EnemyDetail.y > 0.5)
+                    {
+                        // Marked renderers (enemy sprites) use a finer grid, including where a coarse block would smear them.
+                        float2 fineGrid = _PixelGrid.xy * _EnemyDetail.x;
+                        float2 fineUv = (floor(input.texcoord * fineGrid) + 0.5) / fineGrid;
+                        half marked = max(SAMPLE_TEXTURE2D(_EnemyMask, sampler_PointClamp, fineUv).r,
+                            SAMPLE_TEXTURE2D(_EnemyMask, sampler_PointClamp, coarseUv).r);
+                        if (marked > 0.5)
+                            uv = fineUv;
+                    }
+                }
                 half4 scene = SAMPLE_TEXTURE2D_X(_BlitTexture, sampler_PointClamp, uv);
                 float2 centered = (input.texcoord - 0.5) * 2.0;
                 float vignette = smoothstep(0.25, 1.2, length(centered));
@@ -128,6 +148,56 @@ Shader "Hidden/Capstone/NightVision"
                 float tone = step(0.75, lineSeed) * 0.65;
                 scene.rgb = lerp(scene.rgb, tone.xxx, amount);
                 return scene;
+            }
+            ENDHLSL
+        }
+
+        Pass
+        {
+            Name "Reduced Pixelation Mask"
+            HLSLPROGRAM
+            #pragma vertex MaskVertex
+            #pragma fragment MaskFragment
+
+            TEXTURE2D(_MainTex);
+            SAMPLER(sampler_MainTex);
+            TEXTURE2D(_EnemySceneDepth);
+            float4x4 _EnemyMatrixV;
+            float4x4 _EnemyMatrixVP;
+
+            struct MaskAttributes
+            {
+                float4 positionOS : POSITION;
+                float2 uv : TEXCOORD0;
+            };
+
+            struct MaskVaryings
+            {
+                float4 positionCS : SV_POSITION;
+                float2 uv : TEXCOORD0;
+                float eyeDepth : TEXCOORD1;
+            };
+
+            MaskVaryings MaskVertex(MaskAttributes input)
+            {
+                MaskVaryings output;
+                float3 positionWS = TransformObjectToWorld(input.positionOS.xyz);
+                output.positionCS = mul(_EnemyMatrixVP, float4(positionWS, 1.0));
+                output.eyeDepth = -mul(_EnemyMatrixV, float4(positionWS, 1.0)).z;
+                output.uv = input.uv;
+                return output;
+            }
+
+            half4 MaskFragment(MaskVaryings input) : SV_Target
+            {
+                if (SAMPLE_TEXTURE2D(_MainTex, sampler_MainTex, input.uv).a < 0.5)
+                    discard;
+                // Compare against the scene depth to keep occluded parts coarse (Solid Sprite renderers match their own depth).
+                float rawDepth = SAMPLE_TEXTURE2D(_EnemySceneDepth, sampler_PointClamp,
+                    input.positionCS.xy * _EnemyMaskSize.zw).r;
+                if (input.eyeDepth > LinearEyeDepth(rawDepth, _ZBufferParams) + 0.05)
+                    discard;
+                return 1.0;
             }
             ENDHLSL
         }

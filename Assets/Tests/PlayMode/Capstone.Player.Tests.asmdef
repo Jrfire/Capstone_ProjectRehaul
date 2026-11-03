@@ -2,6 +2,8 @@
     "name": "Capstone.Player.Tests",
     "references": [
         "Capstone.Player",
+        "Capstone.Level",
+        "Capstone.Enemies",
         "Mirror",
         "Mirror.Components",
         "Mirror.Transports",

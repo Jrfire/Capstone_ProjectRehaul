@@ -16,6 +16,12 @@ public sealed class EnemyFearSource : MonoBehaviour
     [Range(0f, 1f)]
     public float intensity = 1f;
 
+    [Header("Proximity (vignette + vertical lines only, no line of sight needed)")]
+    [Min(0f), Tooltip("Full proximity panic at or inside this distance, even when the enemy is behind the player or a wall.")]
+    public float proximityFullDistance = 2f;
+    [Min(0f), Tooltip("No proximity panic beyond this distance. Set to 0 to disable proximity panic for this enemy.")]
+    public float proximityMaxDistance = 10f;
+
     private void Awake()
     {
         if (visibilityRenderer == null)
@@ -42,6 +48,15 @@ public sealed class EnemyFearSource : MonoBehaviour
     {
         float far = Mathf.Max(0.1f, maxDistance);
         float near = Mathf.Clamp(fullIntensityDistance, 0f, far - 0.001f);
+        return Mathf.Clamp01(intensity) * (1f - Mathf.InverseLerp(near, far, distance));
+    }
+
+    public float ProximityStrengthAtDistance(float distance)
+    {
+        if (proximityMaxDistance <= 0f)
+            return 0f;
+        float far = Mathf.Max(0.1f, proximityMaxDistance);
+        float near = Mathf.Clamp(proximityFullDistance, 0f, far - 0.001f);
         return Mathf.Clamp01(intensity) * (1f - Mathf.InverseLerp(near, far, distance));
     }
 }

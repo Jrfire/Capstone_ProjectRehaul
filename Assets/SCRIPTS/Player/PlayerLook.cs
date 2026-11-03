@@ -18,6 +18,7 @@ public sealed class PlayerLook : NetworkBehaviour
     private bool captureRequested;
     private bool cursorCaptured;
     private bool hasFocus;
+    private bool wasLocked;
 
     public override void OnStartLocalPlayer()
     {
@@ -79,6 +80,20 @@ public sealed class PlayerLook : NetworkBehaviour
             return;
 
         bool overlayActive = SteamSession.Instance != null && SteamSession.Instance.OverlayActive;
+        bool locked = PlayerControlLock.IsLocked;
+        if (locked)
+        {
+            // Menus and loading screens own the cursor; recapture once they release the lock.
+            wasLocked = true;
+            SetCursorCaptured(false);
+            return;
+        }
+        if (wasLocked)
+        {
+            wasLocked = false;
+            captureRequested = hasFocus;
+        }
+
         if (hasFocus && !overlayActive && Keyboard.current?.escapeKey.wasPressedThisFrame == true)
             captureRequested = !captureRequested;
 

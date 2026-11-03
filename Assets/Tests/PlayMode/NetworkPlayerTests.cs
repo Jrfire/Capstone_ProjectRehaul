@@ -66,6 +66,7 @@ public sealed class NetworkPlayerTests : InputTestFixture
         if (testSheet != null)
             Object.DestroyImmediate(testSheet);
 
+        PlayerStamina.TravelPaused = false;
         Transport.active = previousTransport;
         NetworkServer.listen = previousListen;
         Cursor.lockState = previousCursorLock;
@@ -323,11 +324,12 @@ public sealed class NetworkPlayerTests : InputTestFixture
         float baseFov = localCamera.fieldOfView;
         float remoteFov = remoteCamera.fieldOfView;
         PlayerVision vision = localPlayer.GetComponent<PlayerVision>();
+        float settle = sprintFov.fovIncrease / Mathf.Max(0.01f, sprintFov.transitionSpeed) + 0.25f;
 
         Press(keyboard.leftShiftKey);
         Press(keyboard.wKey);
         InputSystem.Update();
-        yield return new WaitForSeconds(0.4f);
+        yield return new WaitForSeconds(settle);
         Assert.That(localPlayer.GetComponent<PlayerMovement>().IsSprinting, Is.True);
         Assert.That(localCamera.fieldOfView, Is.EqualTo(baseFov + sprintFov.fovIncrease).Within(0.01f));
         Assert.That(remoteCamera.fieldOfView, Is.EqualTo(remoteFov));
@@ -339,7 +341,7 @@ public sealed class NetworkPlayerTests : InputTestFixture
 
         Release(keyboard.leftShiftKey);
         InputSystem.Update();
-        yield return new WaitForSeconds(0.4f);
+        yield return new WaitForSeconds(settle);
         Assert.That(localCamera.fieldOfView, Is.EqualTo(baseFov).Within(0.001f));
         Press(keyboard.leftShiftKey);
         InputSystem.Update();
@@ -353,6 +355,70 @@ public sealed class NetworkPlayerTests : InputTestFixture
         Release(keyboard.leftShiftKey);
         Release(keyboard.wKey);
         InputSystem.Update();
+    }
+
+    [UnityTest]
+    public IEnumerator TravelHandoffFreezesAndCarriesEachPlayersOwnStamina()
+    {
+        SpawnPlayers();
+        yield return null;
+        yield return null;
+        PlayerStamina stamina = localPlayer.GetComponent<PlayerStamina>();
+        Assert.That(stamina.TryUseStamina(1000f), Is.True);
+        PlayerStamina.TravelPaused = true;
+        stamina.CommitForTravel();
+        float timeout = Time.realtimeSinceStartup + 2f;
+        while (CarriedCooldown(stamina) <= 0f && Time.realtimeSinceStartup < timeout)
+            yield return null;
+        Assert.That(CarriedCooldown(stamina), Is.EqualTo(0.8f).Within(0.0001f), "The owner's Command carries its regen delay.");
+
+        yield return new WaitForSeconds(1f);
+        Assert.That(stamina.CurrentStamina, Is.Zero, "Stamina does not regenerate during travel.");
+        Assert.That(stamina.IsExhausted, Is.True);
+        Assert.That(stamina.TryUseStamina(1f), Is.False);
+
+        // A guest's player is respawned from the server's copy; simulate it with an initial-state replica.
+        PlayerStamina guest = remotePlayer.GetComponent<PlayerStamina>();
+        ApplyCarriedState(guest, 37f, true, 0.5f);
+        GameObject replicaObject = new GameObject("Respawned guest stamina");
+        try
+        {
+            PlayerStamina replica = replicaObject.AddComponent<PlayerStamina>();
+            NetworkWriter writer = new NetworkWriter();
+            guest.OnSerialize(writer, true);
+            replica.OnDeserialize(new NetworkReader(writer.ToArray()), true);
+            replica.OnStartAuthority();
+            Assert.That(replica.CurrentStamina, Is.EqualTo(37f), "The guest keeps its own stamina, not the host's.");
+            Assert.That(replica.IsExhausted, Is.True);
+            Regenerate(replica, 0.49f);
+            Assert.That(replica.CurrentStamina, Is.EqualTo(37f), "The remaining regen delay is restored.");
+            Regenerate(replica, 0.02f);
+            Assert.That(replica.CurrentStamina, Is.EqualTo(37.1f).Within(0.001f));
+        }
+        finally
+        {
+            Object.DestroyImmediate(replicaObject);
+        }
+
+        ApplyCarriedState(guest, 150f, false, 5f);
+        Assert.That(guest.CurrentStamina, Is.EqualTo(100f));
+        Assert.That(CarriedCooldown(guest), Is.EqualTo(0.8f).Within(0.0001f));
+
+        PlayerStamina.TravelPaused = false;
+        yield return new WaitForSeconds(1f);
+        Assert.That(stamina.CurrentStamina, Is.GreaterThan(0f), "Regeneration resumes once travel ends.");
+    }
+
+    private static float CarriedCooldown(PlayerStamina stamina)
+    {
+        return (float)typeof(PlayerStamina).GetField("carriedRegenCooldown", BindingFlags.Instance | BindingFlags.NonPublic)
+            .GetValue(stamina);
+    }
+
+    private static void ApplyCarriedState(PlayerStamina stamina, float value, bool exhausted, float cooldown)
+    {
+        typeof(PlayerStamina).GetMethod("ApplyCarriedState", BindingFlags.Instance | BindingFlags.NonPublic)
+            .Invoke(stamina, new object[] { value, exhausted, cooldown });
     }
 
     private static float Horizontal(Vector3 delta) => new Vector2(delta.x, delta.z).magnitude;

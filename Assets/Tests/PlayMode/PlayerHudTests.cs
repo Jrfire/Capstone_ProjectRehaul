@@ -75,6 +75,53 @@ public sealed class PlayerHudTests
     }
 
     [UnityTest]
+    public IEnumerator LocalDamageFlashesRedThenFadesWithoutFlashingOnSpawnOrRemoteDamage()
+    {
+        PlayerDamageFlash flash = hud.GetComponentInChildren<PlayerDamageFlash>(true);
+        Assert.That(flash, Is.Not.Null);
+        Assert.That(flash.FlashImage, Is.Not.Null);
+        Assert.That(flash.FlashImage.raycastTarget, Is.False);
+        Assert.That(flash.FlashImage.color.r, Is.GreaterThan(0.5f));
+        Assert.That(flash.FlashImage.color.g + flash.FlashImage.color.b, Is.LessThan(0.1f), "The flash is red.");
+        Assert.That(flash.transform.GetSiblingIndex(), Is.EqualTo(hud.transform.childCount - 1), "It covers the other HUD panels.");
+        var rect = (RectTransform)flash.transform;
+        Assert.That(rect.anchorMin, Is.EqualTo(Vector2.zero));
+        Assert.That(rect.anchorMax, Is.EqualTo(Vector2.one));
+
+        for (int i = 0; i < 3; i++)
+        {
+            yield return null;
+            Assert.That(flash.CurrentAlpha, Is.Zero, "Spawning never flashes.");
+        }
+        remote.TakeDamage(2);
+        yield return null;
+        yield return null;
+        Assert.That(flash.CurrentAlpha, Is.Zero, "Other players' damage stays on their screens.");
+
+        local.TakeDamage(2);
+        yield return null;
+        yield return null;
+        Assert.That(flash.CurrentAlpha, Is.EqualTo(flash.peakAlpha).Within(0.001f));
+        Assert.That(flash.FlashImage.enabled, Is.True);
+
+        Assert.That(flash.EvaluateAlpha(flash.holdSeconds + flash.fadeSeconds * 0.5f), Is.EqualTo(flash.peakAlpha * 0.5f).Within(0.001f),
+            "It fades gradually rather than vanishing.");
+        float previous = flash.CurrentAlpha;
+        bool sawPartial = false;
+        float timeout = Time.realtimeSinceStartup + 2f;
+        while (flash.CurrentAlpha > 0f && Time.realtimeSinceStartup < timeout)
+        {
+            yield return null;
+            Assert.That(flash.CurrentAlpha, Is.LessThanOrEqualTo(previous + 0.0001f));
+            sawPartial |= flash.CurrentAlpha > 0f && flash.CurrentAlpha < flash.peakAlpha * 0.9f;
+            previous = flash.CurrentAlpha;
+        }
+        Assert.That(flash.CurrentAlpha, Is.Zero);
+        Assert.That(flash.FlashImage.enabled, Is.False);
+        Assert.That(sawPartial, Is.True, "Intermediate fade alphas were shown.");
+    }
+
+    [UnityTest]
     public IEnumerator AllSevenHealthValuesMapToThreeOwnerOnlyHearts()
     {
         yield return null;

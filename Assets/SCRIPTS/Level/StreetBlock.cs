@@ -27,6 +27,17 @@ public sealed class StreetBlockEntrance
     public float Width => width;
     public Vector3 LocalCenter => localCenter;
     public EntranceObstacle Obstacle => obstacle;
+
+    /// <summary>Destroys this entrance's obstacle (e.g. a placed spawn block's entrance must always be open).</summary>
+    public void RemoveObstacle()
+    {
+        if (obstacle != null)
+        {
+            // Immediate, so NavMesh carving collected later this frame never sees it.
+            UnityEngine.Object.DestroyImmediate(obstacle.gameObject);
+        }
+        obstacle = null;
+    }
 }
 
 /// <summary>
@@ -41,6 +52,8 @@ public sealed class StreetBlock : MonoBehaviour
     [SerializeField, Min(1)] private int tilesPerCell = 1;
     [SerializeField] private int seed;
     [SerializeField] private List<StreetBlockEntrance> entrances = new List<StreetBlockEntrance>();
+    [SerializeField, Tooltip("Walkable floor used to bake the NavMesh. Defaults to the generator's Generated/Floor group.")]
+    private Transform floorRoot;
 
     public Vector2Int SizeInTiles => sizeInTiles;
     public Vector2 TileSize => tileSize;
@@ -52,6 +65,16 @@ public sealed class StreetBlock : MonoBehaviour
     public Vector2 Size => new Vector2(sizeInTiles.x * tileSize.x, sizeInTiles.y * tileSize.y);
     public int Seed => seed;
     public IReadOnlyList<StreetBlockEntrance> Entrances => entrances;
+    /// <summary>The walkable floor that MapManager bakes into the NavMesh; everything else in the block becomes an obstacle.</summary>
+    public Transform FloorRoot => floorRoot != null ? floorRoot : transform.Find("Generated/Floor");
+
+    /// <summary>True if <paramref name="worldPosition"/> lies over this block's footprint (height is ignored).</summary>
+    public bool ContainsXZ(Vector3 worldPosition, float margin = 0f)
+    {
+        Vector3 local = transform.InverseTransformPoint(worldPosition);
+        Vector2 half = Size * 0.5f;
+        return Mathf.Abs(local.x) <= half.x + margin && Mathf.Abs(local.z) <= half.y + margin;
+    }
 
     public bool HasEntrance(BlockSide side) => GetEntrance(side) != null;
 

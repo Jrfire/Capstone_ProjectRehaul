@@ -37,7 +37,17 @@ public static class CharacterSheetImporter
         if (definition == null)
             throw new ArgumentNullException(nameof(definition));
 
-        CharacterAnimation animation = definition.GetAnimation(state);
+        Generate(definition, definition.GetAnimation(state));
+    }
+
+    /// <summary>Slices <paramref name="animation"/>'s sheet and assigns its frames; <paramref name="owner"/> is the asset that stores it.</summary>
+    public static void Generate(UnityEngine.Object owner, CharacterAnimation animation)
+    {
+        if (owner == null)
+            throw new ArgumentNullException(nameof(owner));
+        if (animation == null)
+            throw new ArgumentNullException(nameof(animation));
+
         if (animation.AssignmentMode != CharacterFrameAssignment.Automatic)
             throw new InvalidOperationException("Switch this state to Automatic before generating frames. Manual sprites were not changed.");
         string path = AssetDatabase.GetAssetPath(animation.SpriteSheet);
@@ -109,9 +119,9 @@ public static class CharacterSheetImporter
                 throw new InvalidOperationException($"Unity did not import frame '{rects[i].name}'. The definition was not updated.");
         }
 
-        Undo.RecordObject(definition, "Assign character animation frames");
+        Undo.RecordObject(owner, "Assign character animation frames");
         animation.AssignFrames(frames);
-        EditorUtility.SetDirty(definition);
-        AssetDatabase.SaveAssetIfDirty(definition);
+        EditorUtility.SetDirty(owner);
+        AssetDatabase.SaveAssetIfDirty(owner);
     }
 }

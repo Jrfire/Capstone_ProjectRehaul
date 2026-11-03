@@ -1,4 +1,6 @@
+using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.Experimental.Rendering;
 using UnityEngine.Rendering;
 using UnityEngine.Rendering.RenderGraphModule;
 using UnityEngine.Rendering.Universal;
@@ -8,6 +10,7 @@ public sealed class NightVisionRendererFeature : ScriptableRendererFeature
     [SerializeField] private Shader shader;
     private Material fogMaterial;
     private Material pixelMaterial;
+    private Material maskMaterial;
     private NightPass fogPass;
     private NightPass pixelPass;
 
@@ -15,6 +18,7 @@ public sealed class NightVisionRendererFeature : ScriptableRendererFeature
     {
         CoreUtils.Destroy(fogMaterial);
         CoreUtils.Destroy(pixelMaterial);
+        CoreUtils.Destroy(maskMaterial);
         if (shader == null)
         {
             Debug.LogError("NightVisionRendererFeature requires the Capstone Night Vision shader.");
@@ -22,8 +26,9 @@ public sealed class NightVisionRendererFeature : ScriptableRendererFeature
         }
         fogMaterial = CoreUtils.CreateEngineMaterial(shader);
         pixelMaterial = CoreUtils.CreateEngineMaterial(shader);
-        fogPass = new NightPass(fogMaterial, 0, RenderPassEvent.BeforeRenderingPostProcessing);
-        pixelPass = new NightPass(pixelMaterial, 1, RenderPassEvent.AfterRenderingPostProcessing);
+        maskMaterial = CoreUtils.CreateEngineMaterial(shader);
+        fogPass = new NightPass(fogMaterial, 0, RenderPassEvent.BeforeRenderingPostProcessing, null);
+        pixelPass = new NightPass(pixelMaterial, 1, RenderPassEvent.AfterRenderingPostProcessing, maskMaterial);
     }
 
     public override void AddRenderPasses(ScriptableRenderer renderer, ref RenderingData renderingData)
@@ -41,7 +46,7 @@ public sealed class NightVisionRendererFeature : ScriptableRendererFeature
         if (fog != null && fog.active && fog.enabled.value && fog.density.value > 0f)
             renderer.EnqueuePass(fogPass);
         PlayerFearEffects fear = camera.GetComponent<PlayerFearEffects>();
-        if (effects.pixelation || (fear != null && fear.CanAffectCamera && fear.CurrentIntensity > 0f))
+        if (effects.pixelation || (fear != null && fear.CanAffectCamera && fear.OverlayIntensity > 0f))
             renderer.EnqueuePass(pixelPass);
     }
 
@@ -49,32 +54,46 @@ public sealed class NightVisionRendererFeature : ScriptableRendererFeature
     {
         CoreUtils.Destroy(fogMaterial);
         CoreUtils.Destroy(pixelMaterial);
+        CoreUtils.Destroy(maskMaterial);
     }
 
     private sealed class NightPass : ScriptableRenderPass
     {
         private const int MaxLocalLights = 8;
+        private const int MaskShaderPass = 2;
         private readonly Material material;
+        private readonly Material maskMaterial;
         private readonly int shaderPass;
         private readonly Vector4[] lightPositions = new Vector4[MaxLocalLights];
         private readonly Vector4[] lightColors = new Vector4[MaxLocalLights];
         private readonly Vector4[] lightDirections = new Vector4[MaxLocalLights];
+        private readonly List<Renderer> markedRenderers = new List<Renderer>();
 
         private sealed class PassData
         {
             public TextureHandle source;
+            public TextureHandle mask;
             public Material material;
             public int shaderPass;
         }
 
-        public NightPass(Material material, int shaderPass, RenderPassEvent passEvent)
+        private sealed class MaskPassData
+        {
+            public TextureHandle depth;
+            public Material material;
+            public Matrix4x4 view;
+            public Matrix4x4 projection;
+            public readonly List<Renderer> renderers = new List<Renderer>();
+        }
+
+        public NightPass(Material material, int shaderPass, RenderPassEvent passEvent, Material maskMaterial)
         {
             this.material = material;
+            this.maskMaterial = maskMaterial;
             this.shaderPass = shaderPass;
             renderPassEvent = passEvent;
             requiresIntermediateTexture = true;
-            if (shaderPass == 0)
-                ConfigureInput(ScriptableRenderPassInput.Depth);
+            ConfigureInput(ScriptableRenderPassInput.Depth);
         }
 
         public override void RecordRenderGraph(RenderGraph graph, ContextContainer frameData)
@@ -86,6 +105,7 @@ public sealed class NightVisionRendererFeature : ScriptableRendererFeature
                 Debug.LogError("Night vision requires an intermediate camera color texture.");
                 return;
             }
+            TextureHandle mask = TextureHandle.nullHandle;
             if (shaderPass == 0)
             {
                 NightFog fog = VolumeManager.instance.stack.GetComponent<NightFog>();
@@ -107,11 +127,17 @@ public sealed class NightVisionRendererFeature : ScriptableRendererFeature
                 material.SetVector("_PixelGrid", new Vector4(width, height, effects.pixelation ? 1f : 0f, 0f));
                 PlayerFearEffects fear = cameraData.camera.GetComponent<PlayerFearEffects>();
                 bool panic = fear != null && fear.CanAffectCamera;
-                material.SetVector("_Panic", panic ? new Vector4(fear.CurrentIntensity,
+                material.SetVector("_Panic", panic ? new Vector4(fear.OverlayIntensity,
                     Mathf.Clamp01(fear.vignetteStrength), Mathf.Clamp01(fear.verticalGrainStrength),
                     Mathf.Max(1f, fear.verticalLineCount)) : Vector4.zero);
                 material.SetFloat("_FilmTime", panic ? Time.time * Mathf.Max(0f, fear.filmJitterSpeed) : 0f);
                 material.SetFloat("_FilmLineThickness", panic ? Mathf.Clamp(fear.verticalLineThickness, 0.05f, 2f) : 1f);
+                float detail = Mathf.Clamp(effects.enemyPixelDetail, 1f, 4f);
+                if (effects.pixelation && detail > 1.001f)
+                    mask = RecordMask(graph, resources, cameraData);
+                material.SetVector("_EnemyDetail", new Vector4(detail, mask.IsValid() ? 1f : 0f, 0f, 0f));
+                if (!mask.IsValid())
+                    material.SetTexture("_EnemyMask", Texture2D.blackTexture);
             }
 
             TextureHandle source = resources.activeColorTexture;
@@ -122,9 +148,12 @@ public sealed class NightVisionRendererFeature : ScriptableRendererFeature
             using (var builder = graph.AddRasterRenderPass<PassData>(descriptor.name, out var data))
             {
                 data.source = source;
+                data.mask = mask;
                 data.material = material;
                 data.shaderPass = shaderPass;
                 builder.UseTexture(source);
+                if (mask.IsValid())
+                    builder.UseTexture(mask);
                 if (shaderPass == 0)
                 {
                     builder.UseTexture(resources.cameraDepthTexture);
@@ -133,10 +162,63 @@ public sealed class NightVisionRendererFeature : ScriptableRendererFeature
                 }
                 builder.SetRenderAttachment(destination, 0);
                 builder.SetRenderFunc((PassData pass, RasterGraphContext context) =>
+                {
+                    if (pass.mask.IsValid())
+                        pass.material.SetTexture("_EnemyMask", (Texture)pass.mask);
                     Blitter.BlitTexture(context.cmd, pass.source, new Vector4(1f, 1f, 0f, 0f),
-                        pass.material, pass.shaderPass));
+                        pass.material, pass.shaderPass);
+                });
             }
             resources.cameraColor = destination;
+        }
+
+        private TextureHandle RecordMask(RenderGraph graph, UniversalResourceData resources, UniversalCameraData cameraData)
+        {
+            Camera camera = cameraData.camera;
+            markedRenderers.Clear();
+            foreach (Renderer marked in ReducedPixelation.ActiveRenderers)
+            {
+                if (marked != null && marked.enabled && marked.gameObject.activeInHierarchy && !marked.forceRenderingOff &&
+                    (camera.cullingMask & (1 << marked.gameObject.layer)) != 0 &&
+                    (!(marked is SpriteRenderer sprite) || sprite.sprite != null))
+                    markedRenderers.Add(marked);
+            }
+            if (markedRenderers.Count == 0 || maskMaterial == null || !resources.cameraDepthTexture.IsValid())
+                return TextureHandle.nullHandle;
+
+            TextureDesc descriptor = graph.GetTextureDesc(resources.activeColorTexture);
+            descriptor.name = "Reduced Pixelation Mask";
+            descriptor.format = GraphicsFormat.R8_UNorm;
+            descriptor.msaaSamples = MSAASamples.None;
+            descriptor.clearBuffer = true;
+            descriptor.clearColor = Color.clear;
+            TextureHandle mask = graph.CreateTexture(descriptor);
+            maskMaterial.SetVector("_EnemyMaskSize", new Vector4(descriptor.width, descriptor.height,
+                1f / Mathf.Max(1, descriptor.width), 1f / Mathf.Max(1, descriptor.height)));
+            using (var builder = graph.AddRasterRenderPass<MaskPassData>(descriptor.name, out var data))
+            {
+                data.depth = resources.cameraDepthTexture;
+                data.material = maskMaterial;
+                data.view = cameraData.GetViewMatrix();
+                data.projection = GL.GetGPUProjectionMatrix(cameraData.GetProjectionMatrix(), true);
+                data.renderers.Clear();
+                data.renderers.AddRange(markedRenderers);
+                builder.UseTexture(data.depth);
+                builder.SetRenderAttachment(mask, 0);
+                builder.AllowPassCulling(false);
+                builder.SetRenderFunc((MaskPassData pass, RasterGraphContext context) =>
+                {
+                    pass.material.SetTexture("_EnemySceneDepth", (Texture)pass.depth);
+                    pass.material.SetMatrix("_EnemyMatrixV", pass.view);
+                    pass.material.SetMatrix("_EnemyMatrixVP", pass.projection * pass.view);
+                    foreach (Renderer marked in pass.renderers)
+                    {
+                        if (marked != null)
+                            context.cmd.DrawRenderer(marked, pass.material, 0, MaskShaderPass);
+                    }
+                });
+            }
+            return mask;
         }
 
         private void SetLights(UniversalLightData data)

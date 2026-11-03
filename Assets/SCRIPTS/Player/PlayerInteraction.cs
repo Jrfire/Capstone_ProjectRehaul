@@ -12,7 +12,7 @@ public sealed class PlayerInteraction : NetworkBehaviour
     [SerializeField] private LayerMask interactionLayers = Physics.DefaultRaycastLayers;
 
     private InputAction useAction;
-    public SteamInviteInteractable CurrentTarget { get; private set; }
+    public Interactable CurrentTarget { get; private set; }
 
     public override void OnStartLocalPlayer()
     {
@@ -51,26 +51,26 @@ public sealed class PlayerInteraction : NetworkBehaviour
     {
         CurrentTarget = null;
         if (!isLocalPlayer || useAction == null || !useAction.enabled ||
-            !playerCamera.isActiveAndEnabled ||
+            !playerCamera.isActiveAndEnabled || PlayerControlLock.IsLocked ||
             (SteamSession.Instance != null && SteamSession.Instance.OverlayActive))
             return;
 
         var ray = new Ray(playerCamera.transform.position, playerCamera.transform.forward);
         if (Physics.Raycast(ray, out RaycastHit hit, useDistance, interactionLayers, QueryTriggerInteraction.Ignore))
         {
-            SteamInviteInteractable target = hit.collider.GetComponentInParent<SteamInviteInteractable>();
-            if (target != null && target.isActiveAndEnabled)
+            Interactable target = hit.collider.GetComponentInParent<Interactable>();
+            if (target != null && target.isActiveAndEnabled && target.CanInteract(this))
                 CurrentTarget = target;
         }
 
         if (CurrentTarget != null && useAction.WasPressedThisFrame())
-            CurrentTarget.InviteFriends();
+            CurrentTarget.Interact(this);
     }
 
     private void OnGUI()
     {
-        if (isLocalPlayer && CurrentTarget != null)
-            GUI.Box(new Rect(Screen.width / 2f - 120, Screen.height - 70, 240, 30), "E: Invite Steam friends");
+        if (isLocalPlayer && CurrentTarget != null && !PlayerControlLock.IsLocked)
+            GUI.Box(new Rect(Screen.width / 2f - 150, Screen.height - 70, 300, 30), $"E: {CurrentTarget.Prompt}");
     }
 
     private void ReleaseInput()

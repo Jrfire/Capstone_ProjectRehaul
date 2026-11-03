@@ -113,6 +113,106 @@ public sealed class NightVisionRenderTests
     }
 
     [UnityTest]
+    public IEnumerator ReducedPixelationRenderersKeepFinerPixelsThanTheWorld()
+    {
+        effects.pixelHeight = 16;
+        effects.enemyPixelDetail = 2;
+        yield return null;
+        yield return null;
+        int world = RowColors(ReadPixels());
+        Assert.That(world, Is.InRange(15, 30));
+
+        GameObject quad = objects.OfType<GameObject>().Single(obj => obj.GetComponent<MeshFilter>() != null);
+        ReducedPixelation marker = quad.AddComponent<ReducedPixelation>();
+        yield return null;
+        yield return null;
+        int enemy = RowColors(ReadPixels());
+        Assert.That(enemy, Is.GreaterThan(world * 1.5f), "Marked enemy renderers use a finer pixel grid.");
+        Assert.That(enemy, Is.LessThan(80), "They are still pixelated, only less so.");
+
+        effects.enemyPixelDetail = 1;
+        yield return null;
+        yield return null;
+        Assert.That(RowColors(ReadPixels()), Is.InRange(15, 30), "Enemy Pixel Detail 1 matches the world.");
+        effects.enemyPixelDetail = 2;
+
+        GameObject wall = Track(GameObject.CreatePrimitive(PrimitiveType.Quad));
+        wall.layer = 30;
+        wall.transform.position = camera.transform.position + Vector3.forward * 2f;
+        wall.transform.localScale = new Vector3(12f, 12f, 1f);
+        Material wallMaterial = Track(new Material(Shader.Find("Universal Render Pipeline/Unlit")));
+        wallMaterial.SetTexture("_BaseMap", texture);
+        wall.GetComponent<Renderer>().sharedMaterial = wallMaterial;
+        yield return null;
+        yield return null;
+        Assert.That(RowColors(ReadPixels()), Is.InRange(15, 30), "Hidden enemies do not sharpen the wall in front of them.");
+        objects.Remove(wall);
+        Object.DestroyImmediate(wall);
+
+        Object.DestroyImmediate(marker);
+        quad.SetActive(false);
+        Texture2D spriteTexture = Track(new Texture2D(256, 4, TextureFormat.RGBA32, false, true));
+        spriteTexture.wrapMode = TextureWrapMode.Clamp;
+        spriteTexture.SetPixels(Enumerable.Range(0, 1024).Select(index =>
+            Color.white * Mathf.Lerp(0.1f, 0.9f, (index % 256) / 255f) + Color.black).ToArray());
+        spriteTexture.Apply();
+        GameObject spriteObject = Track(new GameObject("Reduced pixelation sprite"));
+        spriteObject.layer = 30;
+        spriteObject.transform.position = camera.transform.position + Vector3.forward * 4f;
+        spriteObject.transform.localScale = new Vector3(12f / 2.56f, 300f, 1f);
+        SpriteRenderer sprite = spriteObject.AddComponent<SpriteRenderer>();
+        sprite.sprite = Track(Sprite.Create(spriteTexture, new Rect(0, 0, 256, 4), Vector2.one * 0.5f, 100f));
+        sprite.sharedMaterial = Track(new Material(Shader.Find("Universal Render Pipeline/2D/Sprite-Unlit-Default")));
+        yield return null;
+        yield return null;
+        int coarseSprite = RowColors(ReadPixels());
+        spriteObject.AddComponent<ReducedPixelation>();
+        yield return null;
+        yield return null;
+        Assert.That(RowColors(ReadPixels()), Is.GreaterThan(coarseSprite * 1.5f), "Sprites (like the Tikbalang) are masked by their shape.");
+
+        sprite.sharedMaterial = Track(new Material(Shader.Find("Capstone/Solid Sprite")));
+        yield return null;
+        yield return null;
+        Assert.That(RowColors(ReadPixels()), Is.GreaterThan(coarseSprite * 1.5f),
+            "Depth-writing Solid Sprite renderers still pass their own depth test in the reduced pixelation mask.");
+    }
+
+    [UnityTest]
+    public IEnumerator SolidSpritesAreFoggedOnlyByTheAirInFrontOfThem()
+    {
+        effects.pixelation = false;
+        fog.enabled.value = true;
+        fog.density.value = 0.2f;
+        fog.heightFalloff.value = 0f;
+        fog.ambientColor.value = Color.black;
+        fog.lightScattering.value = 0f;
+
+        Texture2D white = Track(new Texture2D(4, 4, TextureFormat.RGBA32, false, true));
+        white.SetPixels(Enumerable.Repeat(Color.white, 16).ToArray());
+        white.Apply();
+        GameObject spriteObject = Track(new GameObject("Solid sprite"));
+        spriteObject.layer = 30;
+        spriteObject.transform.position = camera.transform.position + Vector3.forward;
+        SpriteRenderer sprite = spriteObject.AddComponent<SpriteRenderer>();
+        sprite.sprite = Track(Sprite.Create(white, new Rect(0, 0, 4, 4), Vector2.one * 0.5f, 4f));
+
+        sprite.sharedMaterial = Track(new Material(Shader.Find("Universal Render Pipeline/2D/Sprite-Unlit-Default")));
+        yield return null;
+        yield return null;
+        float transparent = CenterBrightness(ReadPixels());
+
+        sprite.sharedMaterial = Track(new Material(Shader.Find("Capstone/Solid Sprite")));
+        yield return null;
+        yield return null;
+        float solid = CenterBrightness(ReadPixels());
+
+        Assert.That(transparent, Is.LessThan(0.6f), "Depth-less sprites are fogged as if they were the wall 4 m behind them.");
+        Assert.That(solid, Is.GreaterThan(0.7f), "Solid sprites only receive the fog of the 1 m in front of them.");
+        Assert.That(solid, Is.LessThan(0.95f), "Fog still applies in front of the sprite.");
+    }
+
+    [UnityTest]
     public IEnumerator FogAttenuatesSurfacesAndLocalLightsScatterInsideTheVolume()
     {
         effects.pixelation = false;

@@ -1,0 +1,40 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 17f09010195041e5a3b6886166ea476b, type: 3}
+  m_Name: Tikbalang_Default
+  m_EditorClassIdentifier: Capstone.Enemies::TikbalangProfile
+  walkSpeed: 2.5
+  chaseSpeed: 6
+  eyeHeight: 2.2
+  visionRange: 18
+  visionAngle: 40
+  searchingVisionAngle: 80
+  hearingRadius: 8
+  idleWaitSeconds: 10
+  fallbackHomeHalfSize: {x: 10, y: 10}
+  lookAroundSeconds: 4
+  lookAroundAngles:
+  - -90
+  - 90
+  - 180
+  - 0
+  searchTimeoutSeconds: 20
+  chaseDurationSeconds: 60
+  repathInterval: 0.25
+  catchDistance: 1.2
+  contactDamage: 2
+  attackRange: 1.4
+  hitPauseSeconds: 1.5
+  teleportDistance: 35
+  teleportMinPlayerDistance: 10
+  teleportCooldownSeconds: 5
+  defaultStunSeconds: 4

@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.AI;
 using UnityEngine.Events;
 
 public enum ObstacleRequirement
@@ -57,6 +58,9 @@ public sealed class EntranceObstacle : MonoBehaviour
             return;
 
         cleared.Invoke();
+        // The NavMesh "fills in" once the entrance opens, whether or not the obstacle object stays visible.
+        foreach (NavMeshObstacle carver in GetComponentsInChildren<NavMeshObstacle>(true))
+            carver.enabled = false;
         if (deactivateWhenCleared)
             gameObject.SetActive(false);
     }

@@ -80,12 +80,28 @@ public sealed class PlayerMovement : NetworkBehaviour
         ReleaseInput();
     }
 
+    /// <summary>
+    /// Owner-only: moves the player without interpolation (e.g. onto a new map's spawn point) and tells everyone else.
+    /// </summary>
+    public void TeleportTo(Vector3 position, Quaternion rotation)
+    {
+        bool controllerEnabled = characterController.enabled;
+        characterController.enabled = false;
+        transform.SetPositionAndRotation(position, rotation);
+        verticalVelocity = 0f;
+        characterController.enabled = controllerEnabled;
+        Physics.SyncTransforms();
+
+        if (isOwned && NetworkClient.ready && TryGetComponent(out NetworkTransformBase networkTransform))
+            networkTransform.CmdTeleport(position, rotation);
+    }
+
     private void Update()
     {
         if (!isLocalPlayer || movementAction == null || !movementAction.enabled)
             return;
 
-        if (SteamSession.Instance != null && SteamSession.Instance.OverlayActive)
+        if (PlayerControlLock.IsLocked || (SteamSession.Instance != null && SteamSession.Instance.OverlayActive))
         {
             IsMoving = false;
             IsSprinting = false;

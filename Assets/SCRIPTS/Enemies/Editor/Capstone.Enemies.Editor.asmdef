@@ -1,0 +1,11 @@
+{
+    "name": "Capstone.Enemies.Editor",
+    "references": [
+        "Capstone.Enemies",
+        "Capstone.Player",
+        "Capstone.Player.Editor"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ]
+}

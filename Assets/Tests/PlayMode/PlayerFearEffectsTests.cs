@@ -124,6 +124,48 @@ public sealed class PlayerFearEffectsTests
     }
 
     [UnityTest]
+    public IEnumerator NearbyEnemiesDriveTheOverlayWithoutSightButNeverTheFovShudder()
+    {
+        camera.transform.rotation = Quaternion.Euler(0f, 180f, 0f);
+        source.proximityFullDistance = 2f;
+        source.proximityMaxDistance = 10f;
+        source.transform.position = camera.transform.position + Vector3.forward * 4f;
+        GameObject wall = Track(GameObject.CreatePrimitive(PrimitiveType.Cube));
+        wall.transform.position = camera.transform.position + Vector3.forward * 2f;
+        wall.transform.localScale = new Vector3(6f, 6f, 0.2f);
+        yield return Frames();
+
+        Assert.That(fear.VisibleIntensity, Is.Zero, "The enemy is behind the player and behind a wall.");
+        Assert.That(fear.CurrentIntensity, Is.Zero);
+        Assert.That(fear.ProximityIntensity, Is.EqualTo(0.75f).Within(0.001f));
+        Assert.That(fear.OverlayIntensity, Is.EqualTo(0.75f).Within(0.001f), "Vignette and film lines react to nearby enemies.");
+        for (int frame = 0; frame < 8; frame++)
+        {
+            yield return null;
+            Assert.That(camera.fieldOfView, Is.EqualTo(65f), "Only seeing an enemy shudders the FOV.");
+        }
+
+        source.transform.position = camera.transform.position + Vector3.forward * 11f;
+        yield return Frames();
+        Assert.That(fear.OverlayIntensity, Is.Zero);
+
+        source.transform.position = camera.transform.position + Vector3.forward * 3f;
+        source.proximityMaxDistance = 0f;
+        yield return Frames();
+        Assert.That(fear.OverlayIntensity, Is.Zero, "A zero proximity radius disables the effect.");
+
+        source.proximityMaxDistance = 10f;
+        camera.transform.rotation = Quaternion.identity;
+        Object.DestroyImmediate(wall);
+        objects.Remove(wall);
+        source.transform.position = camera.transform.position + Vector3.forward * 7f;
+        yield return Frames();
+        Assert.That(fear.CurrentIntensity, Is.EqualTo(0.5f).Within(0.001f));
+        Assert.That(fear.OverlayIntensity, Is.EqualTo(Mathf.Max(0.5f, source.ProximityStrengthAtDistance(7f))).Within(0.001f),
+            "The stronger of sight and proximity wins.");
+    }
+
+    [UnityTest]
     public IEnumerator FovShuddersWithinItsLimitAndRestoresOnDisableAndExternalFovChanges()
     {
         float largestOffset = 0f;
