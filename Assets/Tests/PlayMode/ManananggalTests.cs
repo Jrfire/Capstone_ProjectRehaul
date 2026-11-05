@@ -215,6 +215,32 @@ public sealed class ManananggalTests : InputTestFixture
         Assert.That(brain.ChaseTarget, Is.EqualTo(localPlayer.GetComponent<NetworkIdentity>()));
     }
 
+    [UnityTest]
+    public IEnumerator PassesComeFromVariedDirectionsAndLanes()
+    {
+        SpawnPlayers();
+        ManananggalBrain brain = CreateManananggal(new Vector3(0f, 0f, 0f), enableBrain: false);
+        var headings = new HashSet<int>();
+        bool diagonal = false;
+        float minLane = float.MaxValue, maxLane = float.MinValue;
+        for (int i = 0; i < 40; i++)
+        {
+            Assert.That(brain.TryPlanPass(out Vector3 start, out Vector3 end), Is.True);
+            Vector3 heading = (end - start).normalized;
+            float yaw = Mathf.Repeat(Mathf.Atan2(heading.x, heading.z) * Mathf.Rad2Deg, 360f);
+            headings.Add(Mathf.FloorToInt(yaw / 45f));
+            diagonal |= Mathf.Abs(Mathf.DeltaAngle(yaw, Mathf.Round(yaw / 90f) * 90f)) > 10f;
+            Vector3 side = Vector3.Cross(Vector3.up, heading);
+            float lane = Vector3.Dot((start + end) * 0.5f, side);
+            minLane = Mathf.Min(minLane, lane);
+            maxLane = Mathf.Max(maxLane, lane);
+        }
+        Assert.That(headings.Count, Is.GreaterThanOrEqualTo(5), "Passes come from many directions.");
+        Assert.That(diagonal, Is.True, "Not only along the map axes.");
+        Assert.That(maxLane - minLane, Is.GreaterThan(3f), "Parallel lanes are offset, not always through the centre.");
+        yield return null;
+    }
+
     private void SpawnPlayers()
     {
         Assert.That(NetworkServer.active || NetworkClient.active, Is.False, "Run these tests without an active NetworkManager.");

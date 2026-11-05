@@ -169,22 +169,6 @@ GameObject:
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!114 &7713410087039
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 410087039}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 8d3c5e7a41f24b0b9e6a2f1c7b5d9e03, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  normalSky: {fileID: 2100000, guid: 5583f3ef29b348ca8a709629dfae1de2, type: 2}
-  bloodMoonSky: {fileID: 2100000, guid: c71e2b9d84a64f53a0d6e8f2b1c4a957, type: 2}
-  bloodMoonLightColor: {r: 1, g: 0.12, b: 0.08, a: 1}
-  bloodMoonIntensityMultiplier: 1.5
 --- !u!108 &410087040
 Light:
   m_ObjectHideFlags: 0
@@ -776,6 +760,8 @@ MonoBehaviour:
   - sceneName: StreetsTest
     enemyPool:
     - enemy: {fileID: 11400000, guid: dd36cdc1a5e149b6946458eb43855e8a, type: 2}
+      weight: 1
+    - enemy: {fileID: 11400000, guid: 882f17d6f7014c80808e095574900542, type: 2}
       weight: 1
   mapScreenPrefab: {fileID: 4803919064222490608, guid: bb604f483163b1842ae4c3fd14ff8769, type: 3}
 --- !u!23 &1662569666
@@ -1514,33 +1500,36 @@ MonoBehaviour:
   costs:
   - sceneName: StreetsTest
     hours: 2
---- !u!1660057539 &9223372036854775807
-SceneRoots:
-  m_ObjectHideFlags: 0
-  m_Roots:
-  - {fileID: 410087041}
-  - {fileID: 832575519}
-  - {fileID: 1872446326}
-  - {fileID: 1090505055}
-  - {fileID: 2100000001}
-  - {fileID: 2100000301}
-  - {fileID: 540835442}
-  - {fileID: 1662569669}
-  - {fileID: 1755572577}
-  - {fileID: 2100000601}
---- !u!114 &99172100000300
+--- !u!114 &7713410087039
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2100000300}
+  m_GameObject: {fileID: 410087039}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8d3c5e7a41f24b0b9e6a2f1c7b5d9e03, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  alignMoonToLight: 1
+  normalSky: {fileID: 2100000, guid: 5583f3ef29b348ca8a709629dfae1de2, type: 2}
+  bloodMoonSky: {fileID: 2100000, guid: c71e2b9d84a64f53a0d6e8f2b1c4a957, type: 2}
+  bloodMoonLightColor: {r: 1, g: 0.12, b: 0.08, a: 1}
+  bloodMoonIntensityMultiplier: 1.5
+--- !u!114 &99171662569664
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1662569664}
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: b4e2d3c5f6a74b809d0e1f2a3b4c5d62, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Capstone.Player::Nametag
-  displayName: Steam Invite Terminal
+  displayName: Travel Map
   maxDistance: 3.5
 --- !u!114 &99171819335787
 MonoBehaviour:
@@ -1556,17 +1545,31 @@ MonoBehaviour:
   m_EditorClassIdentifier: Capstone.Player::Nametag
   displayName: Jeepney
   maxDistance: 3.5
---- !u!114 &99171662569664
+--- !u!114 &99172100000300
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1662569664}
+  m_GameObject: {fileID: 2100000300}
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: b4e2d3c5f6a74b809d0e1f2a3b4c5d62, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Capstone.Player::Nametag
-  displayName: Travel Map
+  displayName: Steam Invite Terminal
   maxDistance: 3.5
+--- !u!1660057539 &9223372036854775807
+SceneRoots:
+  m_ObjectHideFlags: 0
+  m_Roots:
+  - {fileID: 410087041}
+  - {fileID: 832575519}
+  - {fileID: 1872446326}
+  - {fileID: 1090505055}
+  - {fileID: 2100000001}
+  - {fileID: 2100000301}
+  - {fileID: 540835442}
+  - {fileID: 1662569669}
+  - {fileID: 1755572577}
+  - {fileID: 2100000601}

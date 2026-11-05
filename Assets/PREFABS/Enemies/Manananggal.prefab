@@ -441,7 +441,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Capstone.Player::EnemyJumpscare
   frontView: {fileID: -1041340136, guid: afe1adc3951ba3b458a60f372af291aa, type: 3}
   finalScreenHeight: 4
-  focusPoint: {x: 0.5, y: 0.6}
+  focusPoint: {x: 0.475, y: 0.604}
 --- !u!114 &3917264058172639401
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -455,10 +455,10 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Capstone.Player::EnemyLoadingMiniature
   frames:
-  - {fileID: -1041340136, guid: afe1adc3951ba3b458a60f372af291aa, type: 3}
-  - {fileID: 1559747223, guid: afe1adc3951ba3b458a60f372af291aa, type: 3}
-  - {fileID: 683713003, guid: afe1adc3951ba3b458a60f372af291aa, type: 3}
-  - {fileID: 1725468559, guid: afe1adc3951ba3b458a60f372af291aa, type: 3}
+  - {fileID: -645089666, guid: 971496dd146dcb74ea352a3a5307b484, type: 3}
+  - {fileID: -1593576373, guid: 971496dd146dcb74ea352a3a5307b484, type: 3}
+  - {fileID: -508002060, guid: 971496dd146dcb74ea352a3a5307b484, type: 3}
+  - {fileID: 977327724, guid: 971496dd146dcb74ea352a3a5307b484, type: 3}
   framesPerSecond: 8
   displayHeight: 140
 --- !u!114 &5482019937465120731

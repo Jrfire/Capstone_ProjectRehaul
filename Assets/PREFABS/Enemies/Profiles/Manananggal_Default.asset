@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: Manananggal_Default
   m_EditorClassIdentifier: Capstone.Enemies::ManananggalProfile
   huntSpeed: 8
-  chaseSpeed: 6.5
+  chaseSpeed: 5.5
   leaveSpeed: 10
   huntAltitude: 14
   chaseHoverHeight: 0.5
@@ -22,8 +22,10 @@ MonoBehaviour:
   visionAngle: 70
   visionPitch: 50
   firstPassDelaySeconds: {x: 5, y: 15}
-  respawnDelaySeconds: {x: 15, y: 40}
+  respawnDelaySeconds: {x: 8, y: 16}
   edgeMargin: 12
+  passDirectionStep: 0
+  minimumBlocksCrossed: 1
   revealDelaySeconds: 0.5
   fallbackPassHalfLength: 40
   chaseDurationSeconds: 20

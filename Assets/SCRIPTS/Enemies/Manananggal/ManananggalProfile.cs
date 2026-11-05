@@ -30,6 +30,10 @@ public sealed class ManananggalProfile : ScriptableObject
     public Vector2 respawnDelaySeconds = new Vector2(15f, 40f);
     [Min(0f), Tooltip("Passes start and end this far outside the street blocks' outer edges.")]
     public float edgeMargin = 12f;
+    [Range(0f, 90f), Tooltip("Pass directions are rounded to this many degrees (0 = any direction, 45 = edges and diagonals, 90 = map axes only).")]
+    public float passDirectionStep = 0f;
+    [Min(1), Tooltip("A pass lane must fly over at least this many street blocks. Lanes are random parallel lines anywhere across the map, including along its edges.")]
+    public int minimumBlocksCrossed = 1;
     [Min(0f), Tooltip("Seconds it stays invisible at the pass start so every client sees it appear there, not mid-flight.")]
     public float revealDelaySeconds = 0.5f;
     [Min(1f), Tooltip("Half length of a pass when there is no street map.")]

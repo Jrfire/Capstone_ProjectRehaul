@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Linq;
 using Mirror;
 using NUnit.Framework;
@@ -135,9 +136,8 @@ public sealed class EnemySetupTests
 
             EnemySpawner spawner = streets.GetRootGameObjects()
                 .SelectMany(root => root.GetComponentsInChildren<EnemySpawner>(true)).Single();
-            Assert.That(spawner.Enemies.Count, Is.EqualTo(1));
-            Assert.That(spawner.Enemies[0].prefab.gameObject, Is.EqualTo(prefab));
-            Assert.That(spawner.Enemies[0].count, Is.EqualTo(1));
+            Assert.That(spawner.Enemies.Count, Is.GreaterThanOrEqualTo(1));
+            Assert.That(spawner.Enemies.Any(entry => entry.prefab != null && entry.prefab.gameObject == prefab && entry.count == 1), Is.True);
             var map = new SerializedObject(spawner).FindProperty("map").objectReferenceValue as MapManager;
             Assert.That(map, Is.Not.Null);
             Assert.That(map.gameObject.scene, Is.EqualTo(streets));
@@ -187,15 +187,50 @@ public sealed class EnemySetupTests
     }
 
     [Test]
+    public void ManananggalPassesComeFromAnyDirectionOnParallelLanesAcrossTheMap()
+    {
+        var bounds = new Bounds(new Vector3(10f, 0f, -5f), new Vector3(60f, 0f, 30f));
+        foreach (float yaw in new[] { 0f, 37f, 90f, 135f, 200f, 270f, 333f })
+        {
+            Vector3 heading = Quaternion.Euler(0f, yaw, 0f) * Vector3.forward;
+            var lanes = new List<Vector3>();
+            foreach (float lane in new[] { 0f, 0.25f, 0.5f, 1f })
+            {
+                ManananggalBrain.PlanLane(bounds, yaw, lane, 14f, 12f, out Vector3 start, out Vector3 end);
+                Assert.That(start.y, Is.EqualTo(14f));
+                Assert.That(end.y, Is.EqualTo(14f));
+                Assert.That(Vector3.Angle(end - start, heading), Is.LessThan(0.01f), $"Yaw {yaw} flies straight along its heading.");
+                Assert.That(DistanceOutside(bounds, start) >= 11.9f && DistanceOutside(bounds, end) >= 11.9f, Is.True,
+                    $"Yaw {yaw} lane {lane}: it appears and despawns beyond the map's edge margin.");
+                lanes.Add(start);
+            }
+            Vector3 side = Vector3.Cross(Vector3.up, heading);
+            float wide = Mathf.Abs(side.x) * bounds.extents.x + Mathf.Abs(side.z) * bounds.extents.z;
+            Assert.That(Vector3.Dot(lanes[3] - lanes[0], side), Is.EqualTo(2f * wide).Within(0.01f),
+                "Lanes 0 and 1 run parallel along opposite edges of the map.");
+            Assert.That(Vector3.Dot(lanes[3] - lanes[0], heading), Is.EqualTo(0f).Within(0.01f));
+        }
+    }
+
+    private static float DistanceOutside(Bounds bounds, Vector3 point)
+    {
+        float dx = Mathf.Max(0f, Mathf.Max(bounds.min.x - point.x, point.x - bounds.max.x));
+        float dz = Mathf.Max(0f, Mathf.Max(bounds.min.z - point.z, point.z - bounds.max.z));
+        return Mathf.Sqrt(dx * dx + dz * dz);
+    }
+
+    [Test]
     public void ManananggalDefaultProfileAndRegistration()
     {
         var profile = AssetDatabase.LoadAssetAtPath<ManananggalProfile>("Assets/PREFABS/Enemies/Profiles/Manananggal_Default.asset");
-        Assert.That(profile.respawnDelaySeconds, Is.EqualTo(new Vector2(15f, 40f)));
+        Assert.That(profile.respawnDelaySeconds.x, Is.GreaterThan(0f));
+        Assert.That(profile.respawnDelaySeconds.y, Is.GreaterThanOrEqualTo(profile.respawnDelaySeconds.x));
         Assert.That(profile.chaseDurationSeconds, Is.EqualTo(20f));
         Assert.That(profile.hitPauseSeconds, Is.EqualTo(2.5f));
         Assert.That(profile.contactDamage, Is.EqualTo(2));
         Assert.That(profile.visionPitch, Is.InRange(20f, 80f), "Its cone looks down and a little forward.");
         Assert.That(profile.huntAltitude, Is.GreaterThan(8f));
+        Assert.That(profile.passDirectionStep, Is.EqualTo(0f), "Passes may come from any direction.");
 
         GameObject prefab = AssetDatabase.LoadAssetAtPath<GameObject>(ManananggalPath);
         var definition = AssetDatabase.LoadAssetAtPath<EnemyDefinition>("Assets/PREFABS/Enemies/Definitions/Manananggal.asset");

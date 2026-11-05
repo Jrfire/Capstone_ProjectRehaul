@@ -131,8 +131,9 @@ public sealed class ManananggalBrain : EnemyBrain
         chaseTarget != null && chaseTarget.TryGetComponent(out PlayerPersistence player) && player.isActiveAndEnabled ? player : null;
 
     /// <summary>
-    /// A straight pass over the street blocks at hunting altitude, from outside one edge of the map to outside the
-    /// opposite edge. Lines along a row/column that crosses many blocks are preferred, so it flies down the streets.
+    /// A straight pass at hunting altitude from outside one side of the map to outside the opposite side. Each pass
+    /// picks a random direction (see <see cref="ManananggalProfile.passDirectionStep"/>) and a random parallel lane
+    /// anywhere across the map, including along its edges, as long as it flies over enough street blocks.
     /// Without a map it crosses the fallback home area instead.
     /// </summary>
     public bool TryPlanPass(out Vector3 start, out Vector3 end)
@@ -140,34 +141,23 @@ public sealed class ManananggalBrain : EnemyBrain
         MapManager map = MapManager.Active;
         if (map != null && map.IsBuilt && TryGetMapBounds(map, out Bounds bounds))
         {
-            var candidates = new List<(Vector3 anchor, bool alongX, int crossed)>();
-            int best = 0;
-            for (int i = 0; i < map.BlockCount; i++)
+            float altitude = bounds.min.y + profile.huntAltitude;
+            int required = Mathf.Min(Mathf.Max(1, profile.minimumBlocksCrossed), Mathf.Max(1, map.BlockCount));
+            for (int attempt = 0; attempt < 32; attempt++)
             {
-                Vector3 anchor = map.GetBlock(i).transform.position;
-                foreach (bool alongX in new[] { true, false })
-                {
-                    int crossed = CountCrossedBlocks(map, bounds, anchor, alongX);
-                    candidates.Add((anchor, alongX, crossed));
-                    best = Mathf.Max(best, crossed);
-                }
+                PlanLane(bounds, RandomPassYaw(), Random.value, altitude, profile.edgeMargin, out start, out end);
+                if (CountCrossedBlocks(map, start, end) >= required)
+                    return true;
             }
-            candidates.RemoveAll(candidate => candidate.crossed < Mathf.Max(1, Mathf.CeilToInt(best * 0.6f)));
-            if (candidates.Count > 0)
-            {
-                var pick = candidates[Random.Range(0, candidates.Count)];
-                float altitude = bounds.min.y + profile.huntAltitude;
-                Vector3 axis = pick.alongX ? Vector3.right : Vector3.forward;
-                float min = (pick.alongX ? bounds.min.x : bounds.min.z) - profile.edgeMargin;
-                float max = (pick.alongX ? bounds.max.x : bounds.max.z) + profile.edgeMargin;
-                Vector3 across = new Vector3(pick.anchor.x, altitude, pick.anchor.z);
-                Vector3 a = Vector3.Scale(across, Vector3.one - axis) + axis * min;
-                Vector3 b = Vector3.Scale(across, Vector3.one - axis) + axis * max;
-                bool reverse = Random.value < 0.5f;
-                start = reverse ? b : a;
-                end = reverse ? a : b;
-                return true;
-            }
+
+            // Rare fallback: a random direction through a random block centre always crosses at least that block.
+            float yaw = RandomPassYaw();
+            Vector3 across = Vector3.Cross(Vector3.up, Quaternion.Euler(0f, yaw, 0f) * Vector3.forward);
+            Vector3 offset = map.GetBlock(Random.Range(0, map.BlockCount)).transform.position - bounds.center;
+            float extent = Mathf.Abs(across.x) * bounds.extents.x + Mathf.Abs(across.z) * bounds.extents.z;
+            float lane = extent > 0.0001f ? Mathf.InverseLerp(-extent, extent, Vector3.Dot(offset, across)) : 0.5f;
+            PlanLane(bounds, yaw, lane, altitude, profile.edgeMargin, out start, out end);
+            return true;
         }
 
         if (!Home.IsValid)
@@ -175,11 +165,37 @@ public sealed class ManananggalBrain : EnemyBrain
             start = end = default;
             return false;
         }
-        Vector3 center = Home.Center + Vector3.up * profile.huntAltitude;
-        Vector3 direction = Quaternion.Euler(0f, Random.Range(0, 4) * 90f, 0f) * Vector3.forward;
+        Vector3 direction = Quaternion.Euler(0f, RandomPassYaw(), 0f) * Vector3.forward;
+        Vector3 side = Vector3.Cross(Vector3.up, direction);
+        Vector2 half = Home.HalfSize;
+        Vector3 center = Home.Center + Vector3.up * profile.huntAltitude
+            + side * Random.Range(-Mathf.Min(half.x, half.y), Mathf.Min(half.x, half.y));
         start = center - direction * profile.fallbackPassHalfLength;
         end = center + direction * profile.fallbackPassHalfLength;
         return true;
+    }
+
+    private float RandomPassYaw()
+    {
+        float yaw = Random.Range(0f, 360f);
+        float step = profile.passDirectionStep;
+        return step > 0.01f ? Mathf.Round(yaw / step) * step : yaw;
+    }
+
+    /// <summary>
+    /// Straight line heading <paramref name="yaw"/> across <paramref name="bounds"/> (XZ). <paramref name="lane"/> 0..1
+    /// picks the parallel lane from one side of the map to the other; both ends lie <paramref name="margin"/> outside it.
+    /// </summary>
+    public static void PlanLane(Bounds bounds, float yaw, float lane, float altitude, float margin, out Vector3 start, out Vector3 end)
+    {
+        Vector3 direction = Quaternion.Euler(0f, yaw, 0f) * Vector3.forward;
+        Vector3 across = Vector3.Cross(Vector3.up, direction);
+        Vector3 extents = bounds.extents;
+        float along = Mathf.Abs(direction.x) * extents.x + Mathf.Abs(direction.z) * extents.z;
+        float wide = Mathf.Abs(across.x) * extents.x + Mathf.Abs(across.z) * extents.z;
+        Vector3 center = new Vector3(bounds.center.x, altitude, bounds.center.z) + across * Mathf.Lerp(-wide, wide, Mathf.Clamp01(lane));
+        start = center - direction * (along + margin);
+        end = center + direction * (along + margin);
     }
 
     /// <summary>Hunting-altitude point outside the map (or fallback area) straight along <paramref name="direction"/>.</summary>
@@ -233,15 +249,13 @@ public sealed class ManananggalBrain : EnemyBrain
         return any;
     }
 
-    private static int CountCrossedBlocks(MapManager map, Bounds bounds, Vector3 anchor, bool alongX)
+    private static int CountCrossedBlocks(MapManager map, Vector3 start, Vector3 end)
     {
         var crossed = new HashSet<int>();
-        float min = alongX ? bounds.min.x : bounds.min.z;
-        float max = alongX ? bounds.max.x : bounds.max.z;
-        for (float t = min; t <= max; t += 1.5f)
+        float length = Vector3.Distance(start, end);
+        for (float t = 0f; t <= length; t += 1.5f)
         {
-            Vector3 point = alongX ? new Vector3(t, anchor.y, anchor.z) : new Vector3(anchor.x, anchor.y, t);
-            if (map.TryGetBlockIndex(point, out int index))
+            if (map.TryGetBlockIndex(Vector3.Lerp(start, end, t / length), out int index))
                 crossed.Add(index);
         }
         return crossed.Count;
