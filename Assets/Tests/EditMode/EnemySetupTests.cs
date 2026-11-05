@@ -66,6 +66,36 @@ public sealed class EnemySetupTests
     }
 
     [Test]
+    public void TikbalangSpriteFadesWithDistanceSoItCannotBeSeenThroughTheFog()
+    {
+        GameObject prefab = AssetDatabase.LoadAssetAtPath<GameObject>(TikbalangPath);
+        var fade = prefab.GetComponent<DistanceFadeSprite>();
+        Assert.That(fade, Is.Not.Null);
+        var so = new SerializedObject(fade);
+        SerializedProperty renderers = so.FindProperty("renderers");
+        Assert.That(renderers.arraySize, Is.EqualTo(1));
+        Assert.That(renderers.GetArrayElementAtIndex(0).objectReferenceValue,
+            Is.EqualTo(prefab.GetComponent<EnemyPresentation>().WorldSprites));
+        Assert.That(fade.SolidDistance, Is.InRange(10f, 15f));
+        Assert.That(fade.FadedDistance, Is.GreaterThan(fade.SolidDistance));
+        Assert.That(fade.MinimumOpacity, Is.InRange(0f, 0.25f), "Far sprites are nearly invisible.");
+        Assert.That(fade.DarkestDistance, Is.GreaterThan(fade.DarkenStartDistance));
+        Assert.That(fade.MinimumBrightness, Is.LessThan(0.5f), "Far sprites are darkened.");
+    }
+
+    [Test]
+    public void DistanceFadeOpacityIsSolidNearbyAndNearlyInvisibleFarAway()
+    {
+        Assert.That(DistanceFadeSprite.EvaluateOpacity(0f, 12f, 30f, 0.01f), Is.EqualTo(1f));
+        Assert.That(DistanceFadeSprite.EvaluateOpacity(12f, 12f, 30f, 0.01f), Is.EqualTo(1f));
+        float middle = DistanceFadeSprite.EvaluateOpacity(21f, 12f, 30f, 0.01f);
+        Assert.That(middle, Is.EqualTo(0.505f).Within(0.001f));
+        Assert.That(DistanceFadeSprite.EvaluateOpacity(20f, 12f, 30f, 0.01f), Is.GreaterThan(middle));
+        Assert.That(DistanceFadeSprite.EvaluateOpacity(30f, 12f, 30f, 0.01f), Is.EqualTo(0.01f).Within(0.0001f));
+        Assert.That(DistanceFadeSprite.EvaluateOpacity(100f, 12f, 30f, 0.01f), Is.EqualTo(0.01f).Within(0.0001f));
+    }
+
+    [Test]
     public void DefaultProfileMatchesTheDesign()
     {
         var profile = AssetDatabase.LoadAssetAtPath<TikbalangProfile>(ProfilePath);

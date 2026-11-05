@@ -67,6 +67,8 @@ public sealed class StreetBlock : MonoBehaviour
     public IReadOnlyList<StreetBlockEntrance> Entrances => entrances;
     /// <summary>The walkable floor that MapManager bakes into the NavMesh; everything else in the block becomes an obstacle.</summary>
     public Transform FloorRoot => floorRoot != null ? floorRoot : transform.Find("Generated/Floor");
+    /// <summary>The generator's decoration group (Generated/Decorations), or null.</summary>
+    public Transform DecorationsRoot => transform.Find("Generated/Decorations");
 
     /// <summary>True if <paramref name="worldPosition"/> lies over this block's footprint (height is ignored).</summary>
     public bool ContainsXZ(Vector3 worldPosition, float margin = 0f)

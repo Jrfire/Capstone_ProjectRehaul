@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: Tikbalang_Default
   m_EditorClassIdentifier: Capstone.Enemies::TikbalangProfile
   walkSpeed: 2.5
-  chaseSpeed: 6
+  chaseSpeed: 5.5
   eyeHeight: 2.2
   visionRange: 18
   visionAngle: 40

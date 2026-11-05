@@ -235,6 +235,7 @@ GameObject:
   - component: {fileID: 6373800808357670071}
   - component: {fileID: 8172635409182736451}
   - component: {fileID: 3917264058172639401}
+  - component: {fileID: 5482019937465120731}
   m_Layer: 0
   m_Name: Tikbalang
   m_TagString: Untagged
@@ -479,3 +480,23 @@ MonoBehaviour:
   - {fileID: -1997496837, guid: a2e34ee5ecabd924a8dc38522f10364b, type: 3}
   framesPerSecond: 8
   displayHeight: 140
+--- !u!114 &5482019937465120731
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4749176831537940182}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c7df588c11424f0d8790780e18fac924, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Capstone.Player::DistanceFadeSprite
+  renderers:
+  - {fileID: 727114019838224886}
+  solidDistance: 12
+  fadedDistance: 40
+  minimumOpacity: 0.1
+  darkenStartDistance: 4
+  darkestDistance: 25
+  minimumBrightness: 0.15

@@ -213,6 +213,69 @@ public sealed class NightVisionRenderTests
     }
 
     [UnityTest]
+    public IEnumerator DistanceFadeBlendsSmoothlyUnderPixelationAndDarkensFarSprites()
+    {
+        effects.pixelation = true;
+        objects.OfType<GameObject>().First(obj => obj.name == "Quad").SetActive(false);
+        Texture2D white = Track(new Texture2D(4, 4, TextureFormat.RGBA32, false, true));
+        white.SetPixels(Enumerable.Repeat(Color.white, 16).ToArray());
+        white.Apply();
+        GameObject spriteObject = Track(new GameObject("Faded solid sprite"));
+        spriteObject.layer = 30;
+        spriteObject.transform.position = camera.transform.position + Vector3.forward;
+        spriteObject.transform.localScale = Vector3.one * 4f;
+        SpriteRenderer sprite = spriteObject.AddComponent<SpriteRenderer>();
+        sprite.sprite = Track(Sprite.Create(white, new Rect(0, 0, 4, 4), Vector2.one * 0.5f, 4f));
+        Material solid = Track(new Material(Shader.Find("Capstone/Solid Sprite")));
+        sprite.sharedMaterial = solid;
+
+        yield return null;
+        yield return null;
+        Assert.That(CenterBrightness(ReadPixels()), Is.GreaterThan(0.99f));
+        sprite.color = new Color(1f, 1f, 1f, 0.5f);
+        yield return null;
+        yield return null;
+        Color32[] half = ReadPixels();
+        Assert.That(CenterBrightness(half), Is.EqualTo(0.5f).Within(0.03f), "Renderer alpha blends.");
+        Assert.That(Variance(half), Is.LessThan(0.0005f), "Pixelated fades are even, not a checker/dither pattern.");
+
+        camera.gameObject.tag = "MainCamera";
+        sprite.color = Color.white;
+        spriteObject.transform.position = camera.transform.position + Vector3.forward * 20f;
+        spriteObject.transform.localScale = Vector3.one * 60f;
+        var fade = spriteObject.AddComponent<DistanceFadeSprite>();
+        yield return null;
+        yield return null;
+        Assert.That(fade.Opacity, Is.LessThan(0.7f).And.GreaterThan(0.1f));
+        Assert.That(fade.Brightness, Is.LessThan(0.5f));
+        Assert.That(sprite.color.a, Is.EqualTo(fade.Opacity).Within(0.0001f));
+        Assert.That(sprite.color.r, Is.EqualTo(fade.Brightness).Within(0.0001f), "Distant sprites are darkened.");
+        Assert.That(sprite.sharedMaterial, Is.Not.SameAs(solid), "Faded sprites use a local transparent material copy.");
+        Assert.That(sprite.sharedMaterial.GetFloat("_ZWrite"), Is.EqualTo(0f));
+        Assert.That(sprite.sharedMaterial.GetShaderPassEnabled("DepthOnly"), Is.False);
+        Assert.That(sprite.sharedMaterial.renderQueue, Is.EqualTo((int)RenderQueue.Transparent));
+        Assert.That(solid.GetFloat("_ZWrite"), Is.EqualTo(1f), "The shared solid material is never modified.");
+        Color32[] far = ReadPixels();
+        float expected = fade.Opacity * (QualitySettings.activeColorSpace == ColorSpace.Linear
+            ? Mathf.GammaToLinearSpace(fade.Brightness) : fade.Brightness);
+        Assert.That(CenterBrightness(far), Is.EqualTo(expected).Within(0.02f));
+        Assert.That(Variance(far), Is.LessThan(0.0005f));
+
+        spriteObject.transform.position = camera.transform.position + Vector3.forward * 2f;
+        yield return null;
+        yield return null;
+        Assert.That(fade.Opacity, Is.EqualTo(1f));
+        Assert.That(fade.Brightness, Is.EqualTo(1f));
+        Assert.That(sprite.sharedMaterial, Is.SameAs(solid), "Opaque sprites go back to the depth-writing material.");
+        Assert.That(CenterBrightness(ReadPixels()), Is.GreaterThan(0.99f));
+
+        spriteObject.transform.position = camera.transform.position + Vector3.forward * 28f;
+        yield return null;
+        fade.enabled = false;
+        Assert.That(sprite.color, Is.EqualTo(Color.white), "Disabling the fade restores the sprite.");
+        Assert.That(sprite.sharedMaterial, Is.SameAs(solid));
+    }
+    [UnityTest]
     public IEnumerator FogAttenuatesSurfacesAndLocalLightsScatterInsideTheVolume()
     {
         effects.pixelation = false;

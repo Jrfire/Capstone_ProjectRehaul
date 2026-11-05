@@ -67,6 +67,10 @@ public sealed class MapManager : MonoBehaviour
     private int navMeshAgentTypeId;
     [SerializeField, Tooltip("Give every solid non-floor collider (buildings, walls, decorations, entrance obstacles) a carving NavMeshObstacle.")]
     private bool carveObstacles = true;
+    [SerializeField, Min(0f), Tooltip("Agent radius the street NavMesh is baked with. Carving expands every obstacle by this on each side and walls keep this clearance. 0 = the agent type's own radius (Humanoid 0.5).")]
+    private float bakeAgentRadius = 0.3f;
+    [SerializeField, Range(0.05f, 1f), Tooltip("Horizontal scale of decoration carving boxes (their colliders often include canopies/overhangs). Use NavMeshCarveOverride on a prefab for an exact footprint or no carving.")]
+    private float decorationCarveScale = 0.6f;
 
     private static readonly Dictionary<string, int> networkSeeds = new Dictionary<string, int>();
     private Transform generatedRoot;
@@ -480,6 +484,14 @@ public sealed class MapManager : MonoBehaviour
 
         bounds.Expand(new Vector3(2f, 20f, 2f));
         NavMeshBuildSettings settings = NavMesh.GetSettingsByID(navMeshAgentTypeId);
+        if (bakeAgentRadius > 0f)
+        {
+            // Keep about three voxels across the radius so the smaller clearance is still resolved accurately.
+            float voxel = Mathf.Min(settings.agentRadius / 3f, bakeAgentRadius / 3f);
+            settings.agentRadius = bakeAgentRadius;
+            settings.overrideVoxelSize = true;
+            settings.voxelSize = voxel;
+        }
         NavMeshData data = NavMeshBuilder.BuildNavMeshData(settings, sources, bounds, Vector3.zero, Quaternion.identity);
         if (data == null)
         {
@@ -491,26 +503,61 @@ public sealed class MapManager : MonoBehaviour
         navMeshInstance.owner = this;
     }
 
-    private static void AddCarvingObstacles(StreetBlock block, Transform floor)
+    /// <summary>Radius the street NavMesh is baked (and carved) with.</summary>
+    public float BakeAgentRadius => bakeAgentRadius > 0f ? bakeAgentRadius : NavMesh.GetSettingsByID(navMeshAgentTypeId).agentRadius;
+    public float DecorationCarveScale => decorationCarveScale;
+
+    private void AddCarvingObstacles(StreetBlock block, Transform floor)
     {
+        Transform decorations = block.DecorationsRoot;
+        var customCarved = new HashSet<NavMeshCarveOverride>();
         foreach (Collider solid in block.GetComponentsInChildren<Collider>(true))
         {
             if (solid.isTrigger || solid.transform.IsChildOf(floor) || solid.GetComponent<NavMeshObstacle>() != null)
                 continue;
+
+            NavMeshCarveOverride custom = solid.GetComponentInParent<NavMeshCarveOverride>(true);
+            if (custom != null && custom.Mode == NavMeshCarveMode.None)
+                continue;
+            if (custom != null && custom.Mode == NavMeshCarveMode.Custom)
+            {
+                if (customCarved.Add(custom))
+                    AddCarver(custom.transform, custom.Center, custom.BoxSize, solid.enabled);
+                continue;
+            }
+
             if (!TryGetLocalBox(solid, out Vector3 center, out Vector3 size))
                 continue;
-
-            var carver = new GameObject("NavMesh Obstacle").AddComponent<NavMeshObstacle>();
-            carver.gameObject.layer = solid.gameObject.layer;
-            carver.transform.SetParent(solid.transform, false);
-            carver.shape = NavMeshObstacleShape.Box;
-            carver.center = center;
-            carver.size = size;
-            carver.carving = true;
-            carver.carveOnlyStationary = true;
-            carver.carvingTimeToStationary = 0f;
-            carver.enabled = solid.enabled;
+            if (decorations != null && solid.transform.IsChildOf(decorations))
+                size = ScaleHorizontally(solid.transform, size, decorationCarveScale);
+            AddCarver(solid.transform, center, size, solid.enabled);
         }
+    }
+
+    private static void AddCarver(Transform parent, Vector3 center, Vector3 size, bool enabled)
+    {
+        var carver = new GameObject("NavMesh Obstacle").AddComponent<NavMeshObstacle>();
+        carver.gameObject.layer = parent.gameObject.layer;
+        carver.transform.SetParent(parent, false);
+        carver.shape = NavMeshObstacleShape.Box;
+        carver.center = center;
+        carver.size = size;
+        carver.carving = true;
+        carver.carveOnlyStationary = true;
+        carver.carvingTimeToStationary = 0f;
+        carver.enabled = enabled;
+    }
+
+    /// <summary>Scales the local box axes that lie (mostly) horizontal in the world, leaving the vertical one.</summary>
+    private static Vector3 ScaleHorizontally(Transform space, Vector3 size, float scale)
+    {
+        for (int axis = 0; axis < 3; axis++)
+        {
+            Vector3 direction = space.rotation * (axis == 0 ? Vector3.right : axis == 1 ? Vector3.up : Vector3.forward);
+            if (Mathf.Abs(direction.y) < 0.7f)
+                size[axis] = Mathf.Max(0.01f, size[axis] * scale);
+        }
+        return size;
     }
 
     private static bool TryGetLocalBox(Collider solid, out Vector3 center, out Vector3 size)
