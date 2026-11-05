@@ -96,7 +96,7 @@ MonoBehaviour:
     m_Value: 1
   density:
     m_OverrideState: 1
-    m_Value: 0.06
+    m_Value: 0.05
   maxDistance:
     m_OverrideState: 1
     m_Value: 40
@@ -108,10 +108,16 @@ MonoBehaviour:
     m_Value: 0.08
   ambientColor:
     m_OverrideState: 1
-    m_Value: {r: 0.0015, g: 0.0015, b: 0.0018, a: 1}
+    m_Value: {r: 0.003, g: 0.003, b: 0.0035, a: 1}
   lightScattering:
     m_OverrideState: 1
     m_Value: 0.8
+  localLightScattering:
+    m_OverrideState: 1
+    m_Value: 0.2
+  localLightNearFade:
+    m_OverrideState: 1
+    m_Value: 3
   anisotropy:
     m_OverrideState: 1
     m_Value: 0.35
@@ -158,7 +164,7 @@ MonoBehaviour:
   active: 1
   postExposure:
     m_OverrideState: 1
-    m_Value: -1.1
+    m_Value: -0.7
   contrast:
     m_OverrideState: 1
     m_Value: 10

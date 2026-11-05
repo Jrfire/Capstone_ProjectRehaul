@@ -114,7 +114,10 @@ public sealed class NightVisionRendererFeature : ScriptableRendererFeature
                     Mathf.Min(fog.maxDistance.value, cameraData.camera.farClipPlane)));
                 material.SetColor("_FogAmbient", fog.ambientColor.value);
                 material.SetVector("_FogLighting", new Vector4(fog.lightScattering.value,
-                    fog.anisotropy.value, fog.steps.value, 0f));
+                    fog.anisotropy.value, fog.steps.value, fog.moonFog.value));
+                material.SetVector("_FogLocal", new Vector4(fog.localLightScattering.value,
+                    Mathf.Max(0.001f, fog.localLightNearFade.value), 0f, 0f));
+                SetMoon(RenderSettings.skybox);
                 SetLights(frameData.Get<UniversalLightData>());
             }
             else
@@ -138,6 +141,10 @@ public sealed class NightVisionRendererFeature : ScriptableRendererFeature
                 material.SetVector("_EnemyDetail", new Vector4(detail, mask.IsValid() ? 1f : 0f, 0f, 0f));
                 if (!mask.IsValid())
                     material.SetTexture("_EnemyMask", Texture2D.blackTexture);
+                if (effects.pixelation && resources.cameraDepthTexture.IsValid())
+                    SetMoon(RenderSettings.skybox);
+                else
+                    material.SetVector("_FogMoon", Vector4.zero);
             }
 
             TextureHandle source = resources.activeColorTexture;
@@ -159,6 +166,10 @@ public sealed class NightVisionRendererFeature : ScriptableRendererFeature
                     builder.UseTexture(resources.cameraDepthTexture);
                     if (resources.mainShadowsTexture.IsValid())
                         builder.UseTexture(resources.mainShadowsTexture);
+                }
+                else if (resources.cameraDepthTexture.IsValid())
+                {
+                    builder.UseTexture(resources.cameraDepthTexture);
                 }
                 builder.SetRenderAttachment(destination, 0);
                 builder.SetRenderFunc((PassData pass, RasterGraphContext context) =>
@@ -219,6 +230,25 @@ public sealed class NightVisionRendererFeature : ScriptableRendererFeature
                 });
             }
             return mask;
+        }
+
+        private void SetMoon(Material sky)
+        {
+            // Mirrors the Night Sky skybox's moon so the fog pass can let only the moon show through.
+            bool moon = sky != null && sky.HasProperty("_MoonTex") && sky.HasProperty("_MoonSize") &&
+                sky.GetTexture("_MoonTex") != null;
+            material.SetTexture("_FogMoonTex", moon ? sky.GetTexture("_MoonTex") : Texture2D.blackTexture);
+            if (!moon)
+            {
+                material.SetVector("_FogMoon", Vector4.zero);
+                material.SetVector("_FogMoonGlow", Vector4.zero);
+                return;
+            }
+            Color glowColor = sky.GetColor("_MoonGlowColor");
+            material.SetVector("_FogMoon", new Vector4(sky.GetFloat("_MoonAzimuth"), sky.GetFloat("_MoonElevation"),
+                sky.GetFloat("_MoonSize"), 1f));
+            material.SetVector("_FogMoonGlow", new Vector4(sky.GetFloat("_MoonGlowSize"),
+                glowColor.maxColorComponent > 0.0001f ? 1f : 0f, sky.GetColor("_MoonColor").a, 0f));
         }
 
         private void SetLights(UniversalLightData data)

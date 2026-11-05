@@ -298,11 +298,235 @@ public sealed class NightVisionRenderTests
         light.type = LightType.Point;
         light.intensity = 10f;
         light.range = 8f;
-        fog.lightScattering.value = 1f;
+        fog.lightScattering.value = 0f;
+        fog.localLightScattering.value = 1f;
+        fog.localLightNearFade.value = 0f;
         yield return null;
         yield return null;
         Assert.That(CenterBrightness(ReadPixels()), Is.GreaterThan(darkFog + 0.05f),
             "A light within the fog must add in-scattered radiance, not just distance tint.");
+
+        // Local lights use their own scattering, not the directional Light Scattering.
+        fog.localLightScattering.value = 0f;
+        fog.lightScattering.value = 1f;
+        yield return null;
+        yield return null;
+        Assert.That(CenterBrightness(ReadPixels()), Is.LessThan(darkFog + 0.01f));
+
+        // A flashlight at the lens: Near Fade removes the glowing blob in the air right in front of the camera.
+        fog.lightScattering.value = 0f;
+        fog.localLightScattering.value = 1f;
+        lightObject.transform.SetPositionAndRotation(camera.transform.position, camera.transform.rotation);
+        light.type = LightType.Spot;
+        light.spotAngle = 60f;
+        yield return null;
+        yield return null;
+        float unfaded = CenterBrightness(ReadPixels());
+        fog.localLightNearFade.value = 3f;
+        yield return null;
+        yield return null;
+        float faded = CenterBrightness(ReadPixels());
+        Assert.That(faded, Is.LessThan(unfaded - 0.03f), "The air at the lamp must not glow brightest.");
+        Assert.That(faded, Is.GreaterThan(darkFog + 0.003f), "The beam further out stays visible in the fog.");
+    }
+
+    [UnityTest]
+    public IEnumerator FogCoversTheSkyButTheMoonShowsThroughByMoonFog()
+    {
+        effects.pixelation = false;
+        Material previousSky = RenderSettings.skybox;
+        try
+        {
+            Shader shader = Shader.Find("Capstone/Night Sky");
+            Assert.That(shader, Is.Not.Null);
+            Material sky = Track(new Material(shader));
+            Texture2D white = Track(new Texture2D(4, 4, TextureFormat.RGBA32, false, true));
+            white.SetPixels(Enumerable.Repeat(Color.white, 16).ToArray());
+            white.Apply();
+            sky.SetTexture("_MoonTex", white);
+            sky.SetFloat("_MoonAzimuth", 180f);
+            sky.SetFloat("_MoonElevation", 0f);
+            sky.SetFloat("_MoonSize", 30f);
+            sky.SetColor("_ZenithColor", Color.white);
+            sky.SetColor("_HorizonColor", Color.white);
+            sky.SetColor("_GroundColor", Color.white);
+            RenderSettings.skybox = sky;
+            camera.clearFlags = CameraClearFlags.Skybox;
+
+            // Facing the quad: geometry hides the sky.
+            yield return null;
+            yield return null;
+            Assert.That(CenterBrightness(ReadPixels()), Is.InRange(0.3f, 0.7f), "The world quad, not the sky, is drawn where geometry is.");
+
+            // Facing away (-Z): the moon fills the centre, plain sky the corners.
+            camera.transform.rotation = Quaternion.Euler(0f, 180f, 0f);
+            yield return null;
+            yield return null;
+            Assert.That(ReadPixels()[5 * 256 + 5].r / 255f, Is.GreaterThan(0.9f), "Without fog the sky gradient is visible.");
+
+            fog.enabled.value = true;
+            fog.density.value = 0.2f;
+            fog.heightFalloff.value = 0f;
+            fog.ambientColor.value = Color.black;
+            fog.lightScattering.value = 0f;
+            fog.moonFog.value = 0f;
+            yield return null;
+            yield return null;
+            Color32[] pixels = ReadPixels();
+            Assert.That(CenterBrightness(pixels), Is.GreaterThan(0.9f), "Moon Fog 0 leaves the moon undimmed by dense fog.");
+            Assert.That(pixels[5 * 256 + 5].r / 255f, Is.LessThan(0.1f), "The rest of the sky is fogged like distant geometry.");
+            fog.moonFog.value = 1f;
+            yield return null;
+            yield return null;
+            Assert.That(CenterBrightness(ReadPixels()), Is.LessThan(0.1f), "Moon Fog 1 hides the moon like the sky.");
+            fog.moonFog.value = 0.5f;
+            yield return null;
+            yield return null;
+            Assert.That(CenterBrightness(ReadPixels()), Is.InRange(0.3f, 0.75f));
+        }
+        finally
+        {
+            RenderSettings.skybox = previousSky;
+        }
+    }
+
+    [UnityTest]
+    public IEnumerator BloodMoonSwapsTheSkyAndTurnsTheMoonLightRed()
+    {
+        effects.pixelation = false;
+        Material previousSky = RenderSettings.skybox;
+        try
+        {
+            MoonSky.BloodMoon = false;
+            Material normal = Track(new Material(Shader.Find("Capstone/Night Sky")));
+            Material blood = Track(new Material(Shader.Find("Capstone/Night Sky")));
+            Texture2D white = Track(new Texture2D(4, 4, TextureFormat.RGBA32, false, true));
+            white.SetPixels(Enumerable.Repeat(Color.white, 16).ToArray());
+            white.Apply();
+            foreach (Material sky in new[] { normal, blood })
+            {
+                sky.SetTexture("_MoonTex", white);
+                sky.SetFloat("_MoonAzimuth", 180f);
+                sky.SetFloat("_MoonElevation", 0f);
+                sky.SetFloat("_MoonSize", 30f);
+            }
+            blood.SetColor("_MoonColor", new Color(1f, 0.1f, 0.1f));
+
+            GameObject lightObject = Track(new GameObject("Moon light"));
+            lightObject.SetActive(false);
+            Light light = lightObject.AddComponent<Light>();
+            light.type = LightType.Directional;
+            light.color = new Color(0.7f, 0.72f, 0.78f);
+            light.intensity = 0.08f;
+            MoonSky moon = lightObject.AddComponent<MoonSky>();
+            var fields = typeof(MoonSky);
+            fields.GetField("normalSky", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance).SetValue(moon, normal);
+            fields.GetField("bloodMoonSky", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance).SetValue(moon, blood);
+            lightObject.SetActive(true);
+            Assert.That(RenderSettings.skybox, Is.SameAs(normal));
+            Assert.That(light.color, Is.EqualTo(new Color(0.7f, 0.72f, 0.78f)));
+
+            camera.clearFlags = CameraClearFlags.Skybox;
+            camera.transform.rotation = Quaternion.Euler(0f, 180f, 0f);
+            MoonSky.BloodMoon = true;
+            Assert.That(RenderSettings.skybox, Is.SameAs(blood));
+            Assert.That(light.color.r, Is.GreaterThan(light.color.g * 5f), "The blood moon's light is red.");
+            Assert.That(light.intensity, Is.EqualTo(0.12f).Within(0.0001f));
+            yield return null;
+            yield return null;
+            Color32 centre = ReadPixels()[72 * 256 + 128];
+            Assert.That(centre.r, Is.GreaterThan(centre.g * 3), "The blood moon renders red.");
+
+            MoonSky.BloodMoon = false;
+            Assert.That(RenderSettings.skybox, Is.SameAs(normal));
+            Assert.That(light.color, Is.EqualTo(new Color(0.7f, 0.72f, 0.78f)));
+            Assert.That(light.intensity, Is.EqualTo(0.08f).Within(0.0001f));
+        }
+        finally
+        {
+            MoonSky.BloodMoon = false;
+            RenderSettings.skybox = previousSky;
+        }
+    }
+    [UnityTest]
+    public IEnumerator TheMoonFollowsTheMoonLightAndKeepsFullResolutionUnderPixelation()
+    {
+        effects.pixelation = false;
+        Material previousSky = RenderSettings.skybox;
+        try
+        {
+            Material sky = Track(new Material(Shader.Find("Capstone/Night Sky")));
+            Texture2D checker = Track(new Texture2D(16, 16, TextureFormat.RGBA32, false, true));
+            checker.filterMode = FilterMode.Point;
+            checker.wrapMode = TextureWrapMode.Clamp;
+            checker.SetPixels(Enumerable.Range(0, 256).Select(index =>
+                ((index % 16) + (index / 16)) % 2 == 0 ? Color.white : new Color(0.25f, 0.25f, 0.25f, 1f)).ToArray());
+            checker.Apply();
+            sky.SetTexture("_MoonTex", checker);
+            sky.SetFloat("_MoonAzimuth", 90f);
+            sky.SetFloat("_MoonElevation", 0f);
+            sky.SetFloat("_MoonSize", 30f);
+            sky.SetColor("_ZenithColor", Color.black);
+            sky.SetColor("_HorizonColor", Color.black);
+            sky.SetColor("_GroundColor", Color.black);
+            RenderSettings.skybox = sky;
+            camera.clearFlags = CameraClearFlags.Skybox;
+            camera.transform.rotation = Quaternion.Euler(0f, 180f, 0f);
+
+            // Material placement (+X) is off screen while facing -Z.
+            yield return null;
+            yield return null;
+            Assert.That(CenterBrightness(ReadPixels()), Is.LessThan(0.05f));
+
+            // A MoonSky light shining towards +Z puts the moon at -Z, in front of the camera.
+            GameObject lightObject = Track(new GameObject("Aligned moon light"));
+            Light light = lightObject.AddComponent<Light>();
+            light.type = LightType.Directional;
+            light.intensity = 0f;
+            MoonSky moon = lightObject.AddComponent<MoonSky>();
+            Assert.That(Vector3.Angle(moon.MoonDirection, Vector3.back), Is.LessThan(0.01f));
+            yield return null;
+            yield return null;
+            Color32[] full = ReadPixels();
+            Assert.That(CenterBrightness(full), Is.GreaterThan(0.2f), "The moon follows its light, not the material angles.");
+            int fullTransitions = Transitions(full, 72);
+            Assert.That(fullTransitions, Is.GreaterThan(12), "The checkered moon has many cells across its centre row.");
+
+            effects.pixelation = true;
+            effects.pixelHeight = 16;
+            yield return null;
+            yield return null;
+            Assert.That(Transitions(ReadPixels(), 72), Is.GreaterThanOrEqualTo(fullTransitions - 2),
+                "World pixelation must not make the moon blocky.");
+
+            // Rotating the light moves the moon away again; disabling MoonSky restores the material angles.
+            lightObject.transform.rotation = Quaternion.Euler(0f, 90f, 0f);
+            yield return null;
+            yield return null;
+            Assert.That(CenterBrightness(ReadPixels()), Is.LessThan(0.05f));
+            moon.enabled = false;
+            camera.transform.rotation = Quaternion.Euler(0f, 90f, 0f);
+            yield return null;
+            yield return null;
+            Assert.That(CenterBrightness(ReadPixels()), Is.GreaterThan(0.2f), "Without MoonSky the material angles apply.");
+        }
+        finally
+        {
+            RenderSettings.skybox = previousSky;
+        }
+    }
+
+    private static int Transitions(Color32[] pixels, int row)
+    {
+        int count = 0;
+        for (int x = 1; x < 256; x++)
+        {
+            Color32 left = pixels[row * 256 + x - 1];
+            Color32 right = pixels[row * 256 + x];
+            if (Mathf.Abs(left.r - right.r) > 40)
+                count++;
+        }
+        return count;
     }
 
     [UnityTest]

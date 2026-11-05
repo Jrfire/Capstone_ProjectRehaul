@@ -5,7 +5,7 @@ using UnityEngine;
 /// </summary>
 public abstract class Interactable : MonoBehaviour
 {
-    /// <summary>Text shown after "E: " while the object is targeted.</summary>
+    /// <summary>Usable-action text shown on the HUD nametag's prompt line (NametagHud Prompt Format, "[E] {0}").</summary>
     public abstract string Prompt { get; }
 
     /// <summary>Whether the local player may currently target and use this object.</summary>

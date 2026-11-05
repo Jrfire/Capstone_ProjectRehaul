@@ -8,7 +8,8 @@ using UnityEngine.AI;
 /// publishes motion to <see cref="EnemyPresentation"/>. The displayed direction always follows actual movement
 /// (e.g. sidestepping around an obstacle) while the enemy's eyes may stay locked on a target.
 /// </summary>
-[RequireComponent(typeof(EnemyMotor), typeof(EnemySenses), typeof(EnemyPresentation))]
+/// <remarks>Ground enemies need an <see cref="EnemyMotor"/>; flying ones an <see cref="EnemyFlightMotor"/>.</remarks>
+[RequireComponent(typeof(EnemySenses), typeof(EnemyPresentation))]
 public abstract class EnemyBrain : NetworkBehaviour
 {
     private static readonly float[] bodyHeights = { 0.3f, 1.4f, 2.6f };
@@ -18,6 +19,9 @@ public abstract class EnemyBrain : NetworkBehaviour
     private bool hasHome;
     private EnemyHomeArea home;
 
+    /// <summary>Whatever moves this enemy (NavMesh walker or flyer).</summary>
+    public EnemyLocomotion Locomotion { get; private set; }
+    /// <summary>The NavMesh motor; null for enemies that do not walk on the NavMesh.</summary>
     public EnemyMotor Motor { get; private set; }
     public EnemySenses Senses { get; private set; }
     public EnemyPresentation Presentation { get; private set; }
@@ -32,6 +36,9 @@ public abstract class EnemyBrain : NetworkBehaviour
     protected virtual void Awake()
     {
         Motor = GetComponent<EnemyMotor>();
+        Locomotion = Motor != null ? Motor : GetComponent<EnemyLocomotion>();
+        if (Locomotion == null)
+            Debug.LogError($"'{name}' needs an EnemyMotor or EnemyFlightMotor.", this);
         Senses = GetComponent<EnemySenses>();
         Presentation = GetComponent<EnemyPresentation>();
     }
@@ -40,6 +47,9 @@ public abstract class EnemyBrain : NetworkBehaviour
 
     /// <summary>Half size of the guarded box used when the enemy spawns without a street map.</summary>
     protected virtual Vector2 FallbackHomeHalfSize => new Vector2(10f, 10f);
+
+    /// <summary>Enemies that roam the whole map (e.g. flyers) instead of guarding a home block.</summary>
+    public virtual bool RoamsWholeMap => false;
 
     /// <summary>Server: makes a placed street block this enemy's home. Call before <c>NetworkServer.Spawn</c>.</summary>
     public void AssignHomeBlock(MapManager map, int blockIndex)
@@ -67,7 +77,7 @@ public abstract class EnemyBrain : NetworkBehaviour
 
     protected virtual void Update()
     {
-        if (!isServer || !Motor.Activate())
+        if (!isServer || Locomotion == null || !Locomotion.Activate())
             return;
 
         if (CurrentState == null)
@@ -92,13 +102,13 @@ public abstract class EnemyBrain : NetworkBehaviour
 
     private void PublishMotion()
     {
-        bool moving = Motor.IsMoving;
-        Vector3 velocity = Motor.Velocity;
+        bool moving = Locomotion.IsMoving;
+        Vector3 velocity = Locomotion.Velocity;
         velocity.y = 0f;
         if (LookTarget.HasValue)
-            Motor.FaceTowards(LookTarget.Value);
+            Locomotion.FaceTowards(LookTarget.Value);
         else if (moving)
-            Motor.FaceDirection(velocity);
+            Locomotion.FaceDirection(velocity);
 
         float yaw = moving && velocity.sqrMagnitude > 0.0001f
             ? Quaternion.LookRotation(velocity, Vector3.up).eulerAngles.y
@@ -107,7 +117,13 @@ public abstract class EnemyBrain : NetworkBehaviour
     }
 
     /// <summary>Random reachable NavMesh point inside the home area.</summary>
-    public bool TryGetHomePoint(out Vector3 point) => Motor.TryRandomPoint(home, 30, true, out point);
+    public bool TryGetHomePoint(out Vector3 point)
+    {
+        if (Motor != null)
+            return Motor.TryRandomPoint(home, 30, true, out point);
+        point = home.RandomPoint();
+        return home.IsValid;
+    }
 
     /// <summary>
     /// Warps to a NavMesh point in the first of <paramref name="areas"/> that has one hidden from every player (behind
@@ -117,6 +133,8 @@ public abstract class EnemyBrain : NetworkBehaviour
     [Server]
     public bool TryTeleportHidden(IEnumerable<EnemyHomeArea> areas, float minPlayerDistance, Vector3? pathTarget, int attemptsPerArea = 24)
     {
+        if (Motor == null)
+            return false;
         foreach (EnemyHomeArea area in areas)
         {
             for (int i = 0; i < attemptsPerArea; i++)

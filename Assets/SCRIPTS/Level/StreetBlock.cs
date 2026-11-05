@@ -28,6 +28,9 @@ public sealed class StreetBlockEntrance
     public Vector3 LocalCenter => localCenter;
     public EntranceObstacle Obstacle => obstacle;
 
+    /// <summary>Records an obstacle MapManager placed in this entrance.</summary>
+    public void AssignObstacle(EntranceObstacle placed) => obstacle = placed;
+
     /// <summary>Destroys this entrance's obstacle (e.g. a placed spawn block's entrance must always be open).</summary>
     public void RemoveObstacle()
     {

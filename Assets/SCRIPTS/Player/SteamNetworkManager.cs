@@ -20,6 +20,7 @@ public sealed class SteamNetworkManager : NetworkManager
     public override void OnStartServer()
     {
         base.OnStartServer();
+        EntranceObstacleNetwork.RegisterServerHandlers();
         Travel?.RegisterServerHandlers();
         Clock?.RegisterServerHandlers();
     }
@@ -27,10 +28,17 @@ public sealed class SteamNetworkManager : NetworkManager
     public override void OnStartClient()
     {
         base.OnStartClient();
+        EntranceObstacleNetwork.RegisterClientHandlers();
         NetworkClient.RegisterHandler<SteamLobbyMessage>(message =>
             Session?.JoinSessionLobby(message.lobbyId));
         Travel?.RegisterClientHandlers();
         Clock?.RegisterClientHandlers();
+    }
+
+    public override void OnClientConnect()
+    {
+        base.OnClientConnect();
+        EntranceObstacleNetwork.RequestSnapshot();
     }
 
     public override void OnServerConnect(NetworkConnectionToClient connection)
@@ -75,6 +83,7 @@ public sealed class SteamNetworkManager : NetworkManager
             base.OnClientSceneChanged();
         }
         Travel?.OnClientSceneChanged();
+        EntranceObstacleNetwork.RequestSnapshot();
     }
 
     public override void OnStopHost()
@@ -93,6 +102,7 @@ public sealed class SteamNetworkManager : NetworkManager
     public override void OnStopClient()
     {
         NetworkClient.UnregisterHandler<SteamLobbyMessage>();
+        EntranceObstacleNetwork.UnregisterClientHandlers();
         Session?.LeaveSessionLobby();
         Travel?.ResetClient();
         Clock?.ResetClient();

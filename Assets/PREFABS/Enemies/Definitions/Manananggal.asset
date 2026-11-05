@@ -1,0 +1,16 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8ae4e553f2bd4ed5b668048e686b7116, type: 3}
+  m_Name: Manananggal
+  m_EditorClassIdentifier: Capstone.Player::EnemyDefinition
+  displayName: Manananggal
+  prefab: {fileID: 3659812021488451613, guid: a7833c19caa344b7bd8bcb62408c3ab3, type: 3}

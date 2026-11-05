@@ -1,4 +1,5 @@
 using System.IO;
+using System.Linq;
 using UnityEditor;
 using UnityEngine;
 
@@ -14,6 +15,12 @@ public sealed class StreetBlockGeneratorEditor : Editor
         StreetBlock block = generator.GetComponent<StreetBlock>();
 
         EditorGUILayout.Space();
+        if (generator.IsFiller)
+        {
+            EditorGUILayout.HelpBox(
+                "Filler block (0 entrances): the inside is packed with buildings separated by narrow alleys (see Filler settings); " +
+                "Middle Building Count is ignored. Add it to a MapManager's Filler Blocks pool.", MessageType.Info);
+        }
         if (block != null && block.Size.x > 0f)
         {
             EditorGUILayout.HelpBox(
@@ -84,6 +91,45 @@ public sealed class StreetBlockGeneratorEditor : Editor
         EnsureFolder(parent);
         AssetDatabase.CreateFolder(parent, Path.GetFileName(folder));
     }
+
+    [MenuItem("Assets/Capstone/Regenerate Selected Street Block Prefabs", true)]
+    private static bool CanRegenerateSelectedPrefabs() => SelectedBlockPrefabPaths().Length > 0;
+
+    /// <summary>Rebuilds saved block prefabs with their stored settings and seed (e.g. after generator fixes). Manual edits under Generated are replaced.</summary>
+    [MenuItem("Assets/Capstone/Regenerate Selected Street Block Prefabs", false, 20)]
+    private static void RegenerateSelectedPrefabs()
+    {
+        string[] paths = SelectedBlockPrefabPaths();
+        if (!EditorUtility.DisplayDialog("Regenerate street blocks",
+                $"Regenerate {paths.Length} street block prefab(s) with their saved settings and seed? Manual changes under 'Generated' are replaced.",
+                "Regenerate", "Cancel"))
+            return;
+
+        int succeeded = 0;
+        foreach (string path in paths)
+        {
+            GameObject contents = PrefabUtility.LoadPrefabContents(path);
+            try
+            {
+                if (StreetBlockBuilder.Generate(contents.GetComponent<StreetBlockGenerator>()))
+                {
+                    PrefabUtility.SaveAsPrefabAsset(contents, path);
+                    succeeded++;
+                }
+            }
+            finally
+            {
+                PrefabUtility.UnloadPrefabContents(contents);
+            }
+        }
+        Debug.Log($"Regenerated {succeeded} of {paths.Length} street block prefab(s).");
+    }
+
+    private static string[] SelectedBlockPrefabPaths() => Selection.GetFiltered<GameObject>(SelectionMode.Assets)
+        .Where(asset => asset.GetComponent<StreetBlockGenerator>() != null)
+        .Select(AssetDatabase.GetAssetPath)
+        .Where(path => path.EndsWith(".prefab"))
+        .ToArray();
 
     [MenuItem("GameObject/Capstone/Street Block Generator", false, 10)]
     private static void CreateGenerator(MenuCommand command)

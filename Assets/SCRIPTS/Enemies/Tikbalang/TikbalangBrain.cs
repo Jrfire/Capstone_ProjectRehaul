@@ -7,6 +7,7 @@ using UnityEngine;
 /// Tikbalang FSM brain. States: Idle (guard home block), Searching (investigate a heard noise), Chase (locked on the
 /// first spotted player for a limited time), Returning (walk home ignoring players) and Stunned.
 /// </summary>
+[RequireComponent(typeof(EnemyMotor))]
 public sealed class TikbalangBrain : EnemyBrain
 {
     [SerializeField] private TikbalangProfile profile;
@@ -120,7 +121,10 @@ public sealed class TikbalangBrain : EnemyBrain
             return false;
 
         Vector3 targetPosition = target.transform.position;
+        // Only blocks the target can walk to without passing a closed barricade, so the enemy is never sealed in.
+        bool[] open = map.FindOpenlyReachable(targetBlock);
         IEnumerable<EnemyHomeArea> areas = map.GetNeighbours(targetBlock)
+            .Where(index => open[index])
             .OrderBy(index => (map.GetBlock(index).transform.position - targetPosition).sqrMagnitude)
             .Select(index => EnemyHomeArea.FromBlock(map.GetBlock(index)))
             .Append(EnemyHomeArea.FromBlock(map.GetBlock(targetBlock)));

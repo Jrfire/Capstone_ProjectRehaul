@@ -634,6 +634,87 @@ public sealed class NetworkPlayerTests : InputTestFixture
     }
 
     [UnityTest]
+    public IEnumerator AimingShowsNametagsForObjectsAndLivingPlayersOnTheHud()
+    {
+        SpawnPlayers();
+        yield return null;
+        yield return null;
+
+        GameObject hud = Object.Instantiate(AssetDatabase.LoadAssetAtPath<GameObject>("Assets/PREFABS/PlayerHud.prefab"));
+        try
+        {
+            NametagHud nametagHud = hud.GetComponentInChildren<NametagHud>(true);
+            Assert.That(nametagHud, Is.Not.Null);
+            PlayerInteraction interaction = localPlayer.GetComponent<PlayerInteraction>();
+            Camera camera = ViewRoot(localPlayer, "firstPersonView").GetComponentInChildren<Camera>(true);
+
+            // Facing -X: nothing aimed.
+            localPlayer.transform.rotation = Quaternion.Euler(0f, -90f, 0f);
+            Physics.SyncTransforms();
+            StepInteraction(interaction);
+            yield return null;
+            Assert.That(interaction.AimedName, Is.Null);
+            Assert.That(nametagHud.Visible, Is.False);
+
+            // Facing the remote player (+X): their synced name, sanitized; no use prompt.
+            remotePlayer.GetComponent<PlayerName>().ServerSetName("Juan <b>Dela</b>\nCruz");
+            localPlayer.transform.rotation = Quaternion.Euler(0f, 90f, 0f);
+            Physics.SyncTransforms();
+            StepInteraction(interaction);
+            Assert.That(interaction.AimedPlayer, Is.SameAs(remotePlayer.GetComponent<PlayerName>()));
+            Assert.That(interaction.AimedName, Is.EqualTo("Juan bDela/b Cruz"));
+            yield return null;
+            Assert.That(nametagHud.Visible, Is.True);
+            Assert.That(nametagHud.ShownName, Is.EqualTo("Juan bDela/b Cruz"));
+            Assert.That(nametagHud.ShownPrompt, Is.Null);
+
+            blocker = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            blocker.transform.position = camera.transform.position + camera.transform.forward * 2f;
+            Physics.SyncTransforms();
+            StepInteraction(interaction);
+            Assert.That(interaction.AimedName, Is.Null, "Walls hide players' nametags.");
+            blocker.SetActive(false);
+
+            remotePlayer.GetComponent<PlayerName>().ServerSetName("");
+            StepInteraction(interaction);
+            Assert.That(interaction.AimedName, Is.EqualTo($"Player {remotePlayer.GetComponent<NetworkIdentity>().netId}"));
+
+            remotePlayer.GetComponent<PlayerHealth>().TakeDamage(6);
+            StepInteraction(interaction);
+            Assert.That(interaction.AimedName, Is.Null, "Dead players show no nametag.");
+            remotePlayer.SetActive(false);
+
+            // An interactable object with a Nametag shows its name and the use prompt within range.
+            localPlayer.transform.rotation = Quaternion.identity;
+            Physics.SyncTransforms();
+            inviteTarget = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            inviteTarget.transform.position = camera.transform.position + camera.transform.forward * 2f;
+            SteamInviteInteractable target = inviteTarget.AddComponent<SteamInviteInteractable>();
+            Nametag nametag = inviteTarget.AddComponent<Nametag>();
+            nametag.DisplayName = "Steam Invite Terminal";
+            Physics.SyncTransforms();
+            StepInteraction(interaction);
+            Assert.That(interaction.AimedName, Is.EqualTo("Steam Invite Terminal"));
+            Assert.That(interaction.CurrentTarget, Is.SameAs(target));
+            yield return null;
+            Assert.That(nametagHud.ShownName, Is.EqualTo("Steam Invite Terminal"));
+            Assert.That(nametagHud.ShownPrompt, Is.EqualTo(string.Format(nametagHud.promptFormat, target.Prompt)));
+
+            // Beyond the nametag's own distance nothing is shown.
+            inviteTarget.transform.position = camera.transform.position + camera.transform.forward * (nametag.MaxDistance + 1.5f);
+            Physics.SyncTransforms();
+            StepInteraction(interaction);
+            Assert.That(interaction.AimedName, Is.Null);
+            yield return null;
+            Assert.That(nametagHud.Visible, Is.False);
+        }
+        finally
+        {
+            Object.DestroyImmediate(hud);
+        }
+    }
+
+    [UnityTest]
     public IEnumerator MouseDeltaTurnsOnlyTheOwnerAndUpdatesMovementInteractionAndFacing()
     {
         Mouse mouse = InputSystem.AddDevice<Mouse>();

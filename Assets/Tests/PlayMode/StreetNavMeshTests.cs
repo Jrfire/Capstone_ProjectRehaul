@@ -28,10 +28,18 @@ public sealed class StreetNavMeshTests
         StreetBlock Block(string name) =>
             AssetDatabase.LoadAssetAtPath<GameObject>($"Assets/PREFABS/StreetBlocks/{name}.prefab").GetComponent<StreetBlock>();
 
-        // A scene copy of the crossroad whose first two decorations use a custom footprint and no carving.
-        StreetBlock crossroad = Track(Object.Instantiate(Block("StreetBlock_Crossroad"), new Vector3(0f, -500f, 0f), Quaternion.identity));
+        // A scene copy of a project connector given small decorations; the first two use a custom footprint and no carving.
+        StreetBlock crossroad = Track(Object.Instantiate(Block("StreetBlock_2Entrances_1"), new Vector3(0f, -500f, 0f), Quaternion.identity));
+        Assert.That(crossroad.DecorationsRoot, Is.Not.Null);
+        foreach (Vector3 offset in new[] { new Vector3(1.8f, 0f, 0f), new Vector3(-1.8f, 0f, 0f), new Vector3(0f, 0f, 1.8f), new Vector3(0f, 0f, -1.8f), new Vector3(1.8f, 0f, 1.8f), new Vector3(-1.8f, 0f, -1.8f) })
+        {
+            GameObject crate = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            crate.name = $"Test Crate {offset.x:0.#} {offset.z:0.#}";
+            crate.transform.SetParent(crossroad.DecorationsRoot, false);
+            crate.transform.localPosition = offset + Vector3.up * 0.3f;
+            crate.transform.localScale = Vector3.one * 0.6f;
+        }
         Transform[] decorations = crossroad.DecorationsRoot.Cast<Transform>().Where(child => child.GetComponentInChildren<Collider>() != null).ToArray();
-        Assert.That(decorations.Length, Is.GreaterThanOrEqualTo(3), "The crossroad needs decorations with colliders.");
         var custom = decorations[0].gameObject.AddComponent<NavMeshCarveOverride>();
         var none = decorations[1].gameObject.AddComponent<NavMeshCarveOverride>();
         var noneSettings = new SerializedObject(none);
@@ -51,8 +59,8 @@ public sealed class StreetNavMeshTests
                 list.GetArrayElementAtIndex(i).objectReferenceValue = blocks[i];
         }
         Fill("connectorBlocks", crossroad);
-        Fill("endCapBlocks", Block("StreetBlock_EndCap"));
-        Fill("spawnBlocks", Block("StreetBlock_Spawn"));
+        Fill("endCapBlocks", Block("EndBlockStreetBlock_1"));
+        Fill("spawnBlocks", Block("SpawnBlockStreetBlock_1"));
         so.FindProperty("connectorBlockCount").intValue = 1;
         so.FindProperty("buildOnStart").boolValue = false;
         so.ApplyModifiedPropertiesWithoutUndo();

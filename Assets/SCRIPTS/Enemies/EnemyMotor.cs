@@ -7,7 +7,7 @@ using UnityEngine.AI;
 /// </summary>
 [DisallowMultipleComponent]
 [RequireComponent(typeof(NavMeshAgent))]
-public sealed class EnemyMotor : MonoBehaviour
+public sealed class EnemyMotor : EnemyLocomotion
 {
     [SerializeField, Min(0.01f)] private float arriveDistance = 0.35f;
     [SerializeField, Min(0.1f), Tooltip("How far from its position the enemy may snap onto the NavMesh when it activates.")]
@@ -18,8 +18,8 @@ public sealed class EnemyMotor : MonoBehaviour
 
     public NavMeshAgent Agent => agent;
     public bool IsActive => agent != null && agent.enabled && agent.isOnNavMesh;
-    public Vector3 Velocity => IsActive ? agent.velocity : Vector3.zero;
-    public bool IsMoving => IsActive && !agent.isStopped && agent.velocity.sqrMagnitude > 0.01f;
+    public override Vector3 Velocity => IsActive ? agent.velocity : Vector3.zero;
+    public override bool IsMoving => IsActive && !agent.isStopped && agent.velocity.sqrMagnitude > 0.01f;
     public int AreaMask => agent != null ? agent.areaMask : NavMesh.AllAreas;
 
     private void Awake()
@@ -33,7 +33,7 @@ public sealed class EnemyMotor : MonoBehaviour
     }
 
     /// <summary>Enables the agent on the nearest NavMesh point. Returns false while no NavMesh exists nearby.</summary>
-    public bool Activate()
+    public override bool Activate()
     {
         if (IsActive)
             return true;
@@ -54,7 +54,7 @@ public sealed class EnemyMotor : MonoBehaviour
         return agent.SetDestination(destination);
     }
 
-    public void Stop()
+    public override void Stop()
     {
         if (!IsActive)
             return;
@@ -66,7 +66,7 @@ public sealed class EnemyMotor : MonoBehaviour
     public bool HasArrived =>
         !IsActive || (!agent.pathPending && (!agent.hasPath || agent.remainingDistance <= Mathf.Max(agent.stoppingDistance, arriveDistance)));
 
-    public void Warp(Vector3 position)
+    public override void Warp(Vector3 position)
     {
         if (IsActive)
         {
@@ -79,18 +79,6 @@ public sealed class EnemyMotor : MonoBehaviour
             transform.position = position;
         }
     }
-
-    /// <summary>Turns instantly (no smoothing) to look horizontally at <paramref name="point"/>.</summary>
-    public void FaceTowards(Vector3 point) => FaceDirection(point - transform.position);
-
-    public void FaceDirection(Vector3 direction)
-    {
-        direction.y = 0f;
-        if (direction.sqrMagnitude > 0.0001f)
-            transform.rotation = Quaternion.LookRotation(direction, Vector3.up);
-    }
-
-    public void FaceYaw(float yaw) => transform.rotation = Quaternion.Euler(0f, yaw, 0f);
 
     public bool HasCompletePath(Vector3 from, Vector3 to)
     {

@@ -148,4 +148,70 @@ public sealed class EnemySetupTests
             EditorSceneManager.CloseScene(sample, true);
         }
     }
+
+    private const string ManananggalPath = "Assets/PREFABS/Enemies/Manananggal.prefab";
+
+    [Test]
+    public void ManananggalReusesTheEnemyComponentsButFliesWithItsOwnBrain()
+    {
+        GameObject prefab = AssetDatabase.LoadAssetAtPath<GameObject>(ManananggalPath);
+        Assert.That(prefab, Is.Not.Null);
+        var identity = prefab.GetComponent<NetworkIdentity>();
+        Assert.That(identity.assetId, Is.Not.EqualTo(0u));
+        Assert.That(identity.assetId, Is.Not.EqualTo(AssetDatabase.LoadAssetAtPath<GameObject>(TikbalangPath).GetComponent<NetworkIdentity>().assetId));
+        Assert.That(prefab.GetComponent<NetworkTransformReliable>(), Is.Not.Null);
+        Assert.That(prefab.GetComponent<NavMeshAgent>(), Is.Null, "It flies; it is not limited to the NavMesh.");
+        Assert.That(prefab.GetComponent<EnemyMotor>(), Is.Null);
+        Assert.That(prefab.GetComponent<EnemyFlightMotor>(), Is.Not.Null);
+        Assert.That(prefab.GetComponent<TikbalangBrain>(), Is.Null);
+
+        var brain = prefab.GetComponent<ManananggalBrain>();
+        Assert.That(brain, Is.Not.Null);
+        Assert.That(brain.RoamsWholeMap, Is.True);
+        Assert.That(brain.Profile, Is.EqualTo(AssetDatabase.LoadAssetAtPath<ManananggalProfile>("Assets/PREFABS/Enemies/Profiles/Manananggal_Default.asset")));
+        Assert.That(prefab.GetComponent<EnemySenses>(), Is.Not.Null);
+
+        var presentation = prefab.GetComponent<EnemyPresentation>();
+        Assert.That(presentation.Sprites, Is.EqualTo(AssetDatabase.LoadAssetAtPath<EnemySpriteDefinition>("Assets/SPRITES/Enemies/Manananggal_Sprites.asset")));
+        Assert.That(presentation.Sprites.GetAnimation(EnemyAnimationState.Idle).IsReady, Is.True);
+        Assert.That(presentation.Sprites.GetAnimation(EnemyAnimationState.Moving).IsReady, Is.True);
+        Assert.That(presentation.WorldSprites.transform.parent, Is.EqualTo(prefab.transform));
+        Assert.That(presentation.WorldSprites.sharedMaterial.shader.name, Is.EqualTo("Capstone/Solid Sprite"));
+        Assert.That(presentation.WorldSprites.GetComponent<ReducedPixelation>(), Is.Not.Null);
+        Assert.That(prefab.GetComponent<EnemyFearSource>().visibilityRenderer, Is.EqualTo(presentation.WorldSprites));
+        Assert.That(prefab.GetComponent<DistanceFadeSprite>(), Is.Not.Null);
+        Assert.That(prefab.GetComponentInChildren<BlobShadow>(true).Follow, Is.EqualTo(presentation.WorldSprites.transform));
+        Assert.That(prefab.GetComponent<EnemyJumpscare>().FrontView, Is.Not.Null);
+        Assert.That(prefab.GetComponent<EnemyLoadingMiniature>().IsReady, Is.True);
+        Assert.That(prefab.GetComponentsInChildren<Collider>(true).Length, Is.EqualTo(1), "Only the body capsule.");
+    }
+
+    [Test]
+    public void ManananggalDefaultProfileAndRegistration()
+    {
+        var profile = AssetDatabase.LoadAssetAtPath<ManananggalProfile>("Assets/PREFABS/Enemies/Profiles/Manananggal_Default.asset");
+        Assert.That(profile.respawnDelaySeconds, Is.EqualTo(new Vector2(15f, 40f)));
+        Assert.That(profile.chaseDurationSeconds, Is.EqualTo(20f));
+        Assert.That(profile.hitPauseSeconds, Is.EqualTo(2.5f));
+        Assert.That(profile.contactDamage, Is.EqualTo(2));
+        Assert.That(profile.visionPitch, Is.InRange(20f, 80f), "Its cone looks down and a little forward.");
+        Assert.That(profile.huntAltitude, Is.GreaterThan(8f));
+
+        GameObject prefab = AssetDatabase.LoadAssetAtPath<GameObject>(ManananggalPath);
+        var definition = AssetDatabase.LoadAssetAtPath<EnemyDefinition>("Assets/PREFABS/Enemies/Definitions/Manananggal.asset");
+        Assert.That(definition.DisplayName, Is.EqualTo("Manananggal"));
+        Assert.That(definition.prefab.gameObject, Is.EqualTo(prefab));
+
+        Scene sample = EditorSceneManager.OpenScene("Assets/Scenes/SampleScene.unity", OpenSceneMode.Additive);
+        try
+        {
+            NetworkManager manager = sample.GetRootGameObjects()
+                .SelectMany(root => root.GetComponentsInChildren<NetworkManager>(true)).Single();
+            Assert.That(manager.spawnPrefabs, Does.Contain(prefab));
+        }
+        finally
+        {
+            EditorSceneManager.CloseScene(sample, true);
+        }
+    }
 }

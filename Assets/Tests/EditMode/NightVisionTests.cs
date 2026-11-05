@@ -45,26 +45,57 @@ public sealed class NightVisionTests
             Assert.That(volume.sharedProfile.TryGet(out NightFog fog), Is.True);
             Assert.That(fog.enabled.value, Is.True);
             Assert.That(fog.density.overrideState, Is.True);
-            Assert.That(fog.density.value, Is.EqualTo(0.06f));
+            Assert.That(fog.density.value, Is.EqualTo(0.05f));
+            Assert.That(fog.localLightScattering.overrideState, Is.True);
+            Assert.That(fog.localLightScattering.value, Is.LessThan(fog.lightScattering.value),
+                "Flashlights must not fill the air in front of the player with glow.");
+            Assert.That(fog.localLightNearFade.value, Is.GreaterThan(0f));
             Assert.That(fog.steps.value, Is.EqualTo(32));
             Assert.That(volume.sharedProfile.TryGet(out FilmGrain grain), Is.True);
             Assert.That(grain.intensity.overrideState, Is.True);
             Assert.That(grain.intensity.value, Is.InRange(0f, 1f), "Grain intensity is user-tuned within Unity's range.");
             Assert.That(volume.sharedProfile.TryGet(out ColorAdjustments color), Is.True);
-            Assert.That(color.postExposure.value, Is.LessThan(-0.9f), "The endless night is very dark.");
+            Assert.That(color.postExposure.value, Is.InRange(-1f, -0.4f), "The endless night is dark, but readable.");
             Assert.That(Mathf.Abs(color.colorFilter.value.b - color.colorFilter.value.r), Is.LessThan(0.05f),
                 "The night palette is neutral rather than tinted blue.");
             Assert.That(System.IO.File.ReadAllText("Assets/Scenes/SampleScene.unity"),
-                Does.Contain("m_AmbientSkyColor: {r: 0.005, g: 0.005, b: 0.006, a: 1}"));
+                Does.Contain("m_AmbientSkyColor: {r: 0.008, g: 0.008, b: 0.009, a: 1}"));
             string streets = System.IO.File.ReadAllText("Assets/Scenes/StreetsTest.unity");
-            Assert.That(streets, Does.Contain("m_AmbientSkyColor: {r: 0.0015, g: 0.0015, b: 0.0018, a: 1}"),
+            Assert.That(streets, Does.Contain("m_AmbientSkyColor: {r: 0.004, g: 0.004, b: 0.0045, a: 1}"),
                 "The streets are darker than the base so flashlights matter.");
             foreach (string path in new[] { "Assets/Scenes/SampleScene.unity", "Assets/Scenes/StreetsTest.unity" })
             {
                 string text = System.IO.File.ReadAllText(path);
                 Assert.That(text, Does.Contain("m_DefaultReflectionMode: 1"), path);
                 Assert.That(text, Does.Contain("m_ReflectionIntensity: 0\n"), path + " has no grey default reflections.");
+                Assert.That(text, Does.Contain("m_SkyboxMaterial: {fileID: 2100000, guid: 5583f3ef29b348ca8a709629dfae1de2, type: 2}"),
+                    path + " uses the Night Sky skybox.");
+                Assert.That(text, Does.Contain("m_AmbientMode: 3"), path + " keeps flat ambient so the skybox never lights the scene.");
+                var scene2 = path == "Assets/Scenes/SampleScene.unity" ? scene : EditorSceneManager.OpenScene(path, OpenSceneMode.Additive);
+                try
+                {
+                    MoonSky moonSky = scene2.GetRootGameObjects().SelectMany(root => root.GetComponentsInChildren<MoonSky>(true)).Single();
+                    Assert.That(moonSky.GetComponent<Light>().type, Is.EqualTo(LightType.Directional), path);
+                    Assert.That(moonSky.NormalSky, Is.SameAs(AssetDatabase.LoadAssetAtPath<Material>("Assets/Settings/NightSky.mat")), path);
+                    Assert.That(moonSky.BloodMoonSky, Is.SameAs(AssetDatabase.LoadAssetAtPath<Material>("Assets/Settings/BloodMoonSky.mat")), path);
+                }
+                finally
+                {
+                    if (scene2 != scene)
+                        EditorSceneManager.CloseScene(scene2, true);
+                }
             }
+            var nightSky = AssetDatabase.LoadAssetAtPath<Material>("Assets/Settings/NightSky.mat");
+            Assert.That(nightSky.shader.name, Is.EqualTo("Capstone/Night Sky"));
+            Assert.That(ShaderUtil.ShaderHasError(nightSky.shader), Is.False);
+            Assert.That(nightSky.HasProperty("_HorizonTex"), Is.False, "The horizon strip was removed.");
+            var bloodSky = AssetDatabase.LoadAssetAtPath<Material>("Assets/Settings/BloodMoonSky.mat");
+            Assert.That(bloodSky.shader, Is.SameAs(nightSky.shader));
+            Assert.That(bloodSky.GetTexture("_MoonTex"), Is.SameAs(nightSky.GetTexture("_MoonTex")), "Same moon, red tint.");
+            Color bloodTint = bloodSky.GetColor("_MoonColor");
+            Assert.That(bloodTint.r, Is.GreaterThan(bloodTint.g * 3f));
+            Assert.That(AssetDatabase.LoadAssetAtPath<GameObject>("Assets/PREFABS/NetworkPlayer.prefab")
+                .GetComponentInChildren<Camera>(true).clearFlags, Is.EqualTo(CameraClearFlags.Skybox));
             Light moon = scene.GetRootGameObjects().SelectMany(root =>
                 root.GetComponentsInChildren<Light>(true)).Single(light => light.type == LightType.Directional);
             Assert.That(moon.intensity, Is.EqualTo(0.08f).Within(0.0001f));

@@ -20,13 +20,13 @@ RenderSettings:
   m_FogDensity: 0.01
   m_LinearFogStart: 0
   m_LinearFogEnd: 300
-  m_AmbientSkyColor: {r: 0.0015, g: 0.0015, b: 0.0018, a: 1}
+  m_AmbientSkyColor: {r: 0.004, g: 0.004, b: 0.0045, a: 1}
   m_AmbientEquatorColor: {r: 0.114, g: 0.125, b: 0.133, a: 1}
   m_AmbientGroundColor: {r: 0.047, g: 0.043, b: 0.035, a: 1}
   m_AmbientIntensity: 1
   m_AmbientMode: 3
   m_SubtractiveShadowColor: {r: 0.42, g: 0.478, b: 0.627, a: 1}
-  m_SkyboxMaterial: {fileID: 0}
+  m_SkyboxMaterial: {fileID: 2100000, guid: 5583f3ef29b348ca8a709629dfae1de2, type: 2}
   m_HaloStrength: 0.5
   m_FlareStrength: 1
   m_FlareFadeSpeed: 3
@@ -149,20 +149,65 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Capstone.Level::MapManager
   connectorBlocks:
-  - {fileID: 1616654376914834088, guid: 175d9f54e9ed36748b978251cf4c885c, type: 3}
-  - {fileID: 618928840342637352, guid: 28d5705db99b5864a9057107cfcc9442, type: 3}
+  - {fileID: 2913222623442181145, guid: e1a9802e6d6c30b4eb464504fff8603d, type: 3}
+  - {fileID: 3087917917985882939, guid: 00f553631ba504947976940e1a15187c, type: 3}
+  - {fileID: 6283119194234240089, guid: b9583c2050a276d469d85998c972c413, type: 3}
+  - {fileID: 2099420819138174690, guid: dc59bb23bb468f345918e906e4feb30d, type: 3}
+  - {fileID: 7436410511699701938, guid: b5e16ac10c412a549b777cbcb4200e03, type: 3}
+  - {fileID: 4182955759780346351, guid: 9196573282af58e4eade3751de434253, type: 3}
+  - {fileID: 4622661087825337083, guid: b2bdcce261073b7468bcc462f5973868, type: 3}
+  - {fileID: 3862842927533186807, guid: 726ca8d189650ba44982c8d6634d09c5, type: 3}
+  - {fileID: 6435243916476262936, guid: 563fd8aff9a41e244aadccb80e49c321, type: 3}
+  - {fileID: 325931030806175823, guid: 53ae0a6671c31514f85ee7c919a2cd87, type: 3}
+  - {fileID: 4472199578707762112, guid: 961c530598f816a4a8eb48bb749838de, type: 3}
+  - {fileID: 2406199986517423049, guid: 54d2f7e082293cb4e82c974e3a21b4b8, type: 3}
+  - {fileID: 2317171683382385537, guid: e297b99e048d4044b8340debb4d27069, type: 3}
+  - {fileID: 2408470338287595567, guid: 75cc0b531b291df499b4692a7cb8032d, type: 3}
+  - {fileID: 2963908831787737540, guid: bba7fc4764edab1448d98c1b8ac9d444, type: 3}
+  - {fileID: 3702304306222441657, guid: 71a76526308f50443a21d1de6ccded7a, type: 3}
   endCapBlocks:
-  - {fileID: 3373957936711295693, guid: 88a53138faae3ad4c92e9062e76354fd, type: 3}
+  - {fileID: 8615029016666643895, guid: 13f42952e1b2c8146a3f3556a4cc6194, type: 3}
+  - {fileID: 8432176015936610181, guid: 49b715f80d9ffe6458d45363ee5c09d1, type: 3}
+  - {fileID: 9187880618568606540, guid: 3037809ad38ec5343a5947bc0df810dd, type: 3}
+  - {fileID: 7698495288718851756, guid: 6859271bf199c8f4484f1a00fed4e37d, type: 3}
+  - {fileID: 4752549933183053837, guid: d3c4dc2fd40a1a548b552bb75538b758, type: 3}
+  - {fileID: 4752549933183053837, guid: d3c4dc2fd40a1a548b552bb75538b758, type: 3}
   spawnBlocks:
-  - {fileID: 5080754136342818940, guid: 0fce73b2361295340af83925d772e34a, type: 3}
+  - {fileID: 2139184186798187448, guid: 8c87feb08446a104e971f164bf2e0053, type: 3}
+  - {fileID: 8445120967365032703, guid: 29215ed96ff906946b72fd8d3ff5b0b2, type: 3}
+  - {fileID: 3103207494426375018, guid: 0e8d3edbd0bd49143a0cfd6a3df13fff, type: 3}
   connectorBlockCount: 6
   maxAttempts: 100
   buildOnStart: 1
   useFixedSeed: 0
   fixedSeed: 0
+  loopChance: 0.75
+  barricadeEndCaps: 1
+  barricadeLoops: 1
+  endCapObstacleChance: 1
+  loopObstacleChance: 0.35
+  fallbackObstaclePrefabs: []
+  generateSpawnPoints: 1
+  spawnPointCount: 6
+  spawnPointSpacing: 1.5
+  spawnClearanceRadius: 0.45
+  spawnClearanceHeight: 2
+  fillerBlocks:
+  - {fileID: 1296405092145811542, guid: 1493f9eee56a86148b7b9c0e878defa8, type: 3}
+  - {fileID: 5346572578585674532, guid: 51dd36a9b90181f4180f1aecab6c563e, type: 3}
+  - {fileID: 5751111996861182083, guid: 1ded1205c77354a4aacb6ad2b749996c, type: 3}
+  - {fileID: 7427172132671303812, guid: ec238a5a570f4024f844d5fda06a2d23, type: 3}
+  - {fileID: 6487281826835785037, guid: f431bb2d4c38c1c46b53b0fb0a14c072, type: 3}
+  - {fileID: 3391361718318670730, guid: 0869a798a3397ad4ca2246e3d2fed9ec, type: 3}
+  - {fileID: 3808761764412456894, guid: eedb52d0cdb66cb4b9639afcb7dea6ae, type: 3}
+  fillerMarginCells: 2
+  plugGaps: 1
+  gapFillPrefabs: []
   buildNavMesh: 1
   navMeshAgentTypeId: 0
   carveObstacles: 1
+  bakeAgentRadius: 0.3
+  decorationCarveScale: 0.6
 --- !u!4 &494850883
 Transform:
   m_ObjectHideFlags: 0
@@ -211,6 +256,8 @@ MonoBehaviour:
   enemies:
   - prefab: {fileID: 3659812021488451613, guid: e16555d2c3b2f7b458521075a2b69ceb, type: 3}
     count: 1
+  - prefab: {fileID: 3659812021488451613, guid: a7833c19caa344b7bd8bcb62408c3ab3, type: 3}
+    count: 1
   rolledEnemyCount: 1
   settleFrames: 3
 --- !u!4 &564393578
@@ -239,6 +286,7 @@ GameObject:
   - component: {fileID: 582414908}
   - component: {fileID: 582414907}
   - component: {fileID: 582414906}
+  - component: {fileID: 7713582414905}
   m_Layer: 0
   m_Name: Directional Light
   m_TagString: Untagged
@@ -348,13 +396,13 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 582414905}
   serializedVersion: 2
-  m_LocalRotation: {x: 0.40821788, y: -0.23456968, z: 0.10938163, w: 0.8754261}
+  m_LocalRotation: {x: 0.057377, y: -0.936195, z: 0.181978, w: 0.295181}
   m_LocalPosition: {x: 0, y: 3, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 0}
-  m_LocalEulerAnglesHint: {x: 50, y: -30, z: 0}
+  m_LocalEulerAnglesHint: {x: 22, y: 215, z: 0}
 --- !u!1 &1853817355
 GameObject:
   m_ObjectHideFlags: 0
@@ -404,6 +452,23 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &7713582414905
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 582414905}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8d3c5e7a41f24b0b9e6a2f1c7b5d9e03, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  alignMoonToLight: 1
+  normalSky: {fileID: 2100000, guid: 5583f3ef29b348ca8a709629dfae1de2, type: 2}
+  bloodMoonSky: {fileID: 2100000, guid: c71e2b9d84a64f53a0d6e8f2b1c4a957, type: 2}
+  bloodMoonLightColor: {r: 1, g: 0.12, b: 0.08, a: 1}
+  bloodMoonIntensityMultiplier: 1.5
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0

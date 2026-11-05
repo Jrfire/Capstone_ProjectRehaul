@@ -20,13 +20,13 @@ RenderSettings:
   m_FogDensity: 0.01
   m_LinearFogStart: 0
   m_LinearFogEnd: 300
-  m_AmbientSkyColor: {r: 0.005, g: 0.005, b: 0.006, a: 1}
+  m_AmbientSkyColor: {r: 0.008, g: 0.008, b: 0.009, a: 1}
   m_AmbientEquatorColor: {r: 0.114, g: 0.125, b: 0.133, a: 1}
   m_AmbientGroundColor: {r: 0.047, g: 0.043, b: 0.035, a: 1}
   m_AmbientIntensity: 1
   m_AmbientMode: 3
   m_SubtractiveShadowColor: {r: 0.42, g: 0.478, b: 0.627, a: 1}
-  m_SkyboxMaterial: {fileID: 0}
+  m_SkyboxMaterial: {fileID: 2100000, guid: 5583f3ef29b348ca8a709629dfae1de2, type: 2}
   m_HaloStrength: 0.5
   m_FlareStrength: 1
   m_FlareFadeSpeed: 3
@@ -161,6 +161,7 @@ GameObject:
   - component: {fileID: 410087041}
   - component: {fileID: 410087040}
   - component: {fileID: 410087042}
+  - component: {fileID: 7713410087039}
   m_Layer: 0
   m_Name: Directional Light
   m_TagString: Untagged
@@ -168,6 +169,22 @@ GameObject:
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
+--- !u!114 &7713410087039
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 410087039}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8d3c5e7a41f24b0b9e6a2f1c7b5d9e03, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  normalSky: {fileID: 2100000, guid: 5583f3ef29b348ca8a709629dfae1de2, type: 2}
+  bloodMoonSky: {fileID: 2100000, guid: c71e2b9d84a64f53a0d6e8f2b1c4a957, type: 2}
+  bloodMoonLightColor: {r: 1, g: 0.12, b: 0.08, a: 1}
+  bloodMoonIntensityMultiplier: 1.5
 --- !u!108 &410087040
 Light:
   m_ObjectHideFlags: 0
@@ -241,13 +258,13 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 410087039}
   serializedVersion: 2
-  m_LocalRotation: {x: 0.40821788, y: -0.23456968, z: 0.10938163, w: 0.8754261}
+  m_LocalRotation: {x: 0.057377, y: -0.936195, z: 0.181978, w: 0.295181}
   m_LocalPosition: {x: 0, y: 3, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 0}
-  m_LocalEulerAnglesHint: {x: 50, y: -30, z: 0}
+  m_LocalEulerAnglesHint: {x: 22, y: 215, z: 0}
 --- !u!114 &410087042
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -735,6 +752,7 @@ GameObject:
   - component: {fileID: 1662569667}
   - component: {fileID: 1662569666}
   - component: {fileID: 1662569665}
+  - component: {fileID: 99171662569664}
   m_Layer: 0
   m_Name: MapTerminal
   m_TagString: Untagged
@@ -897,6 +915,7 @@ GameObject:
   - component: {fileID: 1819335788}
   - component: {fileID: 1819335790}
   - component: {fileID: 1819335789}
+  - component: {fileID: 99171819335787}
   m_Layer: 0
   m_Name: JeepneyBack
   m_TagString: Untagged
@@ -1164,6 +1183,7 @@ MonoBehaviour:
   playerSpawnMethod: 1
   spawnPrefabs:
   - {fileID: 4749176831537940182, guid: e16555d2c3b2f7b458521075a2b69ceb, type: 3}
+  - {fileID: 4749176831537940182, guid: a7833c19caa344b7bd8bcb62408c3ab3, type: 3}
   exceptionsDisconnect: 1
   snapshotSettings:
     bufferTimeMultiplier: 2
@@ -1334,6 +1354,7 @@ GameObject:
   - component: {fileID: 2100000303}
   - component: {fileID: 2100000304}
   - component: {fileID: 2100000305}
+  - component: {fileID: 99172100000300}
   m_Layer: 0
   m_Name: SteamInviteTerminal
   m_TagString: Untagged
@@ -1507,3 +1528,45 @@ SceneRoots:
   - {fileID: 1662569669}
   - {fileID: 1755572577}
   - {fileID: 2100000601}
+--- !u!114 &99172100000300
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2100000300}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b4e2d3c5f6a74b809d0e1f2a3b4c5d62, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Capstone.Player::Nametag
+  displayName: Steam Invite Terminal
+  maxDistance: 3.5
+--- !u!114 &99171819335787
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1819335787}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b4e2d3c5f6a74b809d0e1f2a3b4c5d62, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Capstone.Player::Nametag
+  displayName: Jeepney
+  maxDistance: 3.5
+--- !u!114 &99171662569664
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1662569664}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b4e2d3c5f6a74b809d0e1f2a3b4c5d62, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Capstone.Player::Nametag
+  displayName: Travel Map
+  maxDistance: 3.5

@@ -20,6 +20,7 @@ public static class StreetBlockBuilder
     public const string GeneratedName = "Generated";
     private const float Epsilon = 0.001f;
     private const int DecorationAttempts = 40;
+    private const int MiddleBuildingAttempts = 80;
 
     public static bool Generate(StreetBlockGenerator generator)
     {
@@ -129,6 +130,8 @@ public static class StreetBlockBuilder
         private readonly Random random;
         private readonly Dictionary<GameObject, Vector3> prefabSizes = new Dictionary<GameObject, Vector3>();
         private readonly List<Rect> occupied = new List<Rect>();
+        /// <summary>Wall and boundary rects (also in <see cref="occupied"/>); edges may overlap each other at corners.</summary>
+        private readonly HashSet<Rect> edgeRects = new HashSet<Rect>();
         private readonly List<Rect> paths = new List<Rect>();
         private readonly List<GameObject> placed = new List<GameObject>();
         private Transform blockSpace;
@@ -184,6 +187,10 @@ public static class StreetBlockBuilder
                 PlaceBuildings(buildings, side, wrap ? insets[side] : 0f);
             if (!wrap)
                 Seal();
+            if (settings.IsFiller)
+                PackFillerBuildings(buildings);
+            else
+                PlaceMiddleBuildings(buildings);
             PlaceDecorations(decorations);
             VerifyInsideFloor();
         }
@@ -214,6 +221,8 @@ public static class StreetBlockBuilder
                 throw new StreetBlockGenerationException("Obstacle Count is above zero but no Obstacle Prefabs are assigned.");
             CheckList(settings.obstaclePrefabs, "Obstacle Prefabs");
             CheckList(settings.buildingPrefabs, "Building Prefabs");
+            CheckList(settings.middleBuildingPrefabs, "Middle Building Prefabs");
+            CheckList(settings.fillerBuildingPrefabs, "Filler Building Prefabs");
             CheckList(settings.wallPrefabs, "Wall Prefabs");
             CheckList(settings.decorationPrefabs, "Decoration Prefabs");
             if (settings.obstaclePrefabs != null)
@@ -277,7 +286,8 @@ public static class StreetBlockBuilder
         private void ValidatePrefabSizes()
         {
             Vector2 size = Size;
-            foreach (GameObject prefab in settings.buildingPrefabs ?? Array.Empty<GameObject>())
+            foreach (GameObject prefab in (settings.buildingPrefabs ?? Array.Empty<GameObject>())
+                .Concat(settings.middleBuildingPrefabs ?? Array.Empty<GameObject>()))
             {
                 Vector3 footprint = SizeOf(prefab);
                 bool fitsSouthNorth = footprint.x <= size.x + Epsilon && footprint.z <= size.y + Epsilon;
@@ -416,7 +426,7 @@ public static class StreetBlockBuilder
                     Rect rect = SideRect(side, cursor, cursor + size.x, inset, inset + size.z);
                     if (Blocked(rect, 0f))
                         continue;
-                    PlaceAt(prefab, parent, side.InwardYaw(), rect).name = $"{prefab.name} ({side})";
+                    PlaceAt(prefab, parent, EdgeBuildingYaw(side), rect).name = $"{prefab.name} ({side})";
                     cursor += size.x + settings.buildingSpacing;
                     placedOne = true;
                     break;
@@ -426,6 +436,11 @@ public static class StreetBlockBuilder
             }
         }
 
+        /// <summary>
+        /// Seals one edge. Walls of other edges never count as cover, so every edge runs corner to corner (corner
+        /// pieces overlap) and each span is closed by a last piece set flush with its end (overlapping the previous
+        /// one), so walls meet entrances and obstacles exactly. Only spans shorter than every piece get a boundary.
+        /// </summary>
         /// <returns>The deepest wall or boundary placed along this edge.</returns>
         private float SealEdge(Transform walls, Transform boundaries, BlockSide side, List<(float start, float end)> gaps)
         {
@@ -434,44 +449,72 @@ public static class StreetBlockBuilder
             var covered = new List<(float start, float end)>(gaps);
             foreach (Rect rect in occupied)
             {
-                if (TouchesEdge(rect, side, out float start, out float end))
+                if (!edgeRects.Contains(rect) && TouchesEdge(rect, side, out float start, out float end))
                     covered.Add((start, end));
             }
 
+            GameObject[] prefabs = settings.wallPrefabs ?? Array.Empty<GameObject>();
             foreach ((float start, float end) in Uncovered(covered, length))
             {
                 float cursor = start;
-                GameObject[] prefabs = settings.wallPrefabs ?? Array.Empty<GameObject>();
-                while (prefabs.Length > 0)
+                float closedFrom = end;
+                while (prefabs.Length > 0 && end - cursor > Epsilon)
                 {
                     GameObject fitting = prefabs.Where(prefab =>
                     {
                         Vector3 size = SizeOf(prefab);
-                        return cursor + size.x <= end + Epsilon && !Blocked(SideRect(side, cursor, cursor + size.x, 0f, size.z), 0f);
+                        return cursor + size.x <= end + Epsilon && !WallBlocked(SideRect(side, cursor, cursor + size.x, 0f, size.z));
                     }).OrderBy(_ => random.Next()).FirstOrDefault();
                     if (fitting == null)
                         break;
-                    Vector3 wallSize = SizeOf(fitting);
-                    PlaceAt(fitting, walls, side.InwardYaw(), SideRect(side, cursor, cursor + wallSize.x, 0f, wallSize.z))
-                        .name = $"{fitting.name} ({side})";
-                    cursor += wallSize.x;
-                    inset = Mathf.Max(inset, wallSize.z);
+                    inset = Mathf.Max(inset, PlaceWall(walls, side, fitting, cursor));
+                    cursor += SizeOf(fitting).x;
                 }
 
-                if (end - cursor > Epsilon)
+                if (end - cursor > Epsilon && prefabs.Length > 0)
+                {
+                    // Close the span with a piece flush with its end, overlapping the last one instead of leaving a gap.
+                    GameObject closing = prefabs.Where(prefab =>
+                    {
+                        Vector3 size = SizeOf(prefab);
+                        return size.x <= end - start + Epsilon && !WallBlocked(SideRect(side, end - size.x, end, 0f, size.z));
+                    }).OrderBy(prefab => SizeOf(prefab).x).ThenBy(_ => random.Next()).FirstOrDefault();
+                    if (closing != null)
+                    {
+                        closedFrom = end - SizeOf(closing).x;
+                        inset = Mathf.Max(inset, PlaceWall(walls, side, closing, closedFrom));
+                    }
+                }
+
+                if (closedFrom - cursor > Epsilon)
                 {
                     const float thickness = 0.1f;
-                    Rect rect = SideRect(side, cursor, end, 0f, thickness);
-                    var boundary = new GameObject($"Boundary ({side} {cursor:0.##}-{end:0.##})");
+                    Rect rect = SideRect(side, cursor, closedFrom, 0f, thickness);
+                    var boundary = new GameObject($"Boundary ({side} {cursor:0.##}-{closedFrom:0.##})");
                     boundary.transform.SetParent(boundaries, false);
                     boundary.transform.localPosition = new Vector3(rect.center.x, settings.boundaryHeight * 0.5f, rect.center.y);
                     boundary.AddComponent<BoxCollider>().size = new Vector3(rect.width, settings.boundaryHeight, rect.height);
                     occupied.Add(rect);
+                    edgeRects.Add(rect);
                     inset = Mathf.Max(inset, thickness);
                 }
             }
             return inset;
         }
+
+        private float PlaceWall(Transform walls, BlockSide side, GameObject prefab, float along)
+        {
+            Vector3 size = SizeOf(prefab);
+            Rect rect = SideRect(side, along, along + size.x, 0f, size.z);
+            PlaceAt(prefab, walls, side.InwardYaw(), rect).name = $"{prefab.name} ({side})";
+            edgeRects.Add(rect);
+            return size.z;
+        }
+
+        /// <summary>Walls may overlap other walls (at corners and closing pieces) but nothing else.</summary>
+        private bool WallBlocked(Rect rect) =>
+            !InsideFloor(rect) || paths.Any(path => Overlaps(rect, path)) ||
+            occupied.Any(other => !edgeRects.Contains(other) && Overlaps(rect, other));
 
         private bool TouchesEdge(Rect rect, BlockSide side, out float start, out float end)
         {
@@ -504,6 +547,127 @@ public static class StreetBlockBuilder
             if (cursor < length - Epsilon)
                 result.Add((cursor, length));
             return result;
+        }
+
+        private float EdgeBuildingYaw(BlockSide side) =>
+            settings.IsFiller && settings.fillerEdgeBuildingsFaceOutward ? side.InwardYaw() + 180f : side.InwardYaw();
+
+        /// <summary>
+        /// Filler blocks: packs the inside with buildings, scanning row by row and trying the largest footprints first in
+        /// every 90-degree turn, so only narrow alleys (Filler Alley Width) remain between them and the sealed edges.
+        /// </summary>
+        private void PackFillerBuildings(Transform parent)
+        {
+            GameObject[] prefabs = settings.fillerBuildingPrefabs != null && settings.fillerBuildingPrefabs.Length > 0
+                ? settings.fillerBuildingPrefabs
+                : settings.middleBuildingPrefabs != null && settings.middleBuildingPrefabs.Length > 0
+                    ? settings.middleBuildingPrefabs
+                    : settings.buildingPrefabs ?? Array.Empty<GameObject>();
+            if (prefabs.Length == 0)
+                return;
+
+            float alley = settings.fillerAlleyWidth;
+            float step = Mathf.Max(0.1f, Mathf.Min(0.5f, alley * 0.5f));
+            var options = new List<(GameObject prefab, float yaw, Vector2 footprint)>();
+            foreach (GameObject prefab in prefabs.Distinct())
+            {
+                Vector3 size = SizeOf(prefab);
+                for (int turn = 0; turn < 4; turn++)
+                    options.Add((prefab, turn * 90f, turn % 2 == 0 ? new Vector2(size.x, size.z) : new Vector2(size.z, size.x)));
+            }
+
+            float minSide = options.Min(o => Mathf.Min(o.footprint.x, o.footprint.y));
+            for (float z = -halfZ + alley; z + minSide <= halfZ - alley + Epsilon; z += step)
+            {
+                for (float x = -halfX + alley; x + minSide <= halfX - alley + Epsilon; x += step)
+                {
+                    var corner = new Vector2(x, z);
+                    // A corner strictly inside another footprint's alley margin can never start a building.
+                    if (occupied.Any(o => x > o.xMin - alley + Epsilon && x < o.xMax + alley - Epsilon &&
+                                          z > o.yMin - alley + Epsilon && z < o.yMax + alley - Epsilon))
+                        continue;
+                    // Every prefab tries all four turns; larger footprints are favoured (density) with a random weight (variety).
+                    bool found = false;
+                    float bestScore = 0f;
+                    (GameObject prefab, float yaw, Vector2 footprint) best = default;
+                    foreach (var option in options)
+                    {
+                        Rect rect = new Rect(corner, option.footprint);
+                        if (rect.xMax > halfX - alley + Epsilon || rect.yMax > halfZ - alley + Epsilon || Blocked(rect, alley))
+                            continue;
+                        float score = option.footprint.x * option.footprint.y * (0.6f + 0.8f * (float)random.NextDouble());
+                        if (!found || score > bestScore)
+                        {
+                            found = true;
+                            bestScore = score;
+                            best = option;
+                        }
+                    }
+                    if (found)
+                        PlaceAt(best.prefab, parent, best.yaw, new Rect(corner, best.footprint)).name = $"{best.prefab.name} (Filler)";
+                }
+            }
+        }
+
+        /// <summary>Scatters buildings inside the block once the edges are done, keeping a walkable gap around each.</summary>
+        private void PlaceMiddleBuildings(Transform parent)
+        {
+            GameObject[] prefabs = settings.middleBuildingPrefabs != null && settings.middleBuildingPrefabs.Length > 0
+                ? settings.middleBuildingPrefabs
+                : settings.buildingPrefabs ?? Array.Empty<GameObject>();
+            if (prefabs.Length == 0 || settings.middleBuildingCount == 0)
+                return;
+            float clearance = settings.middleBuildingClearance;
+            Rect area = Rect.MinMaxRect(-halfX + clearance, -halfZ + clearance, halfX - clearance, halfZ - clearance);
+            int failed = 0;
+            for (int index = 0; index < settings.middleBuildingCount; index++)
+            {
+                GameObject prefab = prefabs[random.Next(prefabs.Length)];
+                Vector3 size = SizeOf(prefab);
+                bool success = false;
+                for (int attempt = 0; attempt < MiddleBuildingAttempts && !success; attempt++)
+                {
+                    var point = new Vector2(area.xMin + (float)random.NextDouble() * area.width,
+                        area.yMin + (float)random.NextDouble() * area.height);
+                    float yaw = settings.middleBuildingFacing == MiddleBuildingFacing.TowardWalkway
+                        ? FaceNearestWalkway(point)
+                        : random.Next(4) * 90f;
+                    bool turned = Mathf.Abs(Mathf.DeltaAngle(yaw, 90f)) < 1f || Mathf.Abs(Mathf.DeltaAngle(yaw, 270f)) < 1f;
+                    Vector2 footprint = turned ? new Vector2(size.z, size.x) : new Vector2(size.x, size.z);
+                    Rect rect = new Rect(point - footprint * 0.5f, footprint);
+                    if (rect.xMin < area.xMin - Epsilon || rect.xMax > area.xMax + Epsilon ||
+                        rect.yMin < area.yMin - Epsilon || rect.yMax > area.yMax + Epsilon || Blocked(rect, clearance))
+                        continue;
+                    PlaceAt(prefab, parent, yaw, rect).name = $"{prefab.name} (Middle)";
+                    success = true;
+                }
+                if (!success)
+                    failed++;
+            }
+            if (failed > 0)
+                Debug.LogWarning($"Street block '{settings.name}': {failed} of {settings.middleBuildingCount} middle buildings did not fit with {clearance:0.##} m clearance outside the entrance walkways.", settings);
+        }
+
+        /// <summary>Yaw (multiple of 90) turning a +Z front toward the closest walkway; 0 without entrances.</summary>
+        private float FaceNearestWalkway(Vector2 point)
+        {
+            Vector2 best = Vector2.zero;
+            float bestDistance = float.PositiveInfinity;
+            foreach (Rect path in paths)
+            {
+                var closest = new Vector2(Mathf.Clamp(point.x, path.xMin, path.xMax), Mathf.Clamp(point.y, path.yMin, path.yMax));
+                float distance = (closest - point).sqrMagnitude;
+                if (distance < bestDistance)
+                {
+                    bestDistance = distance;
+                    best = closest - point;
+                }
+            }
+            if (best.sqrMagnitude < Epsilon * Epsilon)
+                return 0f;
+            if (Mathf.Abs(best.x) > Mathf.Abs(best.y))
+                return best.x > 0f ? 90f : 270f;
+            return best.y > 0f ? 0f : 180f;
         }
 
         private void PlaceDecorations(Transform parent)

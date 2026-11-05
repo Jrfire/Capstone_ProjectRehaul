@@ -1,0 +1,34 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e538d5867af941a5a2b19e73846104ff, type: 3}
+  m_Name: Manananggal_Default
+  m_EditorClassIdentifier: Capstone.Enemies::ManananggalProfile
+  huntSpeed: 8
+  chaseSpeed: 6.5
+  leaveSpeed: 10
+  huntAltitude: 14
+  chaseHoverHeight: 0.5
+  eyeHeight: 1.2
+  visionRange: 30
+  visionAngle: 70
+  visionPitch: 50
+  firstPassDelaySeconds: {x: 5, y: 15}
+  respawnDelaySeconds: {x: 15, y: 40}
+  edgeMargin: 12
+  revealDelaySeconds: 0.5
+  fallbackPassHalfLength: 40
+  chaseDurationSeconds: 20
+  contactDamage: 2
+  attackRange: 1.4
+  attackHeight: 2.5
+  hitPauseSeconds: 2.5
+  leaveTimeoutSeconds: 15

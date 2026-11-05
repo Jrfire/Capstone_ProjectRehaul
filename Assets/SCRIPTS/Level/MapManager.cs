@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using UnityEngine;
 using UnityEngine.AI;
 
@@ -59,6 +60,34 @@ public sealed class MapManager : MonoBehaviour
     private bool barricadeEndCaps = true;
     [SerializeField, Tooltip("Keep other entrance obstacles only where the street still has a route around them; turn off to remove every non-end-cap obstacle.")]
     private bool barricadeLoops = true;
+    [SerializeField, Range(0f, 1f), Tooltip("Chance that an end cap joint without a baked obstacle gets one placed by the map. Uses the end cap generator's Obstacle Prefabs, else the other block's, else Fallback Obstacle Prefabs.")]
+    private float endCapObstacleChance = 1f;
+    [SerializeField, Range(0f, 1f), Tooltip("Chance that a connector-to-connector joint without a baked obstacle gets one placed by the map; only where a route around it remains. The spawn block's entrance never gets one.")]
+    private float loopObstacleChance = 0.35f;
+    [SerializeField, Tooltip("Obstacle prefabs (with EntranceObstacle, front = +Z into the block) used when neither block's generator lists any.")]
+    private List<GameObject> fallbackObstaclePrefabs = new List<GameObject>();
+
+    [Header("Player spawns")]
+    [SerializeField, Tooltip("Give the placed spawn block generated player spawn points on open, reachable floor, unless it already has a PlayerSpawnPoints with points.")]
+    private bool generateSpawnPoints = true;
+    [SerializeField, Range(1, 6), Tooltip("Spawn points generated in the spawn block (host plus five guests = 6).")]
+    private int spawnPointCount = 6;
+    [SerializeField, Min(0.5f), Tooltip("Minimum distance between generated spawn points.")]
+    private float spawnPointSpacing = 1.5f;
+    [SerializeField, Min(0.1f), Tooltip("Radius of the player-sized capsule that must be free of colliders at each spawn point.")]
+    private float spawnClearanceRadius = 0.45f;
+    [SerializeField, Min(0.5f), Tooltip("Height of the player-sized capsule that must be free of colliders at each spawn point.")]
+    private float spawnClearanceHeight = 2f;
+
+    [Header("Filler blocks")]
+    [SerializeField, Tooltip("Blocks with no entrances placed in every empty grid cell around the street (same cell size) so the map does not float in a void. Fillers may overhang the outer margin; cells no filler fits are plugged (see Plug Gaps).")]
+    private List<StreetBlock> fillerBlocks = new List<StreetBlock>();
+    [SerializeField, Min(0), Tooltip("Grid cells of filler added beyond the street's bounding box on every side.")]
+    private int fillerMarginCells = 2;
+    [SerializeField, Tooltip("Cells no filler block fits (e.g. one- or two-cell gaps between street blocks) get the smallest filler's floor tiles plus one Gap Fill Prefab, so nobody sees under the map.")]
+    private bool plugGaps = true;
+    [SerializeField, Tooltip("Prefabs (e.g. small buildings) placed centred in plugged cells with a random 90-degree turn; ones larger than a cell are skipped. Empty = the smallest filler's generator Filler/Middle/Building Prefabs.")]
+    private List<GameObject> gapFillPrefabs = new List<GameObject>();
 
     [Header("Navigation")]
     [SerializeField, Tooltip("Bake a NavMesh on every block's floor after building (play mode only).")]
@@ -75,8 +104,10 @@ public sealed class MapManager : MonoBehaviour
     private static readonly Dictionary<string, int> networkSeeds = new Dictionary<string, int>();
     private Transform generatedRoot;
     private readonly List<StreetBlock> placedBlocks = new List<StreetBlock>();
+    private readonly List<StreetBlock> placedFillers = new List<StreetBlock>();
     private readonly List<List<int>> neighbours = new List<List<int>>();
     private readonly List<MapJoint> joints = new List<MapJoint>();
+    private readonly List<EntranceObstacle> jointBarricades = new List<EntranceObstacle>();
     private NavMeshDataInstance navMeshInstance;
 
     public static MapManager Active { get; private set; }
@@ -103,6 +134,17 @@ public sealed class MapManager : MonoBehaviour
 
     public StreetBlock GetBlock(int index) => placedBlocks[index];
 
+    public IReadOnlyList<StreetBlock> FillerBlocks => fillerBlocks;
+    /// <summary>Placed filler blocks (not part of <see cref="Layout"/>, the NavMesh or block neighbours).</summary>
+    public int FillerCount => placedFillers.Count;
+    public StreetBlock GetFiller(int index) => placedFillers[index];
+    /// <summary>Grid cells no filler block fitted, covered by gap plugs (floor tiles plus a gap prefab).</summary>
+    public int PluggedCellCount { get; private set; }
+    public int SpawnPointCount => spawnPointCount;
+    public float SpawnPointSpacing => spawnPointSpacing;
+    public float SpawnClearanceRadius => spawnClearanceRadius;
+    public float SpawnClearanceHeight => spawnClearanceHeight;
+
     public MapBlockRole GetRole(int index) => Layout[index].Role;
 
     /// <summary>Blocks whose footprints share an edge with block <paramref name="index"/>.</summary>
@@ -110,6 +152,55 @@ public sealed class MapManager : MonoBehaviour
 
     /// <summary>Every pair of joined entrances, and whether a barricade stands in it.</summary>
     public IReadOnlyList<MapJoint> Joints => joints;
+
+    /// <summary>True unless joint <paramref name="joint"/> holds a barricade that has not been cleared yet.</summary>
+    public bool IsJointOpen(int joint)
+    {
+        EntranceObstacle barricade = joint < jointBarricades.Count ? jointBarricades[joint] : null;
+        return barricade == null || barricade.IsCleared;
+    }
+
+    /// <summary>
+    /// Blocks reachable from <paramref name="fromBlock"/> through joined entrances without passing an uncleared barricade
+    /// (e.g. a gated end cap is not reachable until its gate is opened).
+    /// </summary>
+    public bool[] FindOpenlyReachable(int fromBlock)
+    {
+        var reached = new bool[placedBlocks.Count];
+        if (fromBlock < 0 || fromBlock >= reached.Length)
+            return reached;
+        var queue = new Queue<int>();
+        reached[fromBlock] = true;
+        queue.Enqueue(fromBlock);
+        while (queue.Count > 0)
+        {
+            int block = queue.Dequeue();
+            for (int j = 0; j < joints.Count; j++)
+            {
+                MapJoint joint = joints[j];
+                if ((joint.BlockA != block && joint.BlockB != block) || !IsJointOpen(j))
+                    continue;
+                int other = joint.BlockA == block ? joint.BlockB : joint.BlockA;
+                if (!reached[other])
+                {
+                    reached[other] = true;
+                    queue.Enqueue(other);
+                }
+            }
+        }
+        return reached;
+    }
+
+    /// <summary>Blocks players can currently walk to from the spawn block (all false if there is none).</summary>
+    public bool[] FindOpenlyReachableFromSpawn()
+    {
+        for (int i = 0; i < placedBlocks.Count; i++)
+        {
+            if (GetRole(i) == MapBlockRole.Spawn)
+                return FindOpenlyReachable(i);
+        }
+        return new bool[placedBlocks.Count];
+    }
 
     /// <summary>Independent loops in the street (joints - blocks + 1 for a connected map).</summary>
     public int LoopCount => Mathf.Max(0, joints.Count - placedBlocks.Count + 1);
@@ -196,9 +287,14 @@ public sealed class MapManager : MonoBehaviour
         FindNeighbours(layout);
         ClearSpawnEntrances(layout);
         ResolveBarricades(layout);
+        PlaceFillers(layout);
+        if (generateSpawnPoints)
+            GenerateSpawnPoints(layout);
         if (buildNavMesh && Application.isPlaying)
             BuildNavigation();
         IsBuilt = true;
+        if (Application.isPlaying)
+            EntranceObstacleNetwork.RequestSnapshot();
         Built?.Invoke(this);
         return true;
     }
@@ -260,12 +356,36 @@ public sealed class MapManager : MonoBehaviour
         }
 
         var blocked = new bool[joints.Count];
+        jointBarricades.Clear();
+        for (int j = 0; j < joints.Count; j++)
+            jointBarricades.Add(null);
+        var random = new System.Random(Seed ^ 0x0B57AC1E);
+        bool warnedNoPrefabs = false;
         for (int j = 0; j < joints.Count; j++)
         {
             List<EntranceObstacle> obstacles = jointObstacles[j];
-            if (obstacles.Count == 0)
-                continue;
             bool endCap = layout[joints[j].BlockA].Role == MapBlockRole.EndCap || layout[joints[j].BlockB].Role == MapBlockRole.EndCap;
+            if (obstacles.Count == 0)
+            {
+                bool spawnJoint = layout[joints[j].BlockA].Role == MapBlockRole.Spawn || layout[joints[j].BlockB].Role == MapBlockRole.Spawn;
+                float chance = endCap ? endCapObstacleChance : loopObstacleChance;
+                if (spawnJoint || chance <= 0f || random.NextDouble() >= chance)
+                    continue;
+                if (!(endCap ? barricadeEndCaps : barricadeLoops && StaysConnected(layout, blocked, j)))
+                    continue;
+                EntranceObstacle placedObstacle = PlaceJointObstacle(layout, j, random);
+                jointBarricades[j] = placedObstacle;
+                if (placedObstacle == null)
+                {
+                    if (!warnedNoPrefabs)
+                        Debug.LogWarning("A joint rolled an obstacle but no Obstacle Prefabs are assigned on either block's generator or the MapManager's Fallback Obstacle Prefabs.", this);
+                    warnedNoPrefabs = true;
+                    continue;
+                }
+                blocked[j] = true;
+                joints[j] = new MapJoint(joints[j].BlockA, joints[j].EntranceA, joints[j].BlockB, joints[j].EntranceB, true);
+                continue;
+            }
             bool keep = endCap ? barricadeEndCaps : barricadeLoops && StaysConnected(layout, blocked, j);
             int keepIndex = -1;
             if (keep)
@@ -283,6 +403,7 @@ public sealed class MapManager : MonoBehaviour
                     }
                 }
                 blocked[j] = true;
+                jointBarricades[j] = obstacles[keepIndex];
             }
             for (int k = 0; k < obstacles.Count; k++)
             {
@@ -290,6 +411,134 @@ public sealed class MapManager : MonoBehaviour
                     RemoveObstacle(obstacles[k]);
             }
             joints[j] = new MapJoint(joints[j].BlockA, joints[j].EntranceA, joints[j].BlockB, joints[j].EntranceB, blocked[j]);
+        }
+    }
+
+    /// <summary>
+    /// Places a random obstacle inside one block of joint <paramref name="joint"/> (the end cap's, else either block), on the
+    /// block edge, centred on the entrance and facing inward, exactly like the street block generator does.
+    /// </summary>
+    private EntranceObstacle PlaceJointObstacle(IReadOnlyList<MapBlockPlacement> layout, int joint, System.Random random)
+    {
+        MapJoint j = joints[joint];
+        bool aIsHost = layout[j.BlockA].Role == MapBlockRole.EndCap ||
+                       (layout[j.BlockB].Role != MapBlockRole.EndCap && random.Next(2) == 0);
+        int hostIndex = aIsHost ? j.BlockA : j.BlockB;
+        int otherIndex = aIsHost ? j.BlockB : j.BlockA;
+        StreetBlock host = placedBlocks[hostIndex];
+        StreetBlockEntrance entrance = host.Entrances[aIsHost ? j.EntranceA : j.EntranceB];
+
+        List<GameObject> pool = ObstaclePool(host);
+        if (pool.Count == 0)
+            pool = ObstaclePool(placedBlocks[otherIndex]);
+        if (pool.Count == 0)
+            pool = ValidObstacles(fallbackObstaclePrefabs);
+        if (pool.Count == 0)
+            return null;
+        GameObject prefab = pool[random.Next(pool.Count)];
+
+        Transform parent = host.transform.Find("Generated/Obstacles");
+        if (parent == null)
+        {
+            parent = new GameObject("Obstacles").transform;
+            Transform generated = host.transform.Find("Generated");
+            parent.SetParent(generated != null ? generated : host.transform, false);
+        }
+        GameObject instance = Instantiate(prefab, parent);
+        instance.name = $"{prefab.name} ({entrance.Side} entrance)";
+        instance.SetActive(true);
+        instance.transform.localPosition = Vector3.zero;
+        instance.transform.localRotation = Quaternion.Euler(0f, entrance.Side.InwardYaw(), 0f);
+
+        StreetBlockGenerator generator = host.GetComponent<StreetBlockGenerator>();
+        if ((generator == null || generator.addMissingColliders) && instance.GetComponentInChildren<Collider>(true) == null &&
+            TryMeasure(instance, instance.transform, out Bounds own))
+        {
+            BoxCollider box = instance.AddComponent<BoxCollider>();
+            box.center = own.center;
+            box.size = own.size;
+        }
+
+        if (TryMeasure(instance, host.transform, out Bounds bounds))
+        {
+            // Outer face on the block edge, centred along the entrance, bottom on the floor.
+            Vector3 outward = entrance.Side.Outward();
+            float depth = Mathf.Abs(Vector3.Dot(bounds.size, outward));
+            Vector3 target = entrance.LocalCenter - outward * (depth * 0.5f);
+            Vector3 shift = new Vector3(target.x - bounds.center.x, entrance.LocalCenter.y - bounds.min.y, target.z - bounds.center.z);
+            instance.transform.position += host.transform.TransformVector(shift);
+        }
+        else
+        {
+            instance.transform.localPosition = parent.InverseTransformPoint(host.transform.TransformPoint(entrance.LocalCenter));
+        }
+
+        EntranceObstacle obstacle = instance.GetComponentInChildren<EntranceObstacle>(true);
+        entrance.AssignObstacle(obstacle);
+        return obstacle;
+    }
+
+    private static List<GameObject> ObstaclePool(StreetBlock block)
+    {
+        StreetBlockGenerator generator = block != null ? block.GetComponent<StreetBlockGenerator>() : null;
+        return ValidObstacles(generator != null ? generator.obstaclePrefabs : null);
+    }
+
+    private static List<GameObject> ValidObstacles(IEnumerable<GameObject> prefabs)
+    {
+        var result = new List<GameObject>();
+        if (prefabs == null)
+            return result;
+        foreach (GameObject prefab in prefabs)
+        {
+            if (prefab != null && prefab.GetComponentInChildren<EntranceObstacle>(true) != null)
+                result.Add(prefab);
+        }
+        return result;
+    }
+
+    /// <summary>Renderer and solid collider bounds of <paramref name="instance"/> in <paramref name="space"/>.</summary>
+    private static bool TryMeasure(GameObject instance, Transform space, out Bounds total)
+    {
+        bool any = false;
+        total = default;
+        foreach (Renderer renderer in instance.GetComponentsInChildren<Renderer>(true))
+        {
+            if (renderer is ParticleSystemRenderer || renderer is TrailRenderer || renderer is LineRenderer)
+                continue;
+            Encapsulate(ref total, ref any, renderer.localBounds, renderer.transform, space);
+        }
+        Physics.SyncTransforms();
+        foreach (Collider collider in instance.GetComponentsInChildren<Collider>(true))
+        {
+            if (collider.isTrigger)
+                continue;
+            if (collider is BoxCollider box)
+                Encapsulate(ref total, ref any, new Bounds(box.center, box.size), box.transform, space);
+            else if (collider.enabled && collider.gameObject.activeInHierarchy)
+                Encapsulate(ref total, ref any, collider.bounds, null, space);
+        }
+        return any;
+    }
+
+    private static void Encapsulate(ref Bounds total, ref bool any, Bounds local, Transform from, Transform space)
+    {
+        for (int corner = 0; corner < 8; corner++)
+        {
+            Vector3 sign = new Vector3((corner & 1) == 0 ? -1f : 1f, (corner & 2) == 0 ? -1f : 1f, (corner & 4) == 0 ? -1f : 1f);
+            Vector3 point = local.center + Vector3.Scale(local.extents, sign);
+            if (from != null)
+                point = from.TransformPoint(point);
+            point = space.InverseTransformPoint(point);
+            if (!any)
+            {
+                total = new Bounds(point, Vector3.zero);
+                any = true;
+            }
+            else
+            {
+                total.Encapsulate(point);
+            }
         }
     }
 
@@ -404,6 +653,453 @@ public sealed class MapManager : MonoBehaviour
         return false;
     }
 
+    /// <summary>
+    /// Fills every empty grid cell in the street's bounding box (plus the margin) with filler blocks, largest first.
+    /// Uses its own random stream so the street layout for a seed never changes.
+    /// </summary>
+    private void PlaceFillers(IReadOnlyList<MapBlockPlacement> layout)
+    {
+        if (fillerBlocks.Count == 0 || layout.Count == 0)
+            return;
+
+        Vector2 cell = layout[0].Prefab.CellSize;
+        var valid = new List<StreetBlock>();
+        foreach (StreetBlock filler in fillerBlocks)
+        {
+            if (filler == null)
+                continue;
+            Vector2 cells = new Vector2(filler.Size.x / cell.x, filler.Size.y / cell.y);
+            if (filler.Entrances.Count != 0)
+                Debug.LogError($"Filler block '{filler.name}' has entrances; fillers must have none. It is skipped.", this);
+            else if (Vector2.Distance(filler.CellSize, cell) > 0.01f || cells.x < 0.99f || cells.y < 0.99f ||
+                     Mathf.Abs(cells.x - Mathf.Round(cells.x)) > 0.01f || Mathf.Abs(cells.y - Mathf.Round(cells.y)) > 0.01f)
+                Debug.LogError($"Filler block '{filler.name}' must use the street's {cell.x}x{cell.y} m cell size. It is skipped.", this);
+            else
+                valid.Add(filler);
+        }
+        if (valid.Count == 0)
+            return;
+
+        Vector2 origin = Footprint(layout[0]).min;
+        var occupied = new HashSet<Vector2Int>();
+        Vector2Int min = new Vector2Int(int.MaxValue, int.MaxValue);
+        Vector2Int max = new Vector2Int(int.MinValue, int.MinValue);
+        foreach (MapBlockPlacement placement in layout)
+        {
+            Rect footprint = Footprint(placement);
+            Vector2Int start = ToCell(footprint.min - origin, cell);
+            Vector2Int size = ToCell(footprint.size, cell);
+            for (int x = 0; x < size.x; x++)
+            {
+                for (int y = 0; y < size.y; y++)
+                    occupied.Add(new Vector2Int(start.x + x, start.y + y));
+            }
+            min = Vector2Int.Min(min, start);
+            max = Vector2Int.Max(max, start + size - Vector2Int.one);
+        }
+        min -= Vector2Int.one * fillerMarginCells;
+        max += Vector2Int.one * fillerMarginCells;
+
+        var random = new System.Random(Seed ^ 0x5F1A7E3);
+        var fillersRoot = new GameObject("Fillers").transform;
+        fillersRoot.SetParent(generatedRoot, false);
+        float height = layout[0].Position.y;
+        var holes = new List<Vector2Int>();
+        var candidates = new List<(StreetBlock prefab, int turns, Vector2Int size, int order)>();
+        for (int y = min.y; y <= max.y; y++)
+        {
+            for (int x = min.x; x <= max.x; x++)
+            {
+                var corner = new Vector2Int(x, y);
+                if (occupied.Contains(corner))
+                    continue;
+
+                candidates.Clear();
+                foreach (StreetBlock filler in valid)
+                {
+                    int turns = random.Next(4);
+                    Vector2Int size = ToCell(filler.Size, cell);
+                    if (turns % 2 != 0)
+                        size = new Vector2Int(size.y, size.x);
+                    candidates.Add((filler, turns, size, random.Next()));
+                }
+                // Largest filler first so one-cell fillers only plug the leftover holes; ties are random.
+                candidates.Sort((a, b) => a.size.x * a.size.y != b.size.x * b.size.y
+                    ? (b.size.x * b.size.y).CompareTo(a.size.x * a.size.y)
+                    : a.order.CompareTo(b.order));
+
+                bool placed = false;
+                foreach ((StreetBlock prefab, int turns, Vector2Int size, int _) in candidates)
+                {
+                    if (!FillerFits(corner, size, min, max, occupied))
+                        continue;
+                    for (int fx = 0; fx < size.x; fx++)
+                    {
+                        for (int fy = 0; fy < size.y; fy++)
+                            occupied.Add(new Vector2Int(corner.x + fx, corner.y + fy));
+                    }
+                    Vector2 center = origin + new Vector2((corner.x + size.x * 0.5f) * cell.x, (corner.y + size.y * 0.5f) * cell.y);
+                    GameObject block = Instantiate(prefab.gameObject, fillersRoot);
+                    block.name = $"Filler {placedFillers.Count:00} {prefab.name}";
+                    block.transform.localPosition = new Vector3(center.x, height, center.y);
+                    block.transform.localRotation = Quaternion.Euler(0f, 90f * turns, 0f);
+                    placedFillers.Add(block.GetComponent<StreetBlock>());
+                    placed = true;
+                    break;
+                }
+                if (!placed)
+                    holes.Add(corner);
+            }
+        }
+        if (holes.Count > 0)
+        {
+            StreetBlock smallest = valid.OrderBy(f => f.Size.x * f.Size.y).First();
+            if (plugGaps)
+                PlugGaps(holes, smallest, origin, cell, height, fillersRoot, random);
+            else
+                Debug.LogWarning($"{holes.Count} filler cell(s) stayed empty because no filler fits them. Enable Plug Gaps or add a one-cell ({cell.x}x{cell.y} m) filler block.", this);
+        }
+    }
+
+    /// <summary>
+    /// Covers cells no filler block fits with the smallest filler's floor tiles plus one gap prefab per cell
+    /// (centred, random quarter turn, skipped if larger than the cell).
+    /// </summary>
+    private void PlugGaps(List<Vector2Int> holes, StreetBlock source, Vector2 origin, Vector2 cell, float height,
+        Transform fillersRoot, System.Random random)
+    {
+        var root = new GameObject("Gap Plugs").transform;
+        root.SetParent(fillersRoot, false);
+
+        // The generator lays tile (x, z) with a constant offset inside its square, so the lowest tile is the template.
+        Transform template = null;
+        Vector3 templateOffset = default;
+        Quaternion templateRotation = Quaternion.identity;
+        Transform floor = source.FloorRoot;
+        Vector2 sourceHalf = source.Size * 0.5f;
+        if (floor != null)
+        {
+            foreach (Transform tile in floor)
+            {
+                if (tile.GetComponentInChildren<Renderer>(true) == null)
+                    continue;
+                Vector3 local = source.transform.InverseTransformPoint(tile.position);
+                if (template == null || local.x + local.z < templateOffset.x + templateOffset.z - 0.001f)
+                {
+                    template = tile;
+                    templateOffset = local;
+                    templateRotation = Quaternion.Inverse(source.transform.rotation) * tile.rotation;
+                }
+            }
+        }
+        if (template == null)
+            Debug.LogWarning($"Filler '{source.name}' has no floor tiles to plug {holes.Count} gap cell(s) with.", this);
+        templateOffset += new Vector3(sourceHalf.x, 0f, sourceHalf.y);
+
+        var pool = new List<GameObject>();
+        pool.AddRange(gapFillPrefabs.Where(p => p != null));
+        if (pool.Count == 0 && source.TryGetComponent(out StreetBlockGenerator generator))
+        {
+            foreach (GameObject[] list in new[] { generator.fillerBuildingPrefabs, generator.middleBuildingPrefabs, generator.buildingPrefabs })
+            {
+                if (list != null && list.Any(p => p != null))
+                {
+                    pool.AddRange(list.Where(p => p != null));
+                    break;
+                }
+            }
+        }
+
+        Vector2 tileSize = source.TileSize;
+        int tilesPerCell = source.TilesPerCell;
+        int skipped = 0;
+        foreach (Vector2Int hole in holes)
+        {
+            Vector2 cellMin = origin + new Vector2(hole.x * cell.x, hole.y * cell.y);
+            if (template != null)
+            {
+                for (int x = 0; x < tilesPerCell; x++)
+                {
+                    for (int z = 0; z < tilesPerCell; z++)
+                    {
+                        GameObject tile = Instantiate(template.gameObject, root);
+                        tile.name = $"Gap Floor ({hole.x},{hole.y})";
+                        tile.transform.localPosition = new Vector3(cellMin.x + x * tileSize.x + templateOffset.x,
+                            height + templateOffset.y, cellMin.y + z * tileSize.y + templateOffset.z);
+                        tile.transform.localRotation = templateRotation;
+                    }
+                }
+            }
+            if (pool.Count == 0)
+                continue;
+
+            Vector2 centre = cellMin + cell * 0.5f;
+            GameObject prefab = pool[random.Next(pool.Count)];
+            GameObject building = Instantiate(prefab, root);
+            building.name = $"Gap {prefab.name} ({hole.x},{hole.y})";
+            building.transform.localPosition = new Vector3(centre.x, height, centre.y);
+            building.transform.localRotation = Quaternion.Euler(0f, 90f * random.Next(4), 0f);
+            if (!TryGetHorizontalBounds(building, root, out Rect bounds) ||
+                bounds.width > cell.x + 0.01f || bounds.height > cell.y + 0.01f)
+            {
+                DestroyImmediate(building);
+                skipped++;
+                continue;
+            }
+            // Re-centre the measured footprint on the cell (prefab pivots are not always centred).
+            Vector2 shift = centre - bounds.center;
+            building.transform.localPosition += new Vector3(shift.x, 0f, shift.y);
+        }
+        if (skipped > 0 && skipped == holes.Count)
+            Debug.LogWarning($"No gap fill prefab fits one {cell.x}x{cell.y} m cell; {holes.Count} gap cell(s) only got floor tiles. Assign smaller Gap Fill Prefabs.", this);
+        PluggedCellCount += holes.Count;
+    }
+
+    private static bool TryGetHorizontalBounds(GameObject instance, Transform space, out Rect rect)
+    {
+        rect = default;
+        bool any = false;
+        float minX = 0f, maxX = 0f, minZ = 0f, maxZ = 0f;
+        void Encapsulate(Bounds world)
+        {
+            Vector3 c = world.center, e = world.extents;
+            for (int i = 0; i < 8; i++)
+            {
+                Vector3 corner = space.InverseTransformPoint(c + new Vector3((i & 1) == 0 ? -e.x : e.x,
+                    (i & 2) == 0 ? -e.y : e.y, (i & 4) == 0 ? -e.z : e.z));
+                if (!any)
+                {
+                    minX = maxX = corner.x;
+                    minZ = maxZ = corner.z;
+                    any = true;
+                }
+                minX = Mathf.Min(minX, corner.x);
+                maxX = Mathf.Max(maxX, corner.x);
+                minZ = Mathf.Min(minZ, corner.z);
+                maxZ = Mathf.Max(maxZ, corner.z);
+            }
+        }
+        foreach (Renderer renderer in instance.GetComponentsInChildren<Renderer>())
+            Encapsulate(renderer.bounds);
+        Physics.SyncTransforms();
+        foreach (Collider collider in instance.GetComponentsInChildren<Collider>())
+        {
+            if (!collider.isTrigger)
+                Encapsulate(collider.bounds);
+        }
+        if (any)
+            rect = Rect.MinMaxRect(minX, minZ, maxX, maxZ);
+        return any;
+    }
+
+    private static bool FillerFits(Vector2Int corner, Vector2Int size, Vector2Int min, Vector2Int max, HashSet<Vector2Int> occupied)
+    {
+        // Fillers may overhang past the outer margin (those cells are always empty), so large fillers still reach the edge.
+        for (int x = 0; x < size.x; x++)
+        {
+            for (int y = 0; y < size.y; y++)
+            {
+                if (occupied.Contains(new Vector2Int(corner.x + x, corner.y + y)))
+                    return false;
+            }
+        }
+        return true;
+    }
+
+    private static Vector2Int ToCell(Vector2 metres, Vector2 cell) =>
+        new Vector2Int(Mathf.RoundToInt(metres.x / cell.x), Mathf.RoundToInt(metres.y / cell.y));
+
+    private static Rect Footprint(MapBlockPlacement placement)
+    {
+        Vector2 size = placement.Prefab.Size;
+        if (placement.QuarterTurns % 2 != 0)
+            size = new Vector2(size.y, size.x);
+        return new Rect(new Vector2(placement.Position.x, placement.Position.z) - size * 0.5f, size);
+    }
+
+    /// <summary>
+    /// Gives each placed spawn block up to <see cref="spawnPointCount"/> spawn points where a player-sized capsule
+    /// touches no solid collider and the floor below is reachable from the block's entrance.
+    /// </summary>
+    private void GenerateSpawnPoints(IReadOnlyList<MapBlockPlacement> layout)
+    {
+        Physics.SyncTransforms();
+        for (int i = 0; i < layout.Count; i++)
+        {
+            StreetBlock block = placedBlocks[i];
+            if (layout[i].Role != MapBlockRole.Spawn || block == null)
+                continue;
+            PlayerSpawnPoints existing = block.GetComponentInChildren<PlayerSpawnPoints>(true);
+            if (existing != null && existing.transform.childCount > 0)
+                continue;
+            if (existing != null)
+                DestroyImmediate(existing.gameObject);
+
+            List<(Vector3 position, Quaternion rotation)> points = FindSpawnPoints(block);
+            if (points.Count == 0)
+            {
+                Debug.LogError($"No unobstructed spot for player spawn points was found in spawn block '{block.name}'.", block);
+                continue;
+            }
+            if (points.Count < spawnPointCount)
+                Debug.LogWarning($"Only {points.Count} of {spawnPointCount} spawn points fit in spawn block '{block.name}'.", block);
+
+            var root = new GameObject("PlayerSpawnPoints (Generated)");
+            root.SetActive(false);
+            root.transform.SetParent(block.transform, false);
+            for (int p = 0; p < points.Count; p++)
+            {
+                Transform point = new GameObject($"Spawn {p + 1}").transform;
+                point.SetParent(root.transform, false);
+                point.localPosition = points[p].position;
+                point.localRotation = points[p].rotation;
+            }
+            root.AddComponent<PlayerSpawnPoints>();
+            root.SetActive(true);
+        }
+    }
+
+    /// <summary>Spawn points in block space, nearest the block centre first.</summary>
+    private List<(Vector3 position, Quaternion rotation)> FindSpawnPoints(StreetBlock block)
+    {
+        const float step = 0.5f;
+        const float lift = 0.05f;
+        var result = new List<(Vector3, Quaternion)>();
+        Vector2 half = block.Size * 0.5f - Vector2.one * spawnClearanceRadius;
+        if (half.x < 0f || half.y < 0f)
+            return result;
+
+        int countX = Mathf.FloorToInt(half.x * 2f / step) + 1;
+        int countZ = Mathf.FloorToInt(half.y * 2f / step) + 1;
+        var free = new bool[countX, countZ];
+        var heights = new float[countX, countZ];
+        Transform blockFloor = block.FloorRoot;
+        bool hasFloorColliders = blockFloor != null && blockFloor.GetComponentInChildren<Collider>() != null;
+        var floors = new List<Transform>();
+        foreach (StreetBlock placed in placedBlocks)
+        {
+            if (placed != null && placed.FloorRoot != null)
+                floors.Add(placed.FloorRoot);
+        }
+        var overlaps = new Collider[32];
+
+        Vector3 LocalAt(int x, int z) => new Vector3(-half.x + x * step, 0f, -half.y + z * step);
+
+        for (int x = 0; x < countX; x++)
+        {
+            for (int z = 0; z < countZ; z++)
+            {
+                Vector3 world = block.transform.TransformPoint(LocalAt(x, z));
+                float groundY = world.y;
+                if (hasFloorColliders)
+                {
+                    RaycastHit[] hits = Physics.RaycastAll(world + Vector3.up * 1.5f, Vector3.down, 3f, ~0, QueryTriggerInteraction.Ignore);
+                    bool grounded = false;
+                    foreach (RaycastHit hit in hits)
+                    {
+                        if (hit.collider.transform.IsChildOf(blockFloor) && (!grounded || hit.point.y > groundY))
+                        {
+                            groundY = hit.point.y;
+                            grounded = true;
+                        }
+                    }
+                    if (!grounded)
+                        continue;
+                }
+
+                Vector3 bottom = new Vector3(world.x, groundY + spawnClearanceRadius + lift, world.z);
+                Vector3 top = new Vector3(world.x, groundY + Mathf.Max(spawnClearanceHeight - spawnClearanceRadius, spawnClearanceRadius + lift), world.z);
+                int count = Physics.OverlapCapsuleNonAlloc(bottom, top, spawnClearanceRadius, overlaps, ~0, QueryTriggerInteraction.Ignore);
+                bool blocked = false;
+                for (int c = 0; c < count && !blocked; c++)
+                {
+                    Transform hit = overlaps[c].transform;
+                    if (!hit.IsChildOf(generatedRoot))
+                        continue;
+                    bool isFloor = false;
+                    foreach (Transform floor in floors)
+                        isFloor |= hit.IsChildOf(floor);
+                    blocked = !isFloor;
+                }
+                if (blocked)
+                    continue;
+                free[x, z] = true;
+                heights[x, z] = block.transform.InverseTransformPoint(new Vector3(world.x, groundY, world.z)).y;
+            }
+        }
+
+        // Keep only floor reachable from the entrance (or the centre if the block has none), so no point is walled in.
+        Vector3 entrance = block.Entrances.Count > 0 ? block.Entrances[0].LocalCenter : Vector3.zero;
+        var reachable = new bool[countX, countZ];
+        var queue = new Queue<Vector2Int>();
+        float bestStart = float.MaxValue;
+        Vector2Int nearest = new Vector2Int(-1, -1);
+        for (int x = 0; x < countX; x++)
+        {
+            for (int z = 0; z < countZ; z++)
+            {
+                if (!free[x, z])
+                    continue;
+                float distance = Vector3.Distance(LocalAt(x, z), new Vector3(entrance.x, 0f, entrance.z));
+                if (distance <= 1.5f)
+                {
+                    reachable[x, z] = true;
+                    queue.Enqueue(new Vector2Int(x, z));
+                }
+                if (distance < bestStart)
+                {
+                    bestStart = distance;
+                    nearest = new Vector2Int(x, z);
+                }
+            }
+        }
+        if (queue.Count == 0 && nearest.x >= 0)
+        {
+            reachable[nearest.x, nearest.y] = true;
+            queue.Enqueue(nearest);
+        }
+        var directions = new[] { Vector2Int.right, Vector2Int.left, Vector2Int.up, Vector2Int.down };
+        while (queue.Count > 0)
+        {
+            Vector2Int current = queue.Dequeue();
+            foreach (Vector2Int direction in directions)
+            {
+                Vector2Int next = current + direction;
+                if (next.x < 0 || next.y < 0 || next.x >= countX || next.y >= countZ || !free[next.x, next.y] || reachable[next.x, next.y])
+                    continue;
+                reachable[next.x, next.y] = true;
+                queue.Enqueue(next);
+            }
+        }
+
+        var cells = new List<Vector2Int>();
+        for (int x = 0; x < countX; x++)
+        {
+            for (int z = 0; z < countZ; z++)
+            {
+                if (reachable[x, z])
+                    cells.Add(new Vector2Int(x, z));
+            }
+        }
+        cells.Sort((a, b) => LocalAt(a.x, a.y).sqrMagnitude.CompareTo(LocalAt(b.x, b.y).sqrMagnitude));
+
+        foreach (Vector2Int cell in cells)
+        {
+            Vector3 local = LocalAt(cell.x, cell.y);
+            bool spaced = true;
+            foreach ((Vector3 position, Quaternion _) in result)
+                spaced &= new Vector2(position.x - local.x, position.z - local.z).magnitude >= spawnPointSpacing - 0.001f;
+            if (!spaced)
+                continue;
+            Vector3 facing = new Vector3(entrance.x - local.x, 0f, entrance.z - local.z);
+            Quaternion rotation = facing.sqrMagnitude > 0.01f ? Quaternion.LookRotation(facing) : Quaternion.identity;
+            result.Add((new Vector3(local.x, heights[cell.x, cell.y] + lift, local.z), rotation));
+            if (result.Count >= spawnPointCount)
+                break;
+        }
+        return result;
+    }
+
     private void FindNeighbours(IReadOnlyList<MapBlockPlacement> layout)
     {
         var footprints = new Rect[layout.Count];
@@ -509,11 +1205,21 @@ public sealed class MapManager : MonoBehaviour
 
     private void AddCarvingObstacles(StreetBlock block, Transform floor)
     {
-        Transform decorations = block.DecorationsRoot;
+        AddCarvingObstacles(block.transform, floor, block.DecorationsRoot);
+    }
+
+    internal void AddClearedObstacleCarvers(Transform root)
+    {
+        if (carveObstacles)
+            AddCarvingObstacles(root, null, null);
+    }
+
+    private void AddCarvingObstacles(Transform root, Transform floor, Transform decorations)
+    {
         var customCarved = new HashSet<NavMeshCarveOverride>();
-        foreach (Collider solid in block.GetComponentsInChildren<Collider>(true))
+        foreach (Collider solid in root.GetComponentsInChildren<Collider>(true))
         {
-            if (solid.isTrigger || solid.transform.IsChildOf(floor) || solid.GetComponent<NavMeshObstacle>() != null)
+            if (solid.isTrigger || (floor != null && solid.transform.IsChildOf(floor)) || solid.GetComponent<NavMeshObstacle>() != null)
                 continue;
 
             NavMeshCarveOverride custom = solid.GetComponentInParent<NavMeshCarveOverride>(true);
@@ -606,6 +1312,9 @@ public sealed class MapManager : MonoBehaviour
 
         generatedRoot = null;
         placedBlocks.Clear();
+        placedFillers.Clear();
+        PluggedCellCount = 0;
+        jointBarricades.Clear();
         neighbours.Clear();
         joints.Clear();
         if (navMeshInstance.valid)

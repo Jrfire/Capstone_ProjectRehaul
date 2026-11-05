@@ -15,7 +15,8 @@ public sealed class EnemySpawnEntry
 
 /// <summary>
 /// Server-only: after the scene's <see cref="MapManager"/> builds the street and its NavMesh, spawns enemies in random
-/// blocks that are neither a player spawn block nor next to one, and makes that block each enemy's home.
+/// blocks that are neither a player spawn block nor next to one, and makes that block each enemy's home. Enemies that
+/// roam the whole map (<see cref="EnemyBrain.RoamsWholeMap"/>, e.g. the Manananggal) start there and move themselves.
 /// </summary>
 public sealed class EnemySpawner : MonoBehaviour
 {
@@ -72,7 +73,10 @@ public sealed class EnemySpawner : MonoBehaviour
             SpawnAll();
     }
 
-    /// <summary>Blocks enemies may call home: not a spawn block and not adjacent to one.</summary>
+    /// <summary>
+    /// Blocks enemies may call home: not a spawn block, not adjacent to one, and reachable from the spawn block without
+    /// passing an uncleared barricade (a gated end cap would trap the enemy).
+    /// </summary>
     public static List<int> FindCandidateBlocks(MapManager map, out bool relaxed)
     {
         var spawnBlocks = new List<int>();
@@ -81,11 +85,13 @@ public sealed class EnemySpawner : MonoBehaviour
             if (map.GetRole(i) == MapBlockRole.Spawn)
                 spawnBlocks.Add(i);
         }
+        bool[] open = spawnBlocks.Count > 0 ? map.FindOpenlyReachableFromSpawn() : null;
+        bool Reachable(int block) => open == null || open[block];
 
         var candidates = new List<int>();
         for (int i = 0; i < map.BlockCount; i++)
         {
-            if (spawnBlocks.Contains(i))
+            if (spawnBlocks.Contains(i) || !Reachable(i))
                 continue;
             bool nearSpawn = false;
             foreach (int spawn in spawnBlocks)
@@ -99,7 +105,7 @@ public sealed class EnemySpawner : MonoBehaviour
         {
             for (int i = 0; i < map.BlockCount; i++)
             {
-                if (!spawnBlocks.Contains(i))
+                if (!spawnBlocks.Contains(i) && Reachable(i))
                     candidates.Add(i);
             }
         }
@@ -113,7 +119,7 @@ public sealed class EnemySpawner : MonoBehaviour
         List<int> candidates = FindCandidateBlocks(map, out bool relaxed);
         if (candidates.Count == 0)
         {
-            Debug.LogError("No street block can host enemies (the map only has spawn blocks).", this);
+            Debug.LogError("No street block can host enemies (only spawn blocks or blocks sealed behind barricades).", this);
             return;
         }
         if (relaxed)
@@ -141,7 +147,9 @@ public sealed class EnemySpawner : MonoBehaviour
     {
         EnemyHomeArea area = EnemyHomeArea.FromBlock(map.GetBlock(blockIndex));
         Vector3 position = area.Center;
-        for (int i = 0; i < 40; i++)
+        bool roams = prefab.TryGetComponent(out EnemyBrain prefabBrain) && prefabBrain.RoamsWholeMap;
+        // Roaming enemies (flyers) place themselves; only NavMesh walkers need a NavMesh point.
+        for (int i = 0; !roams && i < 40; i++)
         {
             if (UnityEngine.AI.NavMesh.SamplePosition(area.RandomPoint(), out UnityEngine.AI.NavMeshHit hit, 2f, UnityEngine.AI.NavMesh.AllAreas) &&
                 area.Contains(hit.position))

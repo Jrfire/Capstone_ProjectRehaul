@@ -1,0 +1,24 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d6a4f5e7b8c94da2bf2a3b4c5d6e7f84, type: 3}
+  m_Name: LoadingTips
+  m_EditorClassIdentifier: Capstone.Player::LoadingTips
+  tips:
+  - 'TIP: Tikbalangs are territorial. Avoid being seen in their territory.'
+  - 'TIP: When you hear the flapping of wings, hide. The Manananggal is hunting for
+    its next victim.'
+  - 'TIP: Most monsters can hear you and see your flashlight. Avoid running, throwing
+    objects or turning on your flashlight when one is near.'
+  - Sacrificing agimats is what keeps the Bakunawa from eating the moon and plunging
+    the endless night into total darkness.
+  - The sun no longer rises in the sky. Your duty is to keep the moon from suffering
+    the same fate.

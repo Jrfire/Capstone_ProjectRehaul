@@ -14,9 +14,9 @@ public sealed class MapTravelTests
     private static StreetBlock Block(string name) =>
         AssetDatabase.LoadAssetAtPath<GameObject>($"{BlockFolder}/{name}.prefab").GetComponent<StreetBlock>();
 
-    private static StreetBlock[] Connectors => new[] { Block("StreetBlock_Sample"), Block("StreetBlock_Crossroad") };
-    private static StreetBlock[] EndCaps => new[] { Block("StreetBlock_EndCap") };
-    private static StreetBlock[] Spawns => new[] { Block("StreetBlock_Spawn") };
+    private static StreetBlock[] Connectors => new[] { Block("StreetBlock_2Entrances_1"), Block("StreetBlock_3Entrances_1"), Block("IntersectStreetBlock_1") };
+    private static StreetBlock[] EndCaps => new[] { Block("EndBlockStreetBlock_1") };
+    private static StreetBlock[] Spawns => new[] { Block("SpawnBlockStreetBlock_1") };
 
     private struct WorldEntrance
     {
@@ -83,9 +83,11 @@ public sealed class MapTravelTests
     [Test]
     public void ProjectBlocksHaveExpectedEntranceCounts()
     {
-        Assert.That(Block("StreetBlock_Crossroad").Entrances.Count, Is.EqualTo(4));
-        Assert.That(Block("StreetBlock_EndCap").Entrances.Count, Is.EqualTo(1));
-        Assert.That(Block("StreetBlock_Spawn").Entrances.Count, Is.EqualTo(1));
+        Assert.That(Block("IntersectStreetBlock_1").Entrances.Count, Is.EqualTo(4));
+        Assert.That(Block("StreetBlock_2Entrances_1").Entrances.Count, Is.EqualTo(2));
+        Assert.That(Block("StreetBlock_3Entrances_1").Entrances.Count, Is.EqualTo(3));
+        Assert.That(Block("EndBlockStreetBlock_1").Entrances.Count, Is.EqualTo(1));
+        Assert.That(Block("SpawnBlockStreetBlock_1").Entrances.Count, Is.EqualTo(1));
     }
 
     [Test]
@@ -201,17 +203,342 @@ public sealed class MapTravelTests
     }
 
     [Test]
-    public void SpawnBlockHasSpawnPointsAndJeepneyButNoTravelMap()
+    public void SpawnBlocksGetUnobstructedSpawnPointsButNoTravelMap([NUnit.Framework.Range(1, 3)] int spawnIndex)
     {
-        StreetBlock spawn = Block("StreetBlock_Spawn");
-        PlayerSpawnPoints points = spawn.GetComponentInChildren<PlayerSpawnPoints>(true);
-        Assert.That(points, Is.Not.Null);
-        Assert.That(points.transform.childCount, Is.EqualTo(6));
-        Assert.That(spawn.GetComponentInChildren<MapTerminal>(true), Is.Null, "Only the base has a travel map.");
-        Assert.That(spawn.Entrances.All(entrance => entrance.Obstacle == null), Is.True);
-        TravelInteractable travel = spawn.GetComponentInChildren<TravelInteractable>(true);
-        Assert.That(travel, Is.Not.Null);
-        Assert.That(travel.GetComponent<Collider>().isTrigger, Is.False);
+        StreetBlock prefab = Block($"SpawnBlockStreetBlock_{spawnIndex}");
+        Assert.That(prefab.GetComponentInChildren<MapTerminal>(true), Is.Null, "Only the base has a travel map.");
+        Assert.That(prefab.Entrances.All(entrance => entrance.Obstacle == null), Is.True);
+
+        WithManager(new[] { prefab }, null, manager =>
+        {
+            Assert.That(manager.Build(spawnIndex * 31), Is.True);
+            int index = Enumerable.Range(0, manager.Layout.Count).Single(i => manager.Layout[i].Role == MapBlockRole.Spawn);
+            StreetBlock spawn = manager.GetBlock(index);
+            PlayerSpawnPoints[] all = manager.GeneratedRoot.GetComponentsInChildren<PlayerSpawnPoints>(true);
+            Assert.That(all.Length, Is.EqualTo(1));
+            Assert.That(all[0].transform.IsChildOf(spawn.transform), Is.True);
+            Transform[] points = all[0].transform.Cast<Transform>().ToArray();
+            Assert.That(points.Length, Is.EqualTo(manager.SpawnPointCount), "Six spawn points (host + five guests) fit.");
+
+            Physics.SyncTransforms();
+            var floors = Enumerable.Range(0, manager.BlockCount).Select(i => manager.GetBlock(i).FloorRoot).Where(f => f != null).ToArray();
+            float radius = manager.SpawnClearanceRadius;
+            for (int a = 0; a < points.Length; a++)
+            {
+                Vector3 p = points[a].position;
+                Assert.That(spawn.ContainsXZ(p), Is.True, $"{points[a].name} is outside the spawn block.");
+                Collider[] hits = Physics.OverlapCapsule(p + Vector3.up * radius, p + Vector3.up * (manager.SpawnClearanceHeight - radius),
+                    radius, ~0, QueryTriggerInteraction.Ignore);
+                Collider blocker = hits.FirstOrDefault(hit => hit.transform.IsChildOf(manager.GeneratedRoot) && !floors.Any(f => hit.transform.IsChildOf(f)));
+                Assert.That(blocker, Is.Null, $"{points[a].name} is obstructed by {(blocker != null ? blocker.name : "")}.");
+                Assert.That(Physics.Raycast(p + Vector3.up, Vector3.down, 1.5f, ~0, QueryTriggerInteraction.Ignore), Is.True, $"{points[a].name} has no floor.");
+                for (int b = a + 1; b < points.Length; b++)
+                    Assert.That(Vector3.Distance(p, points[b].position), Is.GreaterThanOrEqualTo(manager.SpawnPointSpacing - 0.01f));
+            }
+        });
+    }
+
+    [Test]
+    public void FillerBlocksSurroundTheStreetWithoutChangingIt([NUnit.Framework.Range(1, 4)] int seed)
+    {
+        var created = new List<GameObject>();
+        StreetBlock Filler(int cells)
+        {
+            var filler = new GameObject($"Test Filler {cells}x{cells}");
+            filler.transform.position = new Vector3(0f, -500f, 0f);
+            created.Add(filler);
+            var block = filler.AddComponent<StreetBlock>();
+            block.ApplyLayout(new Vector2Int(cells * 2, cells * 2), new Vector2(3f, 3f), 2, 0, new StreetBlockEntrance[0]);
+            GameObject body = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            body.transform.SetParent(filler.transform, false);
+            body.transform.localScale = new Vector3(cells * 6f - 1f, 4f, cells * 6f - 1f);
+            body.transform.localPosition = Vector3.up * 2f;
+            return block;
+        }
+
+        try
+        {
+            StreetBlock[] fillers = { Filler(1), Filler(2) };
+            List<MapBlockPlacement> plain = null;
+            WithManager(Spawns, null, manager =>
+            {
+                Assert.That(manager.Build(seed), Is.True);
+                Assert.That(manager.FillerCount, Is.Zero, "No filler pool, no fillers.");
+                plain = manager.Layout.ToList();
+            });
+
+            WithManager(Spawns, fillers, manager =>
+            {
+                Assert.That(manager.Build(seed), Is.True);
+                Assert.That(manager.Layout.Select(p => (p.Prefab, p.Position, p.QuarterTurns)),
+                    Is.EqualTo(plain.Select(p => (p.Prefab, p.Position, p.QuarterTurns))), "Fillers never change the street layout.");
+                Assert.That(manager.BlockCount, Is.EqualTo(manager.Layout.Count), "Fillers are not street blocks.");
+                Assert.That(manager.FillerCount, Is.GreaterThan(0));
+
+                var rects = manager.Layout.Select(Footprint).ToList();
+                Rect street = rects.Aggregate((a, b) => Rect.MinMaxRect(Mathf.Min(a.xMin, b.xMin), Mathf.Min(a.yMin, b.yMin),
+                    Mathf.Max(a.xMax, b.xMax), Mathf.Max(a.yMax, b.yMax)));
+                for (int i = 0; i < manager.FillerCount; i++)
+                {
+                    StreetBlock filler = manager.GetFiller(i);
+                    Assert.That(filler.Entrances.Count, Is.Zero);
+                    Vector2 size = filler.Size;
+                    if (Mathf.RoundToInt(filler.transform.eulerAngles.y / 90f) % 2 != 0)
+                        size = new Vector2(size.y, size.x);
+                    Vector3 local = manager.GeneratedRoot.InverseTransformPoint(filler.transform.position);
+                    rects.Add(new Rect(new Vector2(local.x, local.z) - size / 2f, size));
+                }
+                for (int a = 0; a < rects.Count; a++)
+                {
+                    for (int b = a + 1; b < rects.Count; b++)
+                    {
+                        float overlapX = Mathf.Min(rects[a].xMax, rects[b].xMax) - Mathf.Max(rects[a].xMin, rects[b].xMin);
+                        float overlapY = Mathf.Min(rects[a].yMax, rects[b].yMax) - Mathf.Max(rects[a].yMin, rects[b].yMin);
+                        Assert.That(overlapX <= 0.01f || overlapY <= 0.01f, $"Blocks/fillers {a} and {b} overlap.");
+                    }
+                }
+
+                // With a one-cell filler every cell of the bounding box plus the 2-cell margin is filled (fillers may overhang it).
+                AssertCellsCovered(manager, rects, street, 12f);
+                Assert.That(manager.PluggedCellCount, Is.Zero, "A one-cell filler leaves nothing to plug.");
+                Assert.That(manager.GetFiller(0).transform.parent.name, Is.EqualTo("Fillers"));
+            });
+        }
+        finally
+        {
+            foreach (GameObject obj in created)
+                Object.DestroyImmediate(obj);
+        }
+    }
+
+    [Test]
+    public void GapsNoFillerFitsArePluggedWithFloorAndASmallBuilding([NUnit.Framework.Range(1, 4)] int seed)
+    {
+        var created = new List<GameObject>();
+        try
+        {
+            // Only a 3x3-cell filler (with real floor tiles), so 1-2 cell gaps between street blocks need plugs.
+            var filler = new GameObject("Test Filler 3x3");
+            filler.transform.position = new Vector3(0f, -500f, 0f);
+            created.Add(filler);
+            var block = filler.AddComponent<StreetBlock>();
+            block.ApplyLayout(new Vector2Int(6, 6), new Vector2(3f, 3f), 2, 0, new StreetBlockEntrance[0]);
+            var floor = new GameObject("Floor").transform;
+            var generated = new GameObject("Generated").transform;
+            generated.SetParent(filler.transform, false);
+            floor.SetParent(generated, false);
+            for (int x = 0; x < 6; x++)
+            {
+                for (int z = 0; z < 6; z++)
+                {
+                    GameObject tile = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                    tile.name = $"Tile ({x},{z})";
+                    tile.transform.SetParent(floor, false);
+                    tile.transform.localScale = new Vector3(3f, 0.2f, 3f);
+                    tile.transform.localPosition = new Vector3(-9f + 1.5f + x * 3f, -0.1f, -9f + 1.5f + z * 3f);
+                }
+            }
+            GameObject small = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            small.name = "Small Gap House";
+            small.transform.position = new Vector3(0f, -600f, 0f);
+            small.transform.localScale = new Vector3(4f, 3f, 5f);
+            created.Add(small);
+            GameObject huge = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            huge.name = "Huge House";
+            huge.transform.position = new Vector3(0f, -700f, 0f);
+            huge.transform.localScale = new Vector3(9f, 3f, 9f);
+            created.Add(huge);
+
+            WithManager(Spawns, new[] { block }, manager =>
+            {
+                var so = new SerializedObject(manager);
+                SerializedProperty gapPrefabs = so.FindProperty("gapFillPrefabs");
+                gapPrefabs.arraySize = 2;
+                gapPrefabs.GetArrayElementAtIndex(0).objectReferenceValue = small;
+                gapPrefabs.GetArrayElementAtIndex(1).objectReferenceValue = huge;
+                so.ApplyModifiedPropertiesWithoutUndo();
+
+                Assert.That(manager.Build(seed), Is.True);
+                Assert.That(manager.PluggedCellCount, Is.GreaterThan(0), "Gaps smaller than the only filler are plugged.");
+
+                var rects = manager.Layout.Select(Footprint).ToList();
+                Rect street = rects.Aggregate((a, b) => Rect.MinMaxRect(Mathf.Min(a.xMin, b.xMin), Mathf.Min(a.yMin, b.yMin),
+                    Mathf.Max(a.xMax, b.xMax), Mathf.Max(a.yMax, b.yMax)));
+                for (int i = 0; i < manager.FillerCount; i++)
+                {
+                    Vector3 local = manager.GeneratedRoot.InverseTransformPoint(manager.GetFiller(i).transform.position);
+                    rects.Add(new Rect(new Vector2(local.x, local.z) - new Vector2(9f, 9f), new Vector2(18f, 18f)));
+                }
+                Transform plugs = manager.GeneratedRoot.Find("Fillers/Gap Plugs");
+                Assert.That(plugs, Is.Not.Null);
+                var floors = plugs.Cast<Transform>().Where(t => t.name.StartsWith("Gap Floor")).ToList();
+                Assert.That(floors.Count, Is.EqualTo(manager.PluggedCellCount * 4), "Each plugged cell gets 2x2 floor tiles.");
+                foreach (Transform tile in floors)
+                {
+                    Vector3 local = manager.GeneratedRoot.InverseTransformPoint(tile.position);
+                    Assert.That(local.y, Is.EqualTo(-0.1f).Within(0.01f), "Plug tiles sit at the street floor height.");
+                    rects.Add(new Rect(local.x - 1.5f, local.z - 1.5f, 3f, 3f));
+                }
+                AssertCellsCovered(manager, rects, street, 12f);
+
+                var buildings = plugs.Cast<Transform>().Where(t => t.name.StartsWith("Gap ") && !t.name.StartsWith("Gap Floor")).ToList();
+                Assert.That(buildings.Count, Is.GreaterThan(0));
+                foreach (Transform building in buildings)
+                {
+                    Assert.That(building.name, Does.StartWith("Gap Small Gap House"), "Prefabs larger than a cell are skipped.");
+                    Vector3 local = manager.GeneratedRoot.InverseTransformPoint(building.position);
+                    Vector2 cellMin = new Vector2(Mathf.Floor((local.x - street.xMin) / 6f) * 6f + street.xMin,
+                        Mathf.Floor((local.z - street.yMin) / 6f) * 6f + street.yMin);
+                    Vector2 offset = new Vector2(local.x, local.z) - cellMin;
+                    Assert.That(offset.x, Is.EqualTo(3f).Within(0.01f), "Gap buildings are centred in their cell.");
+                    Assert.That(offset.y, Is.EqualTo(3f).Within(0.01f));
+                    for (int i = 0; i < manager.Layout.Count; i++)
+                    {
+                        Rect footprint = Footprint(manager.Layout[i]);
+                        Assert.That(footprint.Contains(new Vector2(local.x, local.z)), Is.False, "Plugs never sit inside street blocks.");
+                    }
+                }
+            });
+        }
+        finally
+        {
+            foreach (GameObject obj in created)
+                Object.DestroyImmediate(obj);
+        }
+    }
+
+    private static void AssertCellsCovered(MapManager manager, List<Rect> rects, Rect street, float margin)
+    {
+        for (float x = street.xMin - margin + 3f; x < street.xMax + margin; x += 6f)
+        {
+            for (float z = street.yMin - margin + 3f; z < street.yMax + margin; z += 6f)
+            {
+                var centre = new Vector2(x, z);
+                Assert.That(rects.Any(r => r.Contains(centre)), Is.True, $"Cell at {centre} is empty (void under the map).");
+            }
+        }
+    }
+
+    private static void WithManager(StreetBlock[] spawns, StreetBlock[] fillers, System.Action<MapManager> check)
+    {
+        var root = new GameObject("MapManager Spawn Test");
+        try
+        {
+            var manager = root.AddComponent<MapManager>();
+            var so = new SerializedObject(manager);
+            void Fill(string property, StreetBlock[] blocks)
+            {
+                SerializedProperty list = so.FindProperty(property);
+                list.arraySize = blocks.Length;
+                for (int i = 0; i < blocks.Length; i++)
+                    list.GetArrayElementAtIndex(i).objectReferenceValue = blocks[i];
+            }
+            Fill("connectorBlocks", Connectors);
+            Fill("endCapBlocks", EndCaps);
+            Fill("spawnBlocks", spawns);
+            Fill("fillerBlocks", fillers ?? new StreetBlock[0]);
+            so.FindProperty("connectorBlockCount").intValue = 4;
+            so.ApplyModifiedPropertiesWithoutUndo();
+            check(manager);
+        }
+        finally
+        {
+            Object.DestroyImmediate(root);
+        }
+    }
+
+    [Test]
+    public void MapPlacesObstaclesFromBlockGeneratorsWhenBlocksHaveNone()
+    {
+        int loopBarricades = 0;
+        for (int seed = 1; seed <= 8; seed++)
+        {
+            WithManager(Spawns, null, manager =>
+            {
+                Assert.That(manager.Build(seed), Is.True);
+                foreach (MapJoint joint in manager.Joints)
+                {
+                    bool endCap = manager.GetRole(joint.BlockA) == MapBlockRole.EndCap || manager.GetRole(joint.BlockB) == MapBlockRole.EndCap;
+                    bool spawn = manager.GetRole(joint.BlockA) == MapBlockRole.Spawn || manager.GetRole(joint.BlockB) == MapBlockRole.Spawn;
+                    StreetBlock a = manager.GetBlock(joint.BlockA), b = manager.GetBlock(joint.BlockB);
+                    EntranceObstacle obstacle = a.Entrances[joint.EntranceA].Obstacle ?? b.Entrances[joint.EntranceB].Obstacle;
+                    if (spawn)
+                    {
+                        Assert.That(joint.Barricaded || obstacle != null, Is.False, "The spawn entrance is never blocked.");
+                        continue;
+                    }
+                    if (endCap)
+                        Assert.That(joint.Barricaded, Is.True, $"Seed {seed}: end cap joints get a gate.");
+                    else if (joint.Barricaded)
+                        loopBarricades++;
+                    Assert.That(obstacle != null, Is.EqualTo(joint.Barricaded));
+                    if (obstacle == null)
+                        continue;
+
+                    StreetBlock host = obstacle.GetComponentInParent<StreetBlock>();
+                    int hostIndex = Enumerable.Range(0, manager.BlockCount).Single(i => manager.GetBlock(i) == host);
+                    if (endCap)
+                        Assert.That(manager.GetRole(hostIndex), Is.EqualTo(MapBlockRole.EndCap), "The gate sits in the end cap.");
+                    StreetBlockEntrance entrance = host == a ? a.Entrances[joint.EntranceA] : b.Entrances[joint.EntranceB];
+                    Transform placed = obstacle.transform;
+                    while (placed.parent.name != "Obstacles")
+                        placed = placed.parent;
+                    Bounds bounds = StreetBlockBuilder.MeasureIn(placed.gameObject, host.transform);
+                    Vector3 outward = entrance.Side.Outward();
+                    float outer = Mathf.Max(Vector3.Dot(bounds.min, outward), Vector3.Dot(bounds.max, outward));
+                    Assert.That(outer, Is.EqualTo(Vector3.Dot(entrance.LocalCenter, outward)).Within(0.05f), "The gate's outer face is on the block edge.");
+                    Vector3 along = Vector3.Cross(Vector3.up, outward);
+                    Assert.That(Vector3.Dot(bounds.center, along), Is.EqualTo(Vector3.Dot(entrance.LocalCenter, along)).Within(0.05f),
+                        "The gate is centred on the entrance.");
+                    Assert.That(bounds.min.y, Is.EqualTo(entrance.LocalCenter.y).Within(0.05f), "The gate stands on the floor.");
+                    Assert.That(obstacle.GetComponentsInChildren<Collider>().Any(c => !c.isTrigger), Is.True, "The gate is solid.");
+                }
+            });
+        }
+        Assert.That(loopBarricades, Is.GreaterThan(0), "Some connector joints get a gate where a route around exists.");
+    }
+
+    [Test]
+    public void EnemiesNeverCallABarricadedBlockHomeUntilItOpens()
+    {
+        int sealedSeen = 0;
+        for (int seed = 1; seed <= 8; seed++)
+        {
+            WithManager(Spawns, null, manager =>
+            {
+                Assert.That(manager.Build(seed), Is.True);
+                bool[] open = manager.FindOpenlyReachableFromSpawn();
+                List<int> candidates = EnemySpawner.FindCandidateBlocks(manager, out _);
+                Assert.That(candidates, Is.Not.Empty);
+                for (int i = 0; i < manager.BlockCount; i++)
+                {
+                    if (manager.GetRole(i) != MapBlockRole.EndCap)
+                        continue;
+                    // Map-placed gates seal every end cap by default.
+                    Assert.That(open[i], Is.False, $"Seed {seed}: gated end cap {i} is reachable.");
+                    Assert.That(candidates, Has.No.Member(i), $"Seed {seed}: an enemy could spawn sealed in end cap {i}.");
+                    sealedSeen++;
+                }
+                foreach (int candidate in candidates)
+                    Assert.That(open[candidate], Is.True);
+
+                // Clearing a gate opens its end cap for enemies again.
+                int joint = Enumerable.Range(0, manager.Joints.Count).First(j => manager.Joints[j].Barricaded &&
+                    (manager.GetRole(manager.Joints[j].BlockA) == MapBlockRole.EndCap || manager.GetRole(manager.Joints[j].BlockB) == MapBlockRole.EndCap));
+                MapJoint gated = manager.Joints[joint];
+                int endCap = manager.GetRole(gated.BlockA) == MapBlockRole.EndCap ? gated.BlockA : gated.BlockB;
+                EntranceObstacle gate = manager.GetBlock(gated.BlockA).Entrances[gated.EntranceA].Obstacle ??
+                                        manager.GetBlock(gated.BlockB).Entrances[gated.EntranceB].Obstacle;
+                if (gate.RequiresKey)
+                    gate.TryUseKey();
+                if (gate.RequiresDestruction)
+                    gate.TryDestroy();
+                Assert.That(gate.IsCleared, Is.True);
+                Assert.That(manager.IsJointOpen(joint), Is.True);
+                Assert.That(manager.FindOpenlyReachableFromSpawn()[endCap], Is.True, "An opened gate lets enemies in.");
+            });
+        }
+        Assert.That(sealedSeen, Is.GreaterThan(0));
     }
 
     [Test]

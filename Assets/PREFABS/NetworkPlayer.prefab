@@ -47,7 +47,7 @@ Camera:
   m_GameObject: {fileID: 540132781317581925}
   m_Enabled: 1
   serializedVersion: 2
-  m_ClearFlags: 2
+  m_ClearFlags: 1
   m_BackGroundColor: {r: 0, g: 0, b: 0, a: 1}
   m_projectionMatrixMode: 1
   m_GateFitMode: 2
@@ -307,6 +307,7 @@ GameObject:
   - component: {fileID: 4337183374447058690}
   - component: {fileID: 6274240498741786122}
   - component: {fileID: 4732015065427294672}
+  - component: {fileID: 5180342271938475501}
   m_Layer: 0
   m_Name: NetworkPlayer
   m_TagString: Untagged
@@ -701,8 +702,8 @@ Light:
   serializedVersion: 12
   m_Type: 0
   m_Color: {r: 1, g: 0.94, b: 0.82, a: 1}
-  m_Intensity: 3
-  m_Range: 22
+  m_Intensity: 8
+  m_Range: 30
   m_SpotAngle: 45.018585
   m_InnerSpotAngle: 30.018587
   m_CookieSize2D: {x: 0.5, y: 0.5}
@@ -1012,3 +1013,19 @@ Transform:
   - {fileID: 88488948288432510}
   m_Father: {fileID: 2869025832819141841}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &5180342271938475501
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3831809166821954726}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a3f1c2d4e5b64a7f8c9d0e1f2a3b4c51, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Capstone.Player::PlayerName
+  syncDirection: 0
+  syncMode: 0
+  syncInterval: 0
+  playerName: 

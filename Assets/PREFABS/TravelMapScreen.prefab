@@ -12,6 +12,7 @@ GameObject:
   - component: {fileID: 7124302929426719061}
   - component: {fileID: 5690355592717037820}
   - component: {fileID: 5987750326227082125}
+  - component: {fileID: 8596788142529181957}
   m_Layer: 0
   m_Name: DestinationButtonTemplate
   m_TagString: Untagged
@@ -121,6 +122,22 @@ MonoBehaviour:
   m_OnClick:
     m_PersistentCalls:
       m_Calls: []
+--- !u!114 &8596788142529181957
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 276682187890509733}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e7b5a6f8c9d04eb3c03b4c5d6e7f8a95, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Capstone.Player::HoverRevealGraphic
+  target: {fileID: 5690355592717037820}
+  hoverAlpha: 0.95
+  fadeSeconds: 0.08
+  revealWhenNotInteractable: 0
 --- !u!1 &345443478734766278
 GameObject:
   m_ObjectHideFlags: 0
@@ -161,7 +178,7 @@ RectTransform:
   m_AnchorMin: {x: 0.5, y: 0.5}
   m_AnchorMax: {x: 0.5, y: 0.5}
   m_AnchoredPosition: {x: 0, y: 0}
-  m_SizeDelta: {x: 620, y: 300}
+  m_SizeDelta: {x: 620, y: 400}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!222 &3584651568609295194
 CanvasRenderer:
@@ -305,7 +322,7 @@ MonoBehaviour:
     m_PersistentCalls:
       m_Calls: []
   m_FontData:
-    m_Font: {fileID: 10102, guid: 0000000000000000e000000000000000, type: 0}
+    m_Font: {fileID: 12800000, guid: 84606094a7754b24a83ada14aaba1db5, type: 3}
     m_FontSize: 30
     m_FontStyle: 0
     m_BestFit: 0
@@ -384,7 +401,7 @@ MonoBehaviour:
     m_PersistentCalls:
       m_Calls: []
   m_FontData:
-    m_Font: {fileID: 10102, guid: 0000000000000000e000000000000000, type: 0}
+    m_Font: {fileID: 12800000, guid: 84606094a7754b24a83ada14aaba1db5, type: 3}
     m_FontSize: 26
     m_FontStyle: 0
     m_BestFit: 0
@@ -396,7 +413,7 @@ MonoBehaviour:
     m_HorizontalOverflow: 0
     m_VerticalOverflow: 0
     m_LineSpacing: 1
-  m_Text: 'Travel Time: 1 hour (round trip)'
+  m_Text: 'Travel Time: 1 hour (Round Trip)'
 --- !u!1 &3927395343521710218
 GameObject:
   m_ObjectHideFlags: 0
@@ -463,13 +480,13 @@ MonoBehaviour:
     m_PersistentCalls:
       m_Calls: []
   m_FontData:
-    m_Font: {fileID: 10102, guid: 0000000000000000e000000000000000, type: 0}
+    m_Font: {fileID: 12800000, guid: 84606094a7754b24a83ada14aaba1db5, type: 3}
     m_FontSize: 44
-    m_FontStyle: 0
+    m_FontStyle: 1
     m_BestFit: 0
     m_MinSize: 10
     m_MaxSize: 44
-    m_Alignment: 3
+    m_Alignment: 4
     m_AlignByGeometry: 0
     m_RichText: 1
     m_HorizontalOverflow: 0
@@ -542,7 +559,7 @@ MonoBehaviour:
     m_PersistentCalls:
       m_Calls: []
   m_FontData:
-    m_Font: {fileID: 10102, guid: 0000000000000000e000000000000000, type: 0}
+    m_Font: {fileID: 12800000, guid: 84606094a7754b24a83ada14aaba1db5, type: 3}
     m_FontSize: 26
     m_FontStyle: 0
     m_BestFit: 0
@@ -613,14 +630,14 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Image
   m_Material: {fileID: 0}
-  m_Color: {r: 0.08, g: 0.09, b: 0.11, a: 0.97}
+  m_Color: {r: 0.2804824, g: 0.2920468, b: 0.31132078, a: 0.97}
   m_RaycastTarget: 0
   m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
   m_Maskable: 1
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_Sprite: {fileID: 0}
+  m_Sprite: {fileID: 21300000, guid: 0d3475ab8d608bb47a0f908aeb8ec41b, type: 3}
   m_Type: 0
   m_PreserveAspect: 0
   m_FillCenter: 1
@@ -642,6 +659,7 @@ GameObject:
   - component: {fileID: 7590969264517989778}
   - component: {fileID: 5499098925942971895}
   - component: {fileID: 6644792436944923077}
+  - component: {fileID: 6008109285963402244}
   m_Layer: 0
   m_Name: NoButton
   m_TagString: Untagged
@@ -751,6 +769,22 @@ MonoBehaviour:
   m_OnClick:
     m_PersistentCalls:
       m_Calls: []
+--- !u!114 &6008109285963402244
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4768271052453145545}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e7b5a6f8c9d04eb3c03b4c5d6e7f8a95, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Capstone.Player::HoverRevealGraphic
+  target: {fileID: 5499098925942971895}
+  hoverAlpha: 0.95
+  fadeSeconds: 0.08
+  revealWhenNotInteractable: 0
 --- !u!1 &4836439196859152866
 GameObject:
   m_ObjectHideFlags: 0
@@ -817,7 +851,7 @@ MonoBehaviour:
     m_PersistentCalls:
       m_Calls: []
   m_FontData:
-    m_Font: {fileID: 10102, guid: 0000000000000000e000000000000000, type: 0}
+    m_Font: {fileID: 12800000, guid: 84606094a7754b24a83ada14aaba1db5, type: 3}
     m_FontSize: 30
     m_FontStyle: 0
     m_BestFit: 0
@@ -842,6 +876,7 @@ GameObject:
   - component: {fileID: 6079928214209743439}
   - component: {fileID: 238712273113222481}
   - component: {fileID: 7473405439879801517}
+  - component: {fileID: 5493410184436865513}
   m_Layer: 0
   m_Name: CloseButton
   m_TagString: Untagged
@@ -951,6 +986,22 @@ MonoBehaviour:
   m_OnClick:
     m_PersistentCalls:
       m_Calls: []
+--- !u!114 &5493410184436865513
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5371000274089001429}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e7b5a6f8c9d04eb3c03b4c5d6e7f8a95, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Capstone.Player::HoverRevealGraphic
+  target: {fileID: 238712273113222481}
+  hoverAlpha: 0.95
+  fadeSeconds: 0.08
+  revealWhenNotInteractable: 0
 --- !u!1 &5823039830974676040
 GameObject:
   m_ObjectHideFlags: 0
@@ -1207,7 +1258,7 @@ MonoBehaviour:
     m_PersistentCalls:
       m_Calls: []
   m_FontData:
-    m_Font: {fileID: 10102, guid: 0000000000000000e000000000000000, type: 0}
+    m_Font: {fileID: 12800000, guid: 84606094a7754b24a83ada14aaba1db5, type: 3}
     m_FontSize: 30
     m_FontStyle: 0
     m_BestFit: 0
@@ -1232,6 +1283,7 @@ GameObject:
   - component: {fileID: 2352191919057876429}
   - component: {fileID: 1966899684507360174}
   - component: {fileID: 1013983774602066828}
+  - component: {fileID: 27215644309980323}
   m_Layer: 0
   m_Name: YesButton
   m_TagString: Untagged
@@ -1341,6 +1393,22 @@ MonoBehaviour:
   m_OnClick:
     m_PersistentCalls:
       m_Calls: []
+--- !u!114 &27215644309980323
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7458447531085535407}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e7b5a6f8c9d04eb3c03b4c5d6e7f8a95, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Capstone.Player::HoverRevealGraphic
+  target: {fileID: 1966899684507360174}
+  hoverAlpha: 0.95
+  fadeSeconds: 0.08
+  revealWhenNotInteractable: 0
 --- !u!1 &8072915185625987498
 GameObject:
   m_ObjectHideFlags: 0
@@ -1368,7 +1436,7 @@ RectTransform:
   m_GameObject: {fileID: 8072915185625987498}
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_LocalScale: {x: 1.2, y: 1.2, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
   - {fileID: 8559425801120905609}
@@ -1402,15 +1470,15 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Image
   m_Material: {fileID: 0}
-  m_Color: {r: 0, g: 0, b: 0, a: 0.75}
+  m_Color: {r: 1, g: 1, b: 1, a: 0.88235295}
   m_RaycastTarget: 1
   m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
   m_Maskable: 1
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_Sprite: {fileID: 0}
-  m_Type: 0
+  m_Sprite: {fileID: 21300000, guid: 80bae6994e8f1fc4fb798916c6cbcd2a, type: 3}
+  m_Type: 1
   m_PreserveAspect: 0
   m_FillCenter: 1
   m_FillMethod: 4
@@ -1485,7 +1553,7 @@ MonoBehaviour:
     m_PersistentCalls:
       m_Calls: []
   m_FontData:
-    m_Font: {fileID: 10102, guid: 0000000000000000e000000000000000, type: 0}
+    m_Font: {fileID: 12800000, guid: 84606094a7754b24a83ada14aaba1db5, type: 3}
     m_FontSize: 30
     m_FontStyle: 0
     m_BestFit: 0
@@ -1564,7 +1632,7 @@ MonoBehaviour:
     m_PersistentCalls:
       m_Calls: []
   m_FontData:
-    m_Font: {fileID: 10102, guid: 0000000000000000e000000000000000, type: 0}
+    m_Font: {fileID: 12800000, guid: 84606094a7754b24a83ada14aaba1db5, type: 3}
     m_FontSize: 40
     m_FontStyle: 0
     m_BestFit: 0

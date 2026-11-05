@@ -19,6 +19,37 @@ Shader "Hidden/Capstone/NightVision"
         float4 _EnemyDetail;
         float4 _EnemyMaskSize;
         TEXTURE2D(_EnemyMask);
+        #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/DeclareDepthTexture.hlsl"
+        #include "NightSkyMoon.hlsl"
+
+        TEXTURE2D(_FogMoonTex);
+        SAMPLER(sampler_FogMoonTex);
+        float4 _FogMoon;
+        float4 _FogMoonGlow;
+
+        bool IsSkyDepth(float rawDepth)
+        {
+            return abs(rawDepth - UNITY_RAW_FAR_CLIP_VALUE) < 1e-6;
+        }
+
+        float3 ViewDirection(float2 uv, float rawDepth)
+        {
+            #if !UNITY_REVERSED_Z
+                rawDepth = lerp(UNITY_NEAR_CLIP_VALUE, 1.0, rawDepth);
+            #endif
+            return normalize(ComputeWorldSpacePosition(uv, rawDepth, UNITY_MATRIX_I_VP) - _WorldSpaceCameraPos);
+        }
+
+        // 0..1 coverage of the moon sprite (not its glow) in a sky direction.
+        float MoonSpriteMask(float3 direction)
+        {
+            if (_FogMoon.w < 0.5)
+                return 0.0;
+            float2 moonUv;
+            if (!NightSkyMoonUv(direction, NightSkyMoonDirection(_FogMoon.x, _FogMoon.y), _FogMoon.z, moonUv))
+                return 0.0;
+            return saturate(SAMPLE_TEXTURE2D_LOD(_FogMoonTex, sampler_FogMoonTex, moonUv, 0).a * _FogMoonGlow.z);
+        }
         ENDHLSL
 
         Pass
@@ -30,7 +61,6 @@ Shader "Hidden/Capstone/NightVision"
             #pragma target 3.5
             #pragma multi_compile _ _MAIN_LIGHT_SHADOWS _MAIN_LIGHT_SHADOWS_CASCADE
             #pragma multi_compile_fragment _ _SHADOWS_SOFT
-            #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/DeclareDepthTexture.hlsl"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Shadows.hlsl"
 
             float4 _FogDensityHeight;
@@ -38,6 +68,7 @@ Shader "Hidden/Capstone/NightVision"
             float4 _FogLighting;
             float4 _FogMainDirection;
             float4 _FogMainColor;
+            float4 _FogLocal;
             int _FogLocalLightCount;
             float4 _FogLightPositions[8];
             float4 _FogLightColors[8];
@@ -56,6 +87,7 @@ Shader "Hidden/Capstone/NightVision"
                 float2 uv = input.texcoord;
                 half4 scene = SAMPLE_TEXTURE2D_X(_BlitTexture, sampler_LinearClamp, uv);
                 float depth = SampleSceneDepth(uv);
+                bool sky = abs(depth - UNITY_RAW_FAR_CLIP_VALUE) < 1e-6;
                 #if !UNITY_REVERSED_Z
                     depth = lerp(UNITY_NEAR_CLIP_VALUE, 1.0, depth);
                 #endif
@@ -89,11 +121,21 @@ Shader "Hidden/Capstone/NightVision"
                         if (cone > -1.0)
                             attenuation *= smoothstep(cone, min(cone + 0.08, 1.0),
                                 dot(-lightDirection, _FogLightDirections[light].xyz));
-                        illumination += _FogLightColors[light].rgb * attenuation * _FogLighting.x *
+                        // Air right at the lamp (e.g. a flashlight at the lens) would otherwise glow brightest of all.
+                        attenuation *= smoothstep(0.0, _FogLocal.y, lengthSquared * rsqrt(lengthSquared));
+                        illumination += _FogLightColors[light].rgb * attenuation * _FogLocal.x *
                             Phase(dot(direction, lightDirection));
                     }
                     scattering += transmission * (1.0 - stepTransmission) * illumination;
                     transmission *= stepTransmission;
+                }
+                if (sky && _FogMoon.w > 0.5)
+                {
+                    // Only the moon (and its glow) shows through, by Moon Fog: 0 = undimmed, 1 = fogged like the sky.
+                    float3 moon = NightSkyMoonDirection(_FogMoon.x, _FogMoon.y);
+                    float mask = max(_FogMoonGlow.y * NightSkyMoonGlow(direction, moon, _FogMoonGlow.x),
+                        MoonSpriteMask(direction));
+                    transmission = lerp(transmission, lerp(1.0, transmission, _FogLighting.w), mask);
                 }
                 return half4(scene.rgb * transmission + scattering, scene.a);
             }
@@ -132,6 +174,22 @@ Shader "Hidden/Capstone/NightVision"
                     }
                 }
                 half4 scene = SAMPLE_TEXTURE2D_X(_BlitTexture, sampler_PointClamp, uv);
+                if (_PixelGrid.z > 0.5 && _FogMoon.w > 0.5)
+                {
+                    // The moon keeps full resolution: sky pixels on (or whose coarse block samples) the moon sprite use
+                    // their own pixel, so neither the disc nor its outline turns blocky.
+                    float ownDepth = SampleSceneDepth(input.texcoord);
+                    if (IsSkyDepth(ownDepth))
+                    {
+                        float moonMask = MoonSpriteMask(ViewDirection(input.texcoord, ownDepth));
+                        float sampledDepth = SampleSceneDepth(uv);
+                        if (IsSkyDepth(sampledDepth))
+                            moonMask = max(moonMask, MoonSpriteMask(ViewDirection(uv, sampledDepth)));
+                        if (moonMask > 0.0)
+                            scene = lerp(scene, SAMPLE_TEXTURE2D_X(_BlitTexture, sampler_PointClamp, input.texcoord),
+                                saturate(moonMask * 4.0));
+                    }
+                }
                 float2 centered = (input.texcoord - 0.5) * 2.0;
                 float vignette = smoothstep(0.25, 1.2, length(centered));
                 scene.rgb *= 1.0 - vignette * _Panic.x * _Panic.y;
