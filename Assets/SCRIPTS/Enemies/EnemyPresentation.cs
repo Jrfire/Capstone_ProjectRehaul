@@ -17,6 +17,8 @@ public sealed class EnemyPresentation : NetworkBehaviour
     private float snapsPerSecond = 12f;
     [SerializeField, Tooltip("Size in metres of the dark silhouette shown until Idle/Moving frames are configured.")]
     private Vector2 placeholderSize = new Vector2(1.2f, 2.8f);
+    [SerializeField, Tooltip("Also tilt the sprite up/down so it always faces the viewing camera (for flyers seen from below/above). Off = upright billboard.")]
+    private bool billboardPitch;
 
     [SyncVar] private float facingYaw;
     [SyncVar] private bool moving;
@@ -38,6 +40,21 @@ public sealed class EnemyPresentation : NetworkBehaviour
     public bool IsMoving => moving;
     public EnemyAnimationState AnimationState => moving ? EnemyAnimationState.Moving : EnemyAnimationState.Idle;
     public CharacterDirection DisplayedDirection { get; private set; } = CharacterDirection.South;
+    public bool BillboardPitch { get => billboardPitch; set => billboardPitch = value; }
+
+    /// <summary>Faces the sprite straight at the camera, tilting it when seen from above or below; upright when level.</summary>
+    public static Quaternion FullBillboardRotation(Vector3 cameraPosition, Vector3 spritePosition, float viewerYaw)
+    {
+        Vector3 ray = spritePosition - cameraPosition;
+        Vector3 flat = new Vector3(ray.x, 0f, ray.z);
+        if (flat.sqrMagnitude < 0.0001f)
+            flat = Quaternion.Euler(0f, viewerYaw, 0f) * Vector3.forward;
+        // Directly above/below the camera the flat direction keeps the up vector well defined.
+        Vector3 up = Vector3.Cross(ray.sqrMagnitude > 0.0001f ? ray : flat, Vector3.Cross(Vector3.up, flat)).normalized;
+        return ray.sqrMagnitude > 0.0001f && up.sqrMagnitude > 0.0001f
+            ? Quaternion.LookRotation(ray, up)
+            : Quaternion.LookRotation(flat, Vector3.up);
+    }
 
     private void Awake()
     {
@@ -95,8 +112,9 @@ public sealed class EnemyPresentation : NetworkBehaviour
         {
             float viewerYaw = viewer.transform.eulerAngles.y;
             DisplayedDirection = PlayerVision.DirectionFromYaw(viewerYaw, facingYaw);
-            worldSprites.transform.rotation = PlayerVision.BillboardRotation(viewer.transform.position,
-                worldSprites.transform.position, viewerYaw);
+            worldSprites.transform.rotation = billboardPitch
+                ? FullBillboardRotation(viewer.transform.position, worldSprites.transform.position, viewerYaw)
+                : PlayerVision.BillboardRotation(viewer.transform.position, worldSprites.transform.position, viewerYaw);
         }
 
         EnemyAnimationState state = AnimationState;

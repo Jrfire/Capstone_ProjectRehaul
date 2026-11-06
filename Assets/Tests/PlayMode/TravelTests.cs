@@ -329,9 +329,24 @@ public sealed class TravelTests : InputTestFixture
         bool sawLoading = false;
         float loadingShown = -1f, loadingHidden = -1f;
         var loadingEnemyFrames = new HashSet<Sprite>();
+        var frozenPositions = new Dictionary<EnemyBrain, Vector3>();
+        bool sawFrozen = false;
         float timeout = Time.realtimeSinceStartup + 30f;
-        while ((SceneManager.GetActiveScene().name != Destination || director.IsTraveling) && Time.realtimeSinceStartup < timeout)
+        while ((SceneManager.GetActiveScene().name != Destination || director.IsTraveling || director.ServerLoadingActive) &&
+               Time.realtimeSinceStartup < timeout)
         {
+            if (director.ServerLoadingActive)
+            {
+                sawFrozen |= EnemyBrain.IsFrozenForLoading;
+                foreach (EnemyBrain brain in Object.FindObjectsByType<EnemyBrain>(FindObjectsSortMode.None))
+                {
+                    if (!frozenPositions.TryGetValue(brain, out Vector3 start))
+                        frozenPositions[brain] = brain.transform.position;
+                    else
+                        Assert.That(Vector3.Distance(start, brain.transform.position), Is.LessThan(0.01f),
+                            "Enemies stay still while the loading screen is up.");
+                }
+            }
             bool visible = director.LoadingScreen.LoadingVisible;
             sawLoading |= visible;
             if (visible && loadingShown < 0f)
@@ -351,6 +366,8 @@ public sealed class TravelTests : InputTestFixture
         Assert.That(SceneManager.GetActiveScene().name, Is.EqualTo(Destination));
         Assert.That(director.IsTraveling, Is.False, "Travel did not complete.");
         Assert.That(sawLoading, Is.True, "The loading screen was never shown.");
+        Assert.That(sawFrozen, Is.True, "Enemy brains report the loading freeze during travel.");
+        Assert.That(EnemyBrain.IsFrozenForLoading, Is.False, "Enemies resume once the game has faded back in.");
         Assert.That(loadingHidden - loadingShown, Is.GreaterThanOrEqualTo(2.5f - 0.1f),
             "The loading screen stays up for the minimum time even though the street builds sooner.");
         var tikbalangFrames = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/PREFABS/Enemies/Tikbalang.prefab")

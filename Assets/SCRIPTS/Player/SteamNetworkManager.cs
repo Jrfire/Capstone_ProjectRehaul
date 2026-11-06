@@ -10,6 +10,7 @@ public sealed class SteamNetworkManager : NetworkManager
     private SteamSession Session => TryGetComponent(out SteamSession session) ? session : null;
     private TravelDirector Travel => TryGetComponent(out TravelDirector director) && director.enabled ? director : null;
     private RoundClock Clock => TryGetComponent(out RoundClock clock) && clock.enabled ? clock : null;
+    private AgimatBank Agimats => TryGetComponent(out AgimatBank bank) && bank.enabled ? bank : null;
 
     public override void OnStartHost()
     {
@@ -23,6 +24,7 @@ public sealed class SteamNetworkManager : NetworkManager
         EntranceObstacleNetwork.RegisterServerHandlers();
         Travel?.RegisterServerHandlers();
         Clock?.RegisterServerHandlers();
+        Agimats?.RegisterServerHandlers();
     }
 
     public override void OnStartClient()
@@ -33,6 +35,7 @@ public sealed class SteamNetworkManager : NetworkManager
             Session?.JoinSessionLobby(message.lobbyId));
         Travel?.RegisterClientHandlers();
         Clock?.RegisterClientHandlers();
+        Agimats?.RegisterClientHandlers();
     }
 
     public override void OnClientConnect()
@@ -49,6 +52,7 @@ public sealed class SteamNetworkManager : NetworkManager
             connection.Send(new SteamLobbyMessage { lobbyId = lobbyId });
         Travel?.OnServerConnect(connection);
         Clock?.OnServerConnect(connection);
+        Agimats?.OnServerConnect(connection);
     }
 
     public override void OnServerDisconnect(NetworkConnectionToClient connection)
@@ -96,6 +100,7 @@ public sealed class SteamNetworkManager : NetworkManager
     {
         Travel?.ResetServer();
         Clock?.ResetServer();
+        Agimats?.ResetServer();
         base.OnStopServer();
     }
 
@@ -106,6 +111,7 @@ public sealed class SteamNetworkManager : NetworkManager
         Session?.LeaveSessionLobby();
         Travel?.ResetClient();
         Clock?.ResetClient();
+        Agimats?.ResetClient();
         base.OnStopClient();
     }
 }

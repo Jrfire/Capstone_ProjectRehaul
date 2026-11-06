@@ -28,8 +28,10 @@ public struct RoundClockMessage : NetworkMessage
 /// At midnight away from base, or when a player boards the jeepney home, a countdown starts: each player must board
 /// (E on the jeepney back); anyone left behind dies when the jeepney leaves (health 0, inventory-loss hook) and
 /// respawns at base with one heart. Players who die in any other way also respawn at base; if everyone away from base
-/// is dead, the jeepney brings them all home after <see cref="allDeadReturnSeconds"/>. Arriving at base after midnight resets the
-/// clock when the quota is met, otherwise the game is over and everything resets.
+/// is dead, the jeepney brings them all home after <see cref="allDeadReturnSeconds"/>. With an <see cref="AgimatBank"/>,
+/// sacrificing the quota at the Albularyo starts the next round; being at base with no affordable trip left and too few
+/// agimats ends the game. Without a bank, arriving at base after midnight resets the clock when <see cref="QuotaMet"/>,
+/// otherwise the game is over and everything resets.
 /// </summary>
 [DisallowMultipleComponent]
 public sealed class RoundClock : MonoBehaviour
@@ -60,6 +62,7 @@ public sealed class RoundClock : MonoBehaviour
     private int serverRound = 1;
     private float nextSync;
     private float serverAllDeadTime;
+    private float nextStuckCheck;
     private TravelDirector subscribedDirector;
     private readonly System.Collections.Generic.HashSet<PlayerPersistence> serverAwaitingRespawn =
         new System.Collections.Generic.HashSet<PlayerPersistence>();
@@ -70,8 +73,14 @@ public sealed class RoundClock : MonoBehaviour
 
     public static RoundClock Instance { get; private set; }
 
-    /// <summary>Server: quota check made on arrival at base after midnight. Unassigned = met (agimats are not implemented yet).</summary>
+    /// <summary>Server: quota check made on arrival at base after midnight. Unassigned = met (legacy, without an <see cref="AgimatBank"/>).</summary>
     public Func<bool> QuotaMet { get; set; }
+    /// <summary>
+    /// Server: assigned by <see cref="AgimatBank"/>, which completes rounds itself when the quota is sacrificed
+    /// (<see cref="ServerCompleteRound"/>). While assigned, arriving at base after midnight waits for the sacrifice, and
+    /// the game is over as soon as players are at base with no affordable trip left while this returns false.
+    /// </summary>
+    public Func<bool> QuotaReachable { get; set; }
     /// <summary>Server: a player died by being left behind when the jeepney left (hook for inventory loss).</summary>
     public event Action<PlayerPersistence> ServerPlayerLeftBehind;
 
@@ -304,6 +313,13 @@ public sealed class RoundClock : MonoBehaviour
                 AdvanceClock(deltaTime);
                 if (!traveling && !InBase && serverElapsed >= RoundSeconds)
                     StartReturnCountdown();
+                else if (!traveling && InBase && QuotaReachable != null && Time.unscaledTime >= nextStuckCheck)
+                {
+                    nextStuckCheck = Time.unscaledTime + 0.25f;
+                    // Stuck at base: no time to fetch more agimats and not enough to meet the quota.
+                    if (!QuotaReachable() && !AnyTripAffordable())
+                        ServerGameOver();
+                }
                 break;
         }
 
@@ -469,18 +485,60 @@ public sealed class RoundClock : MonoBehaviour
             return;
         }
 
+        if (QuotaReachable != null)
+        {
+            // The round ends by sacrificing at the Albularyo; ServerTick ends the game if that is impossible.
+            Broadcast();
+            return;
+        }
+
         if (QuotaMet == null || QuotaMet())
         {
-            serverElapsed = 0f;
-            serverRound++;
-            SetPhase(RoundPhase.Running);
-            ServerRoundCompleted?.Invoke(serverRound);
+            ServerCompleteRound();
         }
         else
         {
             serverGameOverRemaining = gameOverSeconds;
             SetPhase(RoundPhase.GameOver);
         }
+    }
+
+    /// <summary>
+    /// Server: the quota was met; starts the next round (clock back to noon). Called by <see cref="AgimatBank"/> when
+    /// enough agimats are sacrificed, or on arrival at base after midnight without a bank.
+    /// </summary>
+    public void ServerCompleteRound()
+    {
+        if (!NetworkServer.active || serverPhase == RoundPhase.GameOver)
+            return;
+        serverElapsed = 0f;
+        serverCountdown = 0f;
+        serverRound++;
+        SetPhase(RoundPhase.Running);
+        ServerRoundCompleted?.Invoke(serverRound);
+    }
+
+    /// <summary>
+    /// Server: whether any destination listed on a map terminal in this scene can still be reached before midnight.
+    /// Without terminals, true until midnight.
+    /// </summary>
+    public bool AnyTripAffordable()
+    {
+        bool anyTerminal = false;
+        Scene active = SceneManager.GetActiveScene();
+        foreach (MapTerminal terminal in FindObjectsByType<MapTerminal>(FindObjectsInactive.Exclude, FindObjectsSortMode.None))
+        {
+            if (terminal.gameObject.scene != active)
+                continue;
+            anyTerminal = true;
+            foreach (string destination in terminal.Destinations)
+            {
+                if (destination != active.name && destination != baseSceneName && TravelDirector.CanLoadScene(destination) &&
+                    CanAfford(destination))
+                    return true;
+            }
+        }
+        return !anyTerminal && serverElapsed < RoundSeconds;
     }
 
     /// <summary>Server: shows the game over screen and then resets the game (as when the quota is not met).</summary>

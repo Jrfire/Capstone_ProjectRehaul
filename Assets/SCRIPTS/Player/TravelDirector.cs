@@ -107,6 +107,12 @@ public sealed class TravelDirector : MonoBehaviour
     /// <summary>True on this client from the start of the fade until the arrival fade-in starts.</summary>
     public bool IsTraveling { get; private set; }
     public bool ServerTraveling { get; private set; }
+    /// <summary>
+    /// Server: true while players are fading out, loading or fading back into the new scene. Enemies stay frozen
+    /// (no movement or attacks) during this time.
+    /// </summary>
+    public bool ServerLoadingActive => ServerTraveling || Time.realtimeSinceStartup < serverFadeInEndsAt;
+    private float serverFadeInEndsAt;
     public string ServerDestination => serverDestination;
     public float FadeDuration => fadeDuration;
     public TravelLoadingScreen LoadingScreen => EnsureLoadingScreen();
@@ -226,6 +232,7 @@ public sealed class TravelDirector : MonoBehaviour
         serverDestination = null;
         serverTravelScene = null;
         ServerTraveling = false;
+        serverFadeInEndsAt = 0f;
         serverRolls.Clear();
         HasArrivalRoll = false;
         ArrivalEnemy = null;
@@ -417,6 +424,8 @@ public sealed class TravelDirector : MonoBehaviour
 
         pendingConnections.Clear();
         readyConnections.Clear();
+        // Clients fade the loading screen to black, hide it and fade into the game before anyone can act.
+        serverFadeInEndsAt = Time.realtimeSinceStartup + fadeDuration * 2f;
         ServerTraveling = false;
         serverRoutine = null;
         ServerTravelCompleted?.Invoke(SceneManager.GetActiveScene().name);

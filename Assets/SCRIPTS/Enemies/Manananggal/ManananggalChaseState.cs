@@ -1,8 +1,9 @@
 using UnityEngine;
 
 /// <summary>
-/// Flies at the first player it spotted, climbing over walls and buildings instead of going around them, until the
-/// chase time runs out or the target dies/boards. Each touch removes one heart and is followed by a hovering pause.
+/// Flies at the first player it spotted, climbing over walls and buildings instead of going around them (and dropping
+/// down beside a roof to fly in underneath when the target hides under one, or straight through the cover when the
+/// target is fully enclosed), until the chase time runs out or the target dies/boards. Each touch removes one heart and is followed by a hovering pause.
 /// </summary>
 public sealed class ManananggalChaseState : EnemyState
 {
@@ -67,7 +68,8 @@ public sealed class ManananggalChaseState : EnemyState
             return;
         }
 
-        brain.Flight.FlyTowards(targetPosition + Vector3.up * brain.Profile.chaseHoverHeight, brain.Profile.chaseSpeed, deltaTime);
+        Vector3 goal = targetPosition + Vector3.up * brain.Profile.chaseHoverHeight;
+        brain.Flight.PursueTowards(goal, brain.Profile.chaseSpeed, deltaTime);
     }
 
     private bool IsTouching(Vector3 targetPosition)

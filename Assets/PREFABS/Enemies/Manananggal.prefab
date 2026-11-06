@@ -411,6 +411,7 @@ MonoBehaviour:
   worldSprites: {fileID: 727114019838224886}
   snapsPerSecond: 12
   placeholderSize: {x: 1.6, y: 2}
+  billboardPitch: 1
 --- !u!114 &6373800808357670071
 MonoBehaviour:
   m_ObjectHideFlags: 0

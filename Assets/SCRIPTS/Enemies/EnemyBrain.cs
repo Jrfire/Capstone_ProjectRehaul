@@ -17,6 +17,7 @@ public abstract class EnemyBrain : NetworkBehaviour
     [SyncVar] private string stateName = string.Empty;
 
     private bool hasHome;
+    private bool frozen;
     private EnemyHomeArea home;
 
     /// <summary>Whatever moves this enemy (NavMesh walker or flyer).</summary>
@@ -32,6 +33,9 @@ public abstract class EnemyBrain : NetworkBehaviour
     public int HomeBlockIndex { get; private set; } = -1;
     /// <summary>When set, the body keeps facing this point (vision lock) instead of turning with movement.</summary>
     public Vector3? LookTarget { get; set; }
+
+    /// <summary>Server: true while players are traveling/loading or fading into the scene (see TravelDirector.ServerLoadingActive).</summary>
+    public static bool IsFrozenForLoading => TravelDirector.Instance != null && TravelDirector.Instance.ServerLoadingActive;
 
     protected virtual void Awake()
     {
@@ -77,7 +81,21 @@ public abstract class EnemyBrain : NetworkBehaviour
 
     protected virtual void Update()
     {
-        if (!isServer || Locomotion == null || !Locomotion.Activate())
+        if (!isServer || Locomotion == null)
+            return;
+        // Nobody can see or react while the loading screen is up, so enemies wait (no movement, no attacks).
+        if (IsFrozenForLoading)
+        {
+            if (!frozen)
+            {
+                frozen = true;
+                Locomotion.Stop();
+                Presentation.SetMotion(false, transform.eulerAngles.y);
+            }
+            return;
+        }
+        frozen = false;
+        if (!Locomotion.Activate())
             return;
 
         if (CurrentState == null)

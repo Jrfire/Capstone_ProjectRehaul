@@ -216,6 +216,71 @@ public sealed class ManananggalTests : InputTestFixture
     }
 
     [UnityTest]
+    public IEnumerator ChaseReachesPlayersHidingUnderARoof()
+    {
+        profile.firstPassDelaySeconds = new Vector2(30f, 30f);
+        SpawnPlayers();
+        Place(localPlayer, new Vector3(0f, 0f, 0f));
+        GameObject roof = Block(new Vector3(0f, 3f, 0f), new Vector3(10f, 0.5f, 10f));
+        Bounds roofBounds = roof.GetComponent<Collider>().bounds;
+        ManananggalBrain brain = CreateManananggal(new Vector3(0f, 0f, -20f));
+        var health = localPlayer.GetComponent<PlayerHealth>();
+        int startHealth = health.CurrentHealth;
+        yield return WaitUntil(() => brain.CurrentState == brain.Hunting, 1f, "It did not start hunting.");
+
+        brain.SetHidden(false);
+        brain.Flight.Warp(new Vector3(0f, 10f, -3f));
+        Assert.That(brain.Flight.IsCovered(localPlayer.transform.position), Is.True, "The player is under the roof.");
+        brain.StartChase(localPlayer.GetComponent<PlayerPersistence>());
+
+        bool wentUnder = false;
+        float timeout = Time.realtimeSinceStartup + 10f;
+        while (brain.Chase.HitCount == 0 && Time.realtimeSinceStartup < timeout)
+        {
+            Vector3 center = brain.transform.position + Vector3.up * brain.Flight.BodyCenterHeight;
+            Assert.That(roofBounds.Contains(center), Is.False, "It never flies through the roof.");
+            wentUnder |= center.y < roofBounds.min.y && Mathf.Abs(center.x) < 5f && Mathf.Abs(center.z) < 5f;
+            yield return null;
+        }
+        Assert.That(brain.Chase.HitCount, Is.EqualTo(1), "It never reached the player under the roof.");
+        Assert.That(wentUnder, Is.True, "It dropped below the roof to reach the player.");
+        Assert.That(health.CurrentHealth, Is.EqualTo(startHealth - 2));
+    }
+
+    [UnityTest]
+    public IEnumerator ChaseReachesPlayersFullyEnclosedByPassingThroughTheCover()
+    {
+        profile.firstPassDelaySeconds = new Vector2(30f, 30f);
+        SpawnPlayers();
+        Place(localPlayer, new Vector3(0f, 0f, 0f));
+        Block(new Vector3(0f, 3f, 0f), new Vector3(6f, 0.5f, 6f));
+        Block(new Vector3(0f, 1.5f, 3f), new Vector3(6f, 3f, 0.5f));
+        Block(new Vector3(0f, 1.5f, -3f), new Vector3(6f, 3f, 0.5f));
+        Block(new Vector3(3f, 1.5f, 0f), new Vector3(0.5f, 3f, 6f));
+        Block(new Vector3(-3f, 1.5f, 0f), new Vector3(0.5f, 3f, 6f));
+        ManananggalBrain brain = CreateManananggal(new Vector3(0f, 0f, -20f));
+        var health = localPlayer.GetComponent<PlayerHealth>();
+        int startHealth = health.CurrentHealth;
+        yield return WaitUntil(() => brain.CurrentState == brain.Hunting, 1f, "It did not start hunting.");
+
+        brain.SetHidden(false);
+        brain.Flight.Warp(new Vector3(0f, 10f, -8f));
+        Assert.That(brain.Flight.IsCovered(localPlayer.transform.position), Is.True, "The player is under the roof.");
+        brain.StartChase(localPlayer.GetComponent<PlayerPersistence>());
+
+        bool sawEnclosed = false;
+        float timeout = Time.realtimeSinceStartup + 10f;
+        while (brain.Chase.HitCount == 0 && Time.realtimeSinceStartup < timeout)
+        {
+            sawEnclosed |= brain.Flight.IsEnclosedTarget;
+            yield return null;
+        }
+        Assert.That(sawEnclosed, Is.True, "The box has no open way in.");
+        Assert.That(brain.Chase.HitCount, Is.EqualTo(1), "It never reached the enclosed player.");
+        Assert.That(health.CurrentHealth, Is.EqualTo(startHealth - 2));
+    }
+
+    [UnityTest]
     public IEnumerator PassesComeFromVariedDirectionsAndLanes()
     {
         SpawnPlayers();

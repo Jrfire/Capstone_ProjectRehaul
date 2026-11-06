@@ -1,0 +1,24 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c7cc8900f59f4f36b2f5b502fe6ab04b, type: 3}
+  m_Name: AlbularyoDialogue
+  m_EditorClassIdentifier: Capstone.Player::AlbularyoDialogue
+  requestLines:
+  - 'The Bakunawa hungers, child. Bring me {0} more {3} before midnight, or the moon will be swallowed.'
+  - 'The serpent stirs beneath the sea. Offer {0} more {3}, and it will sleep a while longer.'
+  - 'You have brought {2} of {1}. The night does not wait, and neither does the Bakunawa.'
+  - 'The sun is already gone, child. Do not let the moon follow it. I still need {0} more {3}.'
+  - 'Every agimat you offer is a prayer to the moon. Hurry, {0} more must be sacrificed tonight.'
+  quotaMetLines:
+  - 'The moon is safe... for now. Rest, and return with more for the next night.'
+  - 'The Bakunawa sinks back into the deep. You have earned us another night, child.'
+  - 'Good. The moon still shines. But tomorrow, the serpent will be hungrier.'

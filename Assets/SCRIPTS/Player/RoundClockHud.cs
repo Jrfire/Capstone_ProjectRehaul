@@ -62,6 +62,13 @@ public sealed class RoundClockHud : MonoBehaviour
             Hide();
             return;
         }
+        if (HudVisibility.Hidden)
+        {
+            // A menu hides the clock and countdown, but a game over still shows.
+            Hide();
+            gameOverPanel.SetActive(clock.Phase == RoundPhase.GameOver);
+            return;
+        }
 
         clockPanel.gameObject.SetActive(true);
         int frame = clock.ClockFrame;

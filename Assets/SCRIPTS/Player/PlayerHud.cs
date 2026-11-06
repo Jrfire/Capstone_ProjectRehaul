@@ -72,7 +72,7 @@ public sealed class PlayerHud : MonoBehaviour
         if (!configured)
             return;
 
-        NetworkIdentity localPlayer = NetworkClient.isConnected ? NetworkClient.localPlayer : null;
+        NetworkIdentity localPlayer = NetworkClient.isConnected && !HudVisibility.Hidden ? NetworkClient.localPlayer : null;
         PlayerHealth localHealth = localPlayer != null ? localPlayer.GetComponent<PlayerHealth>() : null;
         if (observedHealth != localHealth)
             Bind(localHealth);
