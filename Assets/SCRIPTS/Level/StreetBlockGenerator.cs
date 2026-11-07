@@ -106,6 +106,8 @@ public sealed class StreetBlockGenerator : MonoBehaviour
     public GameObject[] wallPrefabs = new GameObject[0];
     [Min(0.1f), Tooltip("Height of the invisible boundary colliders.")]
     public float boundaryHeight = 4f;
+    [Tooltip("Town block: its edge walls are generated as usual but tagged (StreetEdgeWall), and MapManager removes them on every side shared with another town block, so towns connect without walls while the map's outskirts stay walled. Town blocks never get entrance obstacles (Obstacle Count is ignored), though MapManager may still gate a neighbouring walled block.")]
+    public bool townBlock;
 
     [Header("Decorations")]
     public GameObject[] decorationPrefabs = new GameObject[0];

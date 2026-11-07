@@ -484,6 +484,68 @@ public sealed class StreetBlockGeneratorTests
         AssertEdgesSealedExceptEntrances(generator.transform, block);
     }
 
+    [TestCase(WallMode.FillGaps)]
+    [TestCase(WallMode.WrapEdges)]
+    public void TownBlocksTagTheirEdgeWallsAndNeverGetObstacles(WallMode wallMode)
+    {
+        StreetBlockGenerator generator = NewGenerator();
+        generator.wallMode = wallMode;
+        generator.entranceCount = 2;
+        generator.buildingPrefabs = new[] { Template("Small House", 3f, 2.5f, 2.5f) };
+        generator.wallPrefabs = new[] { Template("Fence", 1f, 2f, 0.3f) };
+        GameObject barricade = Template("Barricade", 4f, 2f, 0.3f);
+        barricade.AddComponent<EntranceObstacle>();
+        generator.obstaclePrefabs = new[] { barricade };
+        generator.obstacleCount = 1;
+        generator.townBlock = true;
+
+        LogAssert.Expect(LogType.Warning, new Regex("Town Block"));
+        Assert.That(StreetBlockBuilder.Generate(generator), Is.True);
+        StreetBlock block = generator.GetComponent<StreetBlock>();
+        Assert.That(block.IsTownBlock, Is.True);
+        Assert.That(block.Entrances.All(entrance => entrance.Obstacle == null), Is.True, "Town blocks get no obstacles.");
+        Transform generated = generator.transform.Find(StreetBlockBuilder.GeneratedName);
+        Assert.That(generated.GetComponentsInChildren<EntranceObstacle>(true), Is.Empty);
+
+        Transform[] edgePieces = new[] { "Walls", "Boundaries" }
+            .Select(name => generated.Find(name)).Where(group => group != null)
+            .SelectMany(group => group.Cast<Transform>()).ToArray();
+        Assert.That(edgePieces.Length, Is.GreaterThan(0));
+        foreach (Transform piece in edgePieces)
+        {
+            StreetEdgeWall marker = piece.GetComponent<StreetEdgeWall>();
+            Assert.That(marker, Is.Not.Null, $"{piece.name} is tagged as an edge wall.");
+            Rect rect = piece.GetComponentInChildren<Renderer>() != null
+                ? Footprint(piece.gameObject, generator.transform)
+                : BoxFootprint(piece.GetComponent<BoxCollider>(), generator.transform);
+            float edge = marker.Side switch
+            {
+                BlockSide.West => rect.xMin + Half,
+                BlockSide.East => Half - rect.xMax,
+                BlockSide.South => rect.yMin + Half,
+                _ => Half - rect.yMax
+            };
+            Assert.That(edge, Is.LessThan(0.05f), $"{piece.name} lies on its {marker.Side} edge.");
+        }
+        AssertEdgesSealedExceptEntrances(generator.transform, block);
+
+        generator.townBlock = false;
+        Assert.That(StreetBlockBuilder.Generate(generator), Is.True);
+        Assert.That(block.IsTownBlock, Is.False);
+        Assert.That(generator.GetComponentsInChildren<StreetEdgeWall>(true), Is.Empty, "Normal blocks have no tagged walls.");
+        Assert.That(block.Entrances.Count(entrance => entrance.Obstacle != null), Is.EqualTo(1));
+    }
+
+    private static Rect BoxFootprint(BoxCollider box, Transform space)
+    {
+        Vector3 center = space.InverseTransformPoint(box.transform.TransformPoint(box.center));
+        Vector3 size = Vector3.Scale(box.size, box.transform.lossyScale);
+        Vector3 local = space.InverseTransformDirection(box.transform.right);
+        if (Mathf.Abs(local.x) < 0.5f)
+            size = new Vector3(size.z, size.y, size.x);
+        return new Rect(center.x - size.x * 0.5f, center.z - size.z * 0.5f, size.x, size.z);
+    }
+
     private static float EdgeDistance(Rect rect) =>
         Mathf.Min(Mathf.Min(rect.xMin + Half, Half - rect.xMax), Mathf.Min(rect.yMin + Half, Half - rect.yMax));
 

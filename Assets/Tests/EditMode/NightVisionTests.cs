@@ -45,7 +45,7 @@ public sealed class NightVisionTests
             Assert.That(volume.sharedProfile.TryGet(out NightFog fog), Is.True);
             Assert.That(fog.enabled.value, Is.True);
             Assert.That(fog.density.overrideState, Is.True);
-            Assert.That(fog.density.value, Is.EqualTo(0.05f));
+            Assert.That(fog.density.value, Is.EqualTo(0.04f));
             Assert.That(fog.localLightScattering.overrideState, Is.True);
             Assert.That(fog.localLightScattering.value, Is.LessThan(fog.lightScattering.value),
                 "Flashlights must not fill the air in front of the player with glow.");

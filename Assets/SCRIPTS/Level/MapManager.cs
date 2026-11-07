@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
 using UnityEngine.AI;
+using UnityEngine.Serialization;
 
 /// <summary>Two placed blocks joined through one entrance each (indices into <see cref="MapManager.Layout"/>).</summary>
 public readonly struct MapJoint
@@ -44,6 +45,9 @@ public sealed class MapManager : MonoBehaviour
     [Header("Generation")]
     [SerializeField, Min(0), Tooltip("Number of connector blocks. End caps and the spawn block are added on top of this.")]
     private int connectorBlockCount = 6;
+    [FormerlySerializedAs("maxConnectorBlockCount")]
+    [SerializeField, Min(0), Tooltip("Most blocks in total (connectors, end caps and the spawn block) the map grows to when the host adds blocks per quota met (Extra Connectors). Connector Block Count itself is never reduced, so a base layout above this is kept.")]
+    private int maxBlockCount = 15;
     [SerializeField, Min(1), Tooltip("Layouts retried (deterministically from the seed) before generation fails.")]
     private int maxAttempts = 100;
     [SerializeField, Tooltip("Build automatically when the scene starts.")]
@@ -54,6 +58,14 @@ public sealed class MapManager : MonoBehaviour
 
     [SerializeField, Range(0f, 1f), Tooltip("Chance, each time a connector is added, to place one that joins two or more open entrances and so closes a loop. Loops give players routes around barricades.")]
     private float loopChance = 0.75f;
+
+    [Header("Town layout")]
+    [SerializeField, Tooltip("Town connector blocks (2+ entrances, generated with Town Block ticked). In a town layout they replace Connector Blocks and pack into a compact cluster; their edge walls are removed wherever two town blocks touch, while the map's outskirts and end caps stay walled.")]
+    private List<StreetBlock> townBlocks = new List<StreetBlock>();
+    [SerializeField, Range(0f, 1f), Tooltip("Chance (rolled from the seed, so every peer agrees) that a map with at least Town Min Connector Count connectors is built as a town. Falls back to a normal layout if the town cannot be planned.")]
+    private float townLayoutChance = 0.5f;
+    [SerializeField, Min(0), Tooltip("Town layouts are only rolled when the effective connector count (Connector Block Count plus per-quota extras, capped by Max Block Count) reaches this.")]
+    private int townMinConnectorCount = 10;
 
     [Header("Barricades")]
     [SerializeField, Tooltip("Keep entrance obstacles that seal off end cap blocks (the only places that may be fully blocked, e.g. for loot behind them).")]
@@ -78,6 +90,10 @@ public sealed class MapManager : MonoBehaviour
     private float spawnClearanceRadius = 0.45f;
     [SerializeField, Min(0.5f), Tooltip("Height of the player-sized capsule that must be free of colliders at each spawn point.")]
     private float spawnClearanceHeight = 2f;
+    [SerializeField, Tooltip("Vehicle (e.g. the jeepney with its TravelInteractable back, back = local -Z) parked in the placed spawn block on free, reachable floor, away from the entrance with its back towards the block centre, so players can head home. Empty = none.")]
+    private GameObject jeepneyPrefab;
+    [SerializeField, Min(0.5f), Tooltip("Open, reachable floor kept behind the jeepney's back so players can board it.")]
+    private float jeepneyRearClearance = 2f;
 
     [Header("Filler blocks")]
     [SerializeField, Tooltip("Blocks with no entrances placed in every empty grid cell around the street (same cell size) so the map does not float in a void. Fillers may overhang the outer margin; cells no filler fits are plugged (see Plug Gaps).")]
@@ -102,12 +118,16 @@ public sealed class MapManager : MonoBehaviour
     private float decorationCarveScale = 0.6f;
 
     private static readonly Dictionary<string, int> networkSeeds = new Dictionary<string, int>();
+    private static readonly Dictionary<string, int> networkExtraConnectors = new Dictionary<string, int>();
     private Transform generatedRoot;
     private readonly List<StreetBlock> placedBlocks = new List<StreetBlock>();
     private readonly List<StreetBlock> placedFillers = new List<StreetBlock>();
+    private readonly List<Vector3[]> pluggedCells = new List<Vector3[]>();
     private readonly List<List<int>> neighbours = new List<List<int>>();
     private readonly List<MapJoint> joints = new List<MapJoint>();
     private readonly List<EntranceObstacle> jointBarricades = new List<EntranceObstacle>();
+    private readonly List<Vector3[]> openSeams = new List<Vector3[]>();
+    private List<Vector3>[] reachableFloor;
     private NavMeshDataInstance navMeshInstance;
 
     public static MapManager Active { get; private set; }
@@ -121,6 +141,49 @@ public sealed class MapManager : MonoBehaviour
     public IReadOnlyList<StreetBlock> EndCapBlocks => endCapBlocks;
     public IReadOnlyList<StreetBlock> SpawnBlocks => spawnBlocks;
     public int ConnectorBlockCount => connectorBlockCount;
+    public int MaxBlockCount => maxBlockCount;
+    /// <summary>Connector blocks added on top of Connector Block Count (set by the host for every peer, e.g. 2 per quota met).</summary>
+    public int ExtraConnectors { get; set; }
+    /// <summary>Upper bound for connectors tried: Connector Block Count plus Extra Connectors, capped at Max Block Count. The built layout may use fewer so the total (with end caps and spawn) stays within Max Block Count.</summary>
+    public int EffectiveConnectorBlockCount => EffectiveConnectorCount(connectorBlockCount, ExtraConnectors, maxBlockCount);
+    /// <summary>Connector blocks in the last built layout.</summary>
+    public int PlacedConnectorCount { get; private set; }
+
+    public static int EffectiveConnectorCount(int baseCount, int extra, int max) =>
+        Mathf.Max(baseCount, Mathf.Min(baseCount + Mathf.Max(0, extra), max));
+
+    /// <summary>
+    /// Plans with up to <paramref name="baseCount"/> + <paramref name="extra"/> connectors such that the whole layout (connectors,
+    /// end caps and the spawn block) has at most <paramref name="maxBlocks"/> blocks: each connector count from the highest down
+    /// is tried (deterministically from <paramref name="seed"/>) until one fits. Extras never push a map past the cap, but the
+    /// base count is always kept, even when its own layout exceeds the cap.
+    /// </summary>
+    public static bool TryPlanCapped(IEnumerable<StreetBlock> connectors, IEnumerable<StreetBlock> endCaps, IEnumerable<StreetBlock> spawns,
+        int baseCount, int extra, int maxBlocks, int seed, int maxAttempts, float loopChance,
+        out List<MapBlockPlacement> layout, out int connectorCount, out string error, bool compact = false)
+    {
+        int highest = EffectiveConnectorCount(baseCount, extra, maxBlocks);
+        layout = null;
+        error = null;
+        connectorCount = 0;
+        for (int count = highest; count >= baseCount; count--)
+        {
+            if (!MapLayoutPlanner.TryPlan(connectors, endCaps, spawns, count, seed, maxAttempts, out List<MapBlockPlacement> plan,
+                    out string planError, loopChance, compact))
+            {
+                error ??= planError;
+                continue;
+            }
+            if (plan.Count <= maxBlocks || count == baseCount)
+            {
+                layout = plan;
+                connectorCount = count;
+                error = null;
+                return true;
+            }
+        }
+        return false;
+    }
     public int Seed { get; private set; }
     public bool IsBuilt { get; private set; }
     public bool BuildFailed { get; private set; }
@@ -140,10 +203,40 @@ public sealed class MapManager : MonoBehaviour
     public StreetBlock GetFiller(int index) => placedFillers[index];
     /// <summary>Grid cells no filler block fitted, covered by gap plugs (floor tiles plus a gap prefab).</summary>
     public int PluggedCellCount { get; private set; }
+    /// <summary>World-space corners (clockwise from the -X/-Z corner) of every plugged gap cell.</summary>
+    public IReadOnlyList<Vector3[]> PluggedCells => pluggedCells;
     public int SpawnPointCount => spawnPointCount;
     public float SpawnPointSpacing => spawnPointSpacing;
     public float SpawnClearanceRadius => spawnClearanceRadius;
     public float SpawnClearanceHeight => spawnClearanceHeight;
+    public GameObject JeepneyPrefab => jeepneyPrefab;
+    public float JeepneyRearClearance => jeepneyRearClearance;
+    /// <summary>The jeepney parked in the spawn block by the last build, or null.</summary>
+    public GameObject PlacedJeepney { get; private set; }
+
+    public IReadOnlyList<StreetBlock> TownBlocks => townBlocks;
+    public float TownLayoutChance => townLayoutChance;
+    public int TownMinConnectorCount => townMinConnectorCount;
+    /// <summary>True if the last build used the town layout (town connectors with walls removed between them).</summary>
+    public bool IsTownLayout { get; private set; }
+    /// <summary>World-space segments (two points at floor height) where touching town blocks had their edge walls removed.</summary>
+    public IReadOnlyList<Vector3[]> OpenSeams => openSeams;
+
+    /// <summary>Deterministic town roll shared by every peer: true with probability <paramref name="chance"/> for <paramref name="seed"/>.</summary>
+    public static bool RollTownLayout(int seed, float chance) =>
+        chance > 0f && new System.Random(seed ^ 0x70C1A7E5).NextDouble() < chance;
+
+    /// <summary>True if a build with <paramref name="seed"/> would try the town layout (pool assigned, enough connectors, roll passed).</summary>
+    public bool WantsTownLayout(int seed)
+    {
+        bool hasTownBlock = false;
+        foreach (StreetBlock block in townBlocks)
+            hasTownBlock |= block != null;
+        return hasTownBlock && EffectiveConnectorBlockCount >= townMinConnectorCount && RollTownLayout(seed, townLayoutChance);
+    }
+
+    private bool IsTown(int blockIndex) =>
+        blockIndex >= 0 && blockIndex < placedBlocks.Count && placedBlocks[blockIndex] != null && placedBlocks[blockIndex].IsTownBlock;
 
     public MapBlockRole GetRole(int index) => Layout[index].Role;
 
@@ -217,16 +310,24 @@ public sealed class MapManager : MonoBehaviour
         return false;
     }
 
-    public static void SetNetworkSeed(string sceneName, int seed)
+    public static void SetNetworkSeed(string sceneName, int seed, int extraConnectors = 0)
     {
         networkSeeds[sceneName] = seed;
+        networkExtraConnectors[sceneName] = Mathf.Max(0, extraConnectors);
         if (Active != null && !Active.IsDone && Active.buildOnStart && Active.gameObject.scene.name == sceneName)
+        {
+            Active.ExtraConnectors = Mathf.Max(0, extraConnectors);
             Active.Build(seed);
+        }
     }
 
     public static bool TryGetNetworkSeed(string sceneName, out int seed) => networkSeeds.TryGetValue(sceneName, out seed);
 
-    public static void ClearNetworkSeeds() => networkSeeds.Clear();
+    public static void ClearNetworkSeeds()
+    {
+        networkSeeds.Clear();
+        networkExtraConnectors.Clear();
+    }
 
     private void Awake()
     {
@@ -243,7 +344,10 @@ public sealed class MapManager : MonoBehaviour
             return;
 
         if (TryGetNetworkSeed(gameObject.scene.name, out int seed))
+        {
+            ExtraConnectors = networkExtraConnectors.TryGetValue(gameObject.scene.name, out int extra) ? extra : 0;
             Build(seed);
+        }
         else if (!WaitForNetworkSeed)
             Build(useFixedSeed ? fixedSeed : Environment.TickCount);
     }
@@ -262,8 +366,21 @@ public sealed class MapManager : MonoBehaviour
     {
         Clear();
         Seed = seed;
-        if (!MapLayoutPlanner.TryPlan(connectorBlocks, endCapBlocks, spawnBlocks, connectorBlockCount, seed, maxAttempts,
-                out List<MapBlockPlacement> layout, out string error, loopChance))
+        List<MapBlockPlacement> layout = null;
+        int placedConnectors = 0;
+        string error = null;
+        bool planned = false;
+        if (WantsTownLayout(seed))
+        {
+            planned = TryPlanCapped(townBlocks, endCapBlocks, spawnBlocks, connectorBlockCount, ExtraConnectors, maxBlockCount, seed,
+                maxAttempts, loopChance, out layout, out placedConnectors, out error, compact: true);
+            if (planned)
+                IsTownLayout = true;
+            else
+                Debug.LogWarning($"Town layout could not be planned ({error}); building a normal street instead.", this);
+        }
+        if (!planned && !TryPlanCapped(connectorBlocks, endCapBlocks, spawnBlocks, connectorBlockCount, ExtraConnectors, maxBlockCount, seed,
+                maxAttempts, loopChance, out layout, out placedConnectors, out error))
         {
             Debug.LogError(error, this);
             BuildFailed = true;
@@ -271,6 +388,7 @@ public sealed class MapManager : MonoBehaviour
             return false;
         }
 
+        PlacedConnectorCount = placedConnectors;
         generatedRoot = new GameObject(GeneratedRootName).transform;
         generatedRoot.SetParent(transform, false);
         for (int i = 0; i < layout.Count; i++)
@@ -285,10 +403,11 @@ public sealed class MapManager : MonoBehaviour
 
         Layout = layout;
         FindNeighbours(layout);
+        OpenTownSeams(layout);
         ClearSpawnEntrances(layout);
         ResolveBarricades(layout);
         PlaceFillers(layout);
-        if (generateSpawnPoints)
+        if (generateSpawnPoints || jeepneyPrefab != null)
             GenerateSpawnPoints(layout);
         if (buildNavMesh && Application.isPlaying)
             BuildNavigation();
@@ -333,6 +452,13 @@ public sealed class MapManager : MonoBehaviour
             jointObstacles[j] = new List<EntranceObstacle>();
         foreach (EntranceObstacle obstacle in generatedRoot.GetComponentsInChildren<EntranceObstacle>(true))
         {
+            StreetBlock hostBlock = obstacle.GetComponentInParent<StreetBlock>(true);
+            if (hostBlock != null && hostBlock.IsTownBlock)
+            {
+                // Town blocks have no walls to frame an obstacle.
+                RemoveObstacle(obstacle);
+                continue;
+            }
             int owner = -1;
             float best = float.MaxValue;
             for (int j = 0; j < joints.Count && owner < 0; j++)
@@ -365,6 +491,13 @@ public sealed class MapManager : MonoBehaviour
         {
             List<EntranceObstacle> obstacles = jointObstacles[j];
             bool endCap = layout[joints[j].BlockA].Role == MapBlockRole.EndCap || layout[joints[j].BlockB].Role == MapBlockRole.EndCap;
+            if (IsTown(joints[j].BlockA) && IsTown(joints[j].BlockB))
+            {
+                // Between two town blocks there is no wall to hold an obstacle.
+                foreach (EntranceObstacle obstacle in obstacles)
+                    RemoveObstacle(obstacle);
+                continue;
+            }
             if (obstacles.Count == 0)
             {
                 bool spawnJoint = layout[joints[j].BlockA].Role == MapBlockRole.Spawn || layout[joints[j].BlockB].Role == MapBlockRole.Spawn;
@@ -421,8 +554,13 @@ public sealed class MapManager : MonoBehaviour
     private EntranceObstacle PlaceJointObstacle(IReadOnlyList<MapBlockPlacement> layout, int joint, System.Random random)
     {
         MapJoint j = joints[joint];
-        bool aIsHost = layout[j.BlockA].Role == MapBlockRole.EndCap ||
-                       (layout[j.BlockB].Role != MapBlockRole.EndCap && random.Next(2) == 0);
+        bool townA = IsTown(j.BlockA);
+        bool townB = IsTown(j.BlockB);
+        // A town block never hosts the obstacle: its walled neighbour does.
+        bool aIsHost = townA != townB
+            ? townB
+            : layout[j.BlockA].Role == MapBlockRole.EndCap ||
+              (layout[j.BlockB].Role != MapBlockRole.EndCap && random.Next(2) == 0);
         int hostIndex = aIsHost ? j.BlockA : j.BlockB;
         int otherIndex = aIsHost ? j.BlockB : j.BlockA;
         StreetBlock host = placedBlocks[hostIndex];
@@ -816,6 +954,13 @@ public sealed class MapManager : MonoBehaviour
         foreach (Vector2Int hole in holes)
         {
             Vector2 cellMin = origin + new Vector2(hole.x * cell.x, hole.y * cell.y);
+            pluggedCells.Add(new[]
+            {
+                root.TransformPoint(new Vector3(cellMin.x, height, cellMin.y)),
+                root.TransformPoint(new Vector3(cellMin.x, height, cellMin.y + cell.y)),
+                root.TransformPoint(new Vector3(cellMin.x + cell.x, height, cellMin.y + cell.y)),
+                root.TransformPoint(new Vector3(cellMin.x + cell.x, height, cellMin.y)),
+            });
             if (template != null)
             {
                 for (int x = 0; x < tilesPerCell; x++)
@@ -918,8 +1063,9 @@ public sealed class MapManager : MonoBehaviour
     }
 
     /// <summary>
-    /// Gives each placed spawn block up to <see cref="spawnPointCount"/> spawn points where a player-sized capsule
-    /// touches no solid collider and the floor below is reachable from the block's entrance.
+    /// Parks the <see cref="jeepneyPrefab"/> in each placed spawn block and gives the block up to
+    /// <see cref="spawnPointCount"/> spawn points where a player-sized capsule touches no solid collider and the floor
+    /// below is reachable from the block's entrance.
     /// </summary>
     private void GenerateSpawnPoints(IReadOnlyList<MapBlockPlacement> layout)
     {
@@ -930,12 +1076,27 @@ public sealed class MapManager : MonoBehaviour
             if (layout[i].Role != MapBlockRole.Spawn || block == null)
                 continue;
             PlayerSpawnPoints existing = block.GetComponentInChildren<PlayerSpawnPoints>(true);
-            if (existing != null && existing.transform.childCount > 0)
+            bool keepExisting = existing != null && existing.transform.childCount > 0;
+
+            if (jeepneyPrefab != null && PlacedJeepney == null)
+            {
+                var keep = new List<Vector3>();
+                if (keepExisting)
+                {
+                    foreach (Transform point in existing.transform)
+                        keep.Add(block.transform.InverseTransformPoint(point.position));
+                }
+                PlacedJeepney = PlaceJeepney(block, keep);
+                if (PlacedJeepney == null)
+                    Debug.LogWarning($"No free spot for the jeepney was found in spawn block '{block.name}'.", block);
+            }
+
+            if (!generateSpawnPoints || keepExisting)
                 continue;
             if (existing != null)
                 DestroyImmediate(existing.gameObject);
 
-            List<(Vector3 position, Quaternion rotation)> points = FindSpawnPoints(block);
+            List<(Vector3 position, Quaternion rotation)> points = FindSpawnPoints(block, BuildSpawnGrid(block));
             if (points.Count == 0)
             {
                 Debug.LogError($"No unobstructed spot for player spawn points was found in spawn block '{block.name}'.", block);
@@ -959,37 +1120,57 @@ public sealed class MapManager : MonoBehaviour
         }
     }
 
-    /// <summary>Spawn points in block space, nearest the block centre first.</summary>
-    private List<(Vector3 position, Quaternion rotation)> FindSpawnPoints(StreetBlock block)
+    /// <summary>Free floor cells of a block (block space, 0.5 m grid) and which of them are reachable from its entrance.</summary>
+    private sealed class SpawnGrid
     {
-        const float step = 0.5f;
-        const float lift = 0.05f;
-        var result = new List<(Vector3, Quaternion)>();
-        Vector2 half = block.Size * 0.5f - Vector2.one * spawnClearanceRadius;
-        if (half.x < 0f || half.y < 0f)
-            return result;
+        public const float Step = 0.5f;
+        public Vector2 Half;
+        public int CountX;
+        public int CountZ;
+        public bool[,] Free;
+        public bool[,] Reachable;
+        public float[,] Heights;
+        public Vector3 Entrance;
+        public bool SeededFromEntrance;
 
-        int countX = Mathf.FloorToInt(half.x * 2f / step) + 1;
-        int countZ = Mathf.FloorToInt(half.y * 2f / step) + 1;
-        var free = new bool[countX, countZ];
-        var heights = new float[countX, countZ];
+        public Vector3 LocalAt(int x, int z) => new Vector3(-Half.x + x * Step, 0f, -Half.y + z * Step);
+
+        public bool TryCell(Vector3 local, out Vector2Int cell)
+        {
+            cell = new Vector2Int(Mathf.RoundToInt((local.x + Half.x) / Step), Mathf.RoundToInt((local.z + Half.y) / Step));
+            return CountX > 0 && cell.x >= 0 && cell.y >= 0 && cell.x < CountX && cell.y < CountZ;
+        }
+    }
+
+    private SpawnGrid BuildSpawnGrid(StreetBlock block)
+    {
+        const float lift = 0.05f;
+        var grid = new SpawnGrid
+        {
+            Half = block.Size * 0.5f - Vector2.one * spawnClearanceRadius,
+            Entrance = block.Entrances.Count > 0 ? block.Entrances[0].LocalCenter : Vector3.zero,
+        };
+        if (grid.Half.x < 0f || grid.Half.y < 0f)
+        {
+            grid.Free = grid.Reachable = new bool[0, 0];
+            grid.Heights = new float[0, 0];
+            return grid;
+        }
+
+        int countX = grid.CountX = Mathf.FloorToInt(grid.Half.x * 2f / SpawnGrid.Step) + 1;
+        int countZ = grid.CountZ = Mathf.FloorToInt(grid.Half.y * 2f / SpawnGrid.Step) + 1;
+        var free = grid.Free = new bool[countX, countZ];
+        var heights = grid.Heights = new float[countX, countZ];
         Transform blockFloor = block.FloorRoot;
         bool hasFloorColliders = blockFloor != null && blockFloor.GetComponentInChildren<Collider>() != null;
-        var floors = new List<Transform>();
-        foreach (StreetBlock placed in placedBlocks)
-        {
-            if (placed != null && placed.FloorRoot != null)
-                floors.Add(placed.FloorRoot);
-        }
+        List<Transform> floors = PlacedFloors();
         var overlaps = new Collider[32];
-
-        Vector3 LocalAt(int x, int z) => new Vector3(-half.x + x * step, 0f, -half.y + z * step);
 
         for (int x = 0; x < countX; x++)
         {
             for (int z = 0; z < countZ; z++)
             {
-                Vector3 world = block.transform.TransformPoint(LocalAt(x, z));
+                Vector3 world = block.transform.TransformPoint(grid.LocalAt(x, z));
                 float groundY = world.y;
                 if (hasFloorColliders)
                 {
@@ -1012,15 +1193,7 @@ public sealed class MapManager : MonoBehaviour
                 int count = Physics.OverlapCapsuleNonAlloc(bottom, top, spawnClearanceRadius, overlaps, ~0, QueryTriggerInteraction.Ignore);
                 bool blocked = false;
                 for (int c = 0; c < count && !blocked; c++)
-                {
-                    Transform hit = overlaps[c].transform;
-                    if (!hit.IsChildOf(generatedRoot))
-                        continue;
-                    bool isFloor = false;
-                    foreach (Transform floor in floors)
-                        isFloor |= hit.IsChildOf(floor);
-                    blocked = !isFloor;
-                }
+                    blocked = IsGeneratedSolid(overlaps[c], floors);
                 if (blocked)
                     continue;
                 free[x, z] = true;
@@ -1029,8 +1202,8 @@ public sealed class MapManager : MonoBehaviour
         }
 
         // Keep only floor reachable from the entrance (or the centre if the block has none), so no point is walled in.
-        Vector3 entrance = block.Entrances.Count > 0 ? block.Entrances[0].LocalCenter : Vector3.zero;
-        var reachable = new bool[countX, countZ];
+        Vector3 entrance = grid.Entrance;
+        var reachable = grid.Reachable = new bool[countX, countZ];
         var queue = new Queue<Vector2Int>();
         float bestStart = float.MaxValue;
         Vector2Int nearest = new Vector2Int(-1, -1);
@@ -1040,7 +1213,7 @@ public sealed class MapManager : MonoBehaviour
             {
                 if (!free[x, z])
                     continue;
-                float distance = Vector3.Distance(LocalAt(x, z), new Vector3(entrance.x, 0f, entrance.z));
+                float distance = Vector3.Distance(grid.LocalAt(x, z), new Vector3(entrance.x, 0f, entrance.z));
                 if (distance <= 1.5f)
                 {
                     reachable[x, z] = true;
@@ -1053,6 +1226,7 @@ public sealed class MapManager : MonoBehaviour
                 }
             }
         }
+        grid.SeededFromEntrance = queue.Count > 0;
         if (queue.Count == 0 && nearest.x >= 0)
         {
             reachable[nearest.x, nearest.y] = true;
@@ -1071,21 +1245,52 @@ public sealed class MapManager : MonoBehaviour
                 queue.Enqueue(next);
             }
         }
+        return grid;
+    }
 
-        var cells = new List<Vector2Int>();
-        for (int x = 0; x < countX; x++)
+    private List<Transform> PlacedFloors()
+    {
+        var floors = new List<Transform>();
+        foreach (StreetBlock placed in placedBlocks)
         {
-            for (int z = 0; z < countZ; z++)
+            if (placed != null && placed.FloorRoot != null)
+                floors.Add(placed.FloorRoot);
+        }
+        return floors;
+    }
+
+    private bool IsGeneratedSolid(Collider collider, List<Transform> floors)
+    {
+        if (collider.isTrigger || !collider.transform.IsChildOf(generatedRoot))
+            return false;
+        foreach (Transform floor in floors)
+        {
+            if (collider.transform.IsChildOf(floor))
+                return false;
+        }
+        return true;
+    }
+
+    /// <summary>Spawn points in block space, nearest the block centre first.</summary>
+    private List<(Vector3 position, Quaternion rotation)> FindSpawnPoints(StreetBlock block, SpawnGrid grid)
+    {
+        const float lift = 0.05f;
+        var result = new List<(Vector3, Quaternion)>();
+        Vector3 entrance = grid.Entrance;
+        var cells = new List<Vector2Int>();
+        for (int x = 0; x < grid.CountX; x++)
+        {
+            for (int z = 0; z < grid.CountZ; z++)
             {
-                if (reachable[x, z])
+                if (grid.Reachable[x, z])
                     cells.Add(new Vector2Int(x, z));
             }
         }
-        cells.Sort((a, b) => LocalAt(a.x, a.y).sqrMagnitude.CompareTo(LocalAt(b.x, b.y).sqrMagnitude));
+        cells.Sort((a, b) => grid.LocalAt(a.x, a.y).sqrMagnitude.CompareTo(grid.LocalAt(b.x, b.y).sqrMagnitude));
 
         foreach (Vector2Int cell in cells)
         {
-            Vector3 local = LocalAt(cell.x, cell.y);
+            Vector3 local = grid.LocalAt(cell.x, cell.y);
             bool spaced = true;
             foreach ((Vector3 position, Quaternion _) in result)
                 spaced &= new Vector2(position.x - local.x, position.z - local.z).magnitude >= spawnPointSpacing - 0.001f;
@@ -1093,11 +1298,174 @@ public sealed class MapManager : MonoBehaviour
                 continue;
             Vector3 facing = new Vector3(entrance.x - local.x, 0f, entrance.z - local.z);
             Quaternion rotation = facing.sqrMagnitude > 0.01f ? Quaternion.LookRotation(facing) : Quaternion.identity;
-            result.Add((new Vector3(local.x, heights[cell.x, cell.y] + lift, local.z), rotation));
+            result.Add((new Vector3(local.x, grid.Heights[cell.x, cell.y] + lift, local.z), rotation));
             if (result.Count >= spawnPointCount)
                 break;
         }
         return result;
+    }
+
+    /// <summary>
+    /// Parks the jeepney on free, reachable floor of the spawn block: as far from the entrance as fits, axis-aligned with
+    /// its back (local -Z) towards the block centre, keeping <see cref="jeepneyRearClearance"/> of reachable floor behind
+    /// it. Each pose is verified by re-checking reachability with the jeepney in place: the entrance, the floor behind its
+    /// back and the spawn points must stay reachable and it must not cover <paramref name="keepClear"/> (block space).
+    /// Deterministic (local physics only), so every peer parks it in the same spot.
+    /// </summary>
+    private GameObject PlaceJeepney(StreetBlock block, List<Vector3> keepClear)
+    {
+        var holder = new GameObject("Jeepney Measure");
+        holder.SetActive(false);
+        GameObject jeepney = Instantiate(jeepneyPrefab, holder.transform);
+        jeepney.name = jeepneyPrefab.name;
+        jeepney.transform.localPosition = Vector3.zero;
+        jeepney.transform.localRotation = Quaternion.identity;
+        jeepney.transform.localScale = Vector3.one;
+        if (!TryMeasure(jeepney, jeepney.transform, out Bounds footprint))
+        {
+            DestroyImmediate(holder);
+            Debug.LogWarning($"Jeepney prefab '{jeepneyPrefab.name}' has no renderers or colliders to measure.", this);
+            return null;
+        }
+
+        SpawnGrid baseline = BuildSpawnGrid(block);
+        int baselinePoints = generateSpawnPoints ? FindSpawnPoints(block, baseline).Count : 0;
+        List<Transform> floors = PlacedFloors();
+        const float margin = 0.1f;
+        Vector3 extents = footprint.extents + new Vector3(margin, 0f, margin);
+        Vector3 entrance = new Vector3(baseline.Entrance.x, 0f, baseline.Entrance.z);
+
+        bool InFootprint(Vector3 local, Vector3 position, Quaternion yaw, float grow)
+        {
+            Vector3 p = Quaternion.Inverse(yaw) * (local - position) - footprint.center;
+            return Mathf.Abs(p.x) <= extents.x + grow && Mathf.Abs(p.z) <= extents.z + grow;
+        }
+        bool InRear(Vector3 local, Vector3 position, Quaternion yaw)
+        {
+            Vector3 p = Quaternion.Inverse(yaw) * (local - position);
+            return Mathf.Abs(p.x - footprint.center.x) <= footprint.extents.x &&
+                p.z < footprint.min.z - margin && p.z >= footprint.min.z - margin - jeepneyRearClearance;
+        }
+        Vector3 RearSpot(Vector3 position, Quaternion yaw) =>
+            position + yaw * new Vector3(footprint.center.x, 0f, footprint.min.z - margin - Mathf.Min(0.75f, jeepneyRearClearance));
+
+        var candidates = new List<(Vector3 position, Quaternion yaw, float score)>();
+        for (int x = 0; x < baseline.CountX; x += 2)
+        {
+            for (int z = 0; z < baseline.CountZ; z += 2)
+            {
+                if (!baseline.Reachable[x, z])
+                    continue;
+                Vector3 position = baseline.LocalAt(x, z);
+                Vector3 away = new Vector3(position.x, 0f, position.z);
+                if (away.sqrMagnitude < 0.01f)
+                    away = -entrance;
+                if (away.sqrMagnitude < 0.01f)
+                    away = Vector3.forward;
+                // Facing away from the centre (back towards it) along the nearest axes.
+                Vector3 major = Mathf.Abs(away.x) >= Mathf.Abs(away.z) ? new Vector3(Mathf.Sign(away.x), 0f, 0f) : new Vector3(0f, 0f, Mathf.Sign(away.z));
+                Vector3 minor = Mathf.Abs(away.x) >= Mathf.Abs(away.z) ? new Vector3(0f, 0f, away.z >= 0f ? 1f : -1f) : new Vector3(away.x >= 0f ? 1f : -1f, 0f, 0f);
+                foreach (Vector3 forward in new[] { major, minor })
+                {
+                    Quaternion yaw = Quaternion.LookRotation(forward);
+                    if (!FitsJeepney(block, baseline, floors, footprint, position, yaw, InFootprint, InRear, keepClear, entrance))
+                        continue;
+                    float score = Vector3.Distance(position, entrance) + (forward == major ? 0.25f : 0f);
+                    candidates.Add((position, yaw, score));
+                }
+            }
+        }
+        candidates.Sort((a, b) => b.score.CompareTo(a.score));
+
+        const int maxVerified = 12;
+        jeepney.transform.SetParent(block.transform, false);
+        jeepney.SetActive(false);
+        DestroyImmediate(holder);
+        for (int c = 0; c < candidates.Count && c < maxVerified; c++)
+        {
+            (Vector3 position, Quaternion yaw, float _) = candidates[c];
+            baseline.TryCell(position, out Vector2Int cell);
+            float height = baseline.Heights[cell.x, cell.y];
+            jeepney.transform.localPosition = new Vector3(position.x, height - footprint.min.y, position.z);
+            jeepney.transform.localRotation = yaw;
+            jeepney.SetActive(true);
+            Physics.SyncTransforms();
+
+            SpawnGrid after = BuildSpawnGrid(block);
+            bool rearReachable = after.TryCell(RearSpot(position, yaw), out Vector2Int rear) && after.Reachable[rear.x, rear.y];
+            bool pointsFit = !generateSpawnPoints || FindSpawnPoints(block, after).Count >= Mathf.Min(spawnPointCount, baselinePoints);
+            if (after.SeededFromEntrance && rearReachable && pointsFit)
+            {
+                jeepney.name = $"{jeepneyPrefab.name} (Generated)";
+                return jeepney;
+            }
+            jeepney.SetActive(false);
+        }
+        DestroyImmediate(jeepney);
+        Physics.SyncTransforms();
+        return null;
+    }
+
+    private bool FitsJeepney(StreetBlock block, SpawnGrid grid, List<Transform> floors, Bounds footprint, Vector3 position, Quaternion yaw,
+        Func<Vector3, Vector3, Quaternion, float, bool> inFootprint, Func<Vector3, Vector3, Quaternion, bool> inRear,
+        List<Vector3> keepClear, Vector3 entrance)
+    {
+        // Inside the block, clear of the entrance opening and of points that must stay free.
+        for (int corner = 0; corner < 4; corner++)
+        {
+            Vector3 local = new Vector3(corner % 2 == 0 ? footprint.min.x : footprint.max.x, 0f, corner < 2 ? footprint.min.z : footprint.max.z);
+            Vector3 point = position + yaw * local;
+            if (Mathf.Abs(point.x) > grid.Half.x || Mathf.Abs(point.z) > grid.Half.y)
+                return false;
+        }
+        if (inFootprint(entrance, position, yaw, 2f))
+            return false;
+        foreach (Vector3 point in keepClear)
+        {
+            if (inFootprint(new Vector3(point.x, 0f, point.z), position, yaw, spawnClearanceRadius))
+                return false;
+        }
+
+        // Its footprint lies on reachable floor and the floor behind its back stays reachable.
+        int covered = 0;
+        int rearCells = 0;
+        float minHeight = float.MaxValue;
+        float maxHeight = float.MinValue;
+        for (int x = 0; x < grid.CountX; x++)
+        {
+            for (int z = 0; z < grid.CountZ; z++)
+            {
+                Vector3 local = grid.LocalAt(x, z);
+                if (inFootprint(local, position, yaw, 0f))
+                {
+                    if (!grid.Reachable[x, z])
+                        return false;
+                    covered++;
+                    minHeight = Mathf.Min(minHeight, grid.Heights[x, z]);
+                    maxHeight = Mathf.Max(maxHeight, grid.Heights[x, z]);
+                }
+                else if (inRear(local, position, yaw))
+                {
+                    if (!grid.Reachable[x, z])
+                        return false;
+                    rearCells++;
+                }
+            }
+        }
+        if (covered == 0 || rearCells == 0 || maxHeight - minHeight > 0.3f)
+            return false;
+
+        // Nothing solid (e.g. thin props the player grid slips past) inside the body.
+        grid.TryCell(position, out Vector2Int cell);
+        Vector3 center = position + yaw * footprint.center;
+        center.y = grid.Heights[cell.x, cell.y] + footprint.extents.y + 0.1f;
+        Vector3 half = new Vector3(footprint.extents.x, Mathf.Max(0.05f, footprint.extents.y - 0.05f), footprint.extents.z);
+        foreach (Collider hit in Physics.OverlapBox(block.transform.TransformPoint(center), half, block.transform.rotation * yaw, ~0, QueryTriggerInteraction.Ignore))
+        {
+            if (IsGeneratedSolid(hit, floors))
+                return false;
+        }
+        return true;
     }
 
     private void FindNeighbours(IReadOnlyList<MapBlockPlacement> layout)
@@ -1130,6 +1498,255 @@ public sealed class MapManager : MonoBehaviour
         float overlapY = Mathf.Min(a.yMax, b.yMax) - Mathf.Max(a.yMin, b.yMin);
         // Edge contact: touching on one axis while sharing a real length along the other.
         return (Mathf.Abs(overlapX) <= epsilon && overlapY > epsilon) || (Mathf.Abs(overlapY) <= epsilon && overlapX > epsilon);
+    }
+
+    private Rect WorldFootprint(int index)
+    {
+        StreetBlock block = placedBlocks[index];
+        Vector2 size = block.Size;
+        if (Mathf.Abs(Vector3.Dot(block.transform.right, Vector3.right)) < 0.5f)
+            size = new Vector2(size.y, size.x);
+        Vector3 center = block.transform.position;
+        return new Rect(new Vector2(center.x, center.z) - size * 0.5f, size);
+    }
+
+    /// <summary>
+    /// Removes the tagged edge walls (<see cref="StreetEdgeWall"/>) of every pair of touching town blocks along the stretch
+    /// they share, so the town reads as one open area. Walls facing non-town blocks or the map's outside stay.
+    /// </summary>
+    private void OpenTownSeams(IReadOnlyList<MapBlockPlacement> layout)
+    {
+        const float epsilon = 0.05f;
+        openSeams.Clear();
+        for (int a = 0; a < placedBlocks.Count; a++)
+        {
+            if (!IsTown(a))
+                continue;
+            foreach (int b in neighbours[a])
+            {
+                if (b <= a || !IsTown(b))
+                    continue;
+                Rect ra = WorldFootprint(a);
+                Rect rb = WorldFootprint(b);
+                Vector3 outwardA;
+                float line;
+                float min;
+                float max;
+                bool alongZ;
+                if (Mathf.Abs(ra.xMax - rb.xMin) <= epsilon || Mathf.Abs(rb.xMax - ra.xMin) <= epsilon)
+                {
+                    bool right = Mathf.Abs(ra.xMax - rb.xMin) <= epsilon;
+                    outwardA = right ? Vector3.right : Vector3.left;
+                    line = right ? ra.xMax : ra.xMin;
+                    min = Mathf.Max(ra.yMin, rb.yMin);
+                    max = Mathf.Min(ra.yMax, rb.yMax);
+                    alongZ = true;
+                }
+                else
+                {
+                    bool up = Mathf.Abs(ra.yMax - rb.yMin) <= epsilon;
+                    outwardA = up ? Vector3.forward : Vector3.back;
+                    line = up ? ra.yMax : ra.yMin;
+                    min = Mathf.Max(ra.xMin, rb.xMin);
+                    max = Mathf.Min(ra.xMax, rb.xMax);
+                    alongZ = false;
+                }
+                if (max - min <= epsilon)
+                    continue;
+
+                RemoveEdgeWalls(placedBlocks[a], outwardA, alongZ, min, max);
+                RemoveEdgeWalls(placedBlocks[b], -outwardA, alongZ, min, max);
+                float y = Mathf.Max(placedBlocks[a].transform.position.y, placedBlocks[b].transform.position.y);
+                openSeams.Add(alongZ
+                    ? new[] { new Vector3(line, y, min), new Vector3(line, y, max) }
+                    : new[] { new Vector3(min, y, line), new Vector3(max, y, line) });
+            }
+        }
+    }
+
+    private static void RemoveEdgeWalls(StreetBlock block, Vector3 worldOutward, bool alongZ, float min, float max)
+    {
+        foreach (StreetEdgeWall wall in block.GetComponentsInChildren<StreetEdgeWall>(true))
+        {
+            Vector3 outward = block.transform.TransformDirection(wall.Side.Outward());
+            if (Vector3.Dot(outward, worldOutward) < 0.9f)
+                continue;
+            Vector3 center = WorldCenter(wall.gameObject);
+            float along = alongZ ? center.z : center.x;
+            if (along >= min - 0.01f && along <= max + 0.01f)
+                DestroyImmediate(wall.gameObject);
+        }
+    }
+
+    private static Vector3 WorldCenter(GameObject target)
+    {
+        bool any = false;
+        Bounds bounds = default;
+        foreach (Renderer renderer in target.GetComponentsInChildren<Renderer>(true))
+        {
+            if (!any) bounds = renderer.bounds; else bounds.Encapsulate(renderer.bounds);
+            any = true;
+        }
+        if (!any)
+        {
+            foreach (BoxCollider box in target.GetComponentsInChildren<BoxCollider>(true))
+            {
+                Vector3 center = box.transform.TransformPoint(box.center);
+                if (!any) bounds = new Bounds(center, Vector3.zero); else bounds.Encapsulate(center);
+                any = true;
+            }
+        }
+        return any ? bounds.center : target.transform.position;
+    }
+
+    /// <summary>
+    /// Floor points (0.5 m grid, at floor height) inside block <paramref name="blockIndex"/> where a player-sized capsule
+    /// stands free and that a player can walk to from the spawn block. Entrance obstacles are ignored (they open later),
+    /// so blocks sealed behind gates still count, but gaps behind or between buildings that nobody fits through do not.
+    /// Computed once per build; empty if there is no spawn block or floor.
+    /// </summary>
+    public IReadOnlyList<Vector3> GetReachableFloor(int blockIndex)
+    {
+        if (blockIndex < 0 || blockIndex >= placedBlocks.Count)
+            return Array.Empty<Vector3>();
+        if (reachableFloor == null || reachableFloor.Length != placedBlocks.Count)
+            reachableFloor = BuildReachableFloor();
+        return reachableFloor[blockIndex];
+    }
+
+    private List<Vector3>[] BuildReachableFloor()
+    {
+        const float step = 0.5f;
+        const float lift = 0.05f;
+        var result = new List<Vector3>[placedBlocks.Count];
+        for (int i = 0; i < result.Length; i++)
+            result[i] = new List<Vector3>();
+        if (placedBlocks.Count == 0 || generatedRoot == null)
+            return result;
+
+        Physics.SyncTransforms();
+        Rect area = WorldFootprint(0);
+        for (int i = 1; i < placedBlocks.Count; i++)
+        {
+            Rect r = WorldFootprint(i);
+            area = Rect.MinMaxRect(Mathf.Min(area.xMin, r.xMin), Mathf.Min(area.yMin, r.yMin), Mathf.Max(area.xMax, r.xMax), Mathf.Max(area.yMax, r.yMax));
+        }
+        int countX = Mathf.FloorToInt(area.width / step);
+        int countZ = Mathf.FloorToInt(area.height / step);
+        var blockOf = new int[countX, countZ];
+        var heights = new float[countX, countZ];
+        List<Transform> floors = PlacedFloors();
+        var overlaps = new Collider[32];
+        Vector3 At(int x, int z) => new Vector3(area.xMin + (x + 0.5f) * step, 0f, area.yMin + (z + 0.5f) * step);
+
+        for (int x = 0; x < countX; x++)
+        {
+            for (int z = 0; z < countZ; z++)
+            {
+                blockOf[x, z] = -1;
+                Vector3 world = At(x, z);
+                if (!TryGetBlockIndex(world, out int block))
+                    continue;
+                world.y = placedBlocks[block].transform.position.y;
+                bool grounded = false;
+                float groundY = world.y;
+                foreach (RaycastHit hit in Physics.RaycastAll(world + Vector3.up * 1.5f, Vector3.down, 3f, ~0, QueryTriggerInteraction.Ignore))
+                {
+                    bool onFloor = false;
+                    foreach (Transform floor in floors)
+                        onFloor |= hit.collider.transform.IsChildOf(floor);
+                    if (onFloor && (!grounded || hit.point.y > groundY))
+                    {
+                        groundY = hit.point.y;
+                        grounded = true;
+                    }
+                }
+                if (!grounded)
+                    continue;
+                Vector3 bottom = new Vector3(world.x, groundY + spawnClearanceRadius + lift, world.z);
+                Vector3 top = new Vector3(world.x, groundY + Mathf.Max(spawnClearanceHeight - spawnClearanceRadius, spawnClearanceRadius + lift), world.z);
+                int count = Physics.OverlapCapsuleNonAlloc(bottom, top, spawnClearanceRadius, overlaps, ~0, QueryTriggerInteraction.Ignore);
+                bool blocked = false;
+                for (int c = 0; c < count && !blocked; c++)
+                    blocked = IsGeneratedSolid(overlaps[c], floors) && overlaps[c].GetComponentInParent<EntranceObstacle>(true) == null;
+                if (blocked)
+                    continue;
+                blockOf[x, z] = block;
+                heights[x, z] = groundY;
+            }
+        }
+
+        // Flood from the spawn block's entrances (else its nearest free cell to the centre).
+        var reached = new bool[countX, countZ];
+        var queue = new Queue<Vector2Int>();
+        for (int i = 0; i < placedBlocks.Count; i++)
+        {
+            if (GetRole(i) != MapBlockRole.Spawn || placedBlocks[i] == null)
+                continue;
+            var seeds = new List<Vector3>();
+            foreach (StreetBlockEntrance entrance in placedBlocks[i].Entrances)
+                seeds.Add(placedBlocks[i].transform.TransformPoint(entrance.LocalCenter));
+            float best = float.MaxValue;
+            Vector2Int nearest = new Vector2Int(-1, -1);
+            for (int x = 0; x < countX; x++)
+            {
+                for (int z = 0; z < countZ; z++)
+                {
+                    if (blockOf[x, z] < 0)
+                        continue;
+                    Vector3 cell = At(x, z);
+                    foreach (Vector3 seed in seeds)
+                    {
+                        if (new Vector2(cell.x - seed.x, cell.z - seed.z).magnitude <= 1.5f && !reached[x, z])
+                        {
+                            reached[x, z] = true;
+                            queue.Enqueue(new Vector2Int(x, z));
+                        }
+                    }
+                    if (blockOf[x, z] == i)
+                    {
+                        Vector3 offset = cell - placedBlocks[i].transform.position;
+                        float distance = new Vector2(offset.x, offset.z).magnitude;
+                        if (distance < best)
+                        {
+                            best = distance;
+                            nearest = new Vector2Int(x, z);
+                        }
+                    }
+                }
+            }
+            if (nearest.x >= 0 && !reached[nearest.x, nearest.y])
+            {
+                reached[nearest.x, nearest.y] = true;
+                queue.Enqueue(nearest);
+            }
+        }
+        var directions = new[] { Vector2Int.right, Vector2Int.left, Vector2Int.up, Vector2Int.down };
+        while (queue.Count > 0)
+        {
+            Vector2Int current = queue.Dequeue();
+            foreach (Vector2Int direction in directions)
+            {
+                Vector2Int next = current + direction;
+                if (next.x < 0 || next.y < 0 || next.x >= countX || next.y >= countZ || blockOf[next.x, next.y] < 0 || reached[next.x, next.y] ||
+                    Mathf.Abs(heights[next.x, next.y] - heights[current.x, current.y]) > 0.6f)
+                    continue;
+                reached[next.x, next.y] = true;
+                queue.Enqueue(next);
+            }
+        }
+        for (int x = 0; x < countX; x++)
+        {
+            for (int z = 0; z < countZ; z++)
+            {
+                if (reached[x, z])
+                {
+                    Vector3 cell = At(x, z);
+                    result[blockOf[x, z]].Add(new Vector3(cell.x, heights[x, z], cell.z));
+                }
+            }
+        }
+        return result;
     }
 
     /// <summary>
@@ -1311,10 +1928,15 @@ public sealed class MapManager : MonoBehaviour
         }
 
         generatedRoot = null;
+        PlacedJeepney = null;
         placedBlocks.Clear();
         placedFillers.Clear();
+        pluggedCells.Clear();
         PluggedCellCount = 0;
         jointBarricades.Clear();
+        openSeams.Clear();
+        reachableFloor = null;
+        IsTownLayout = false;
         neighbours.Clear();
         joints.Clear();
         if (navMeshInstance.valid)

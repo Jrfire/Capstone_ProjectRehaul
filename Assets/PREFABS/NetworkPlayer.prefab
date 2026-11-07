@@ -308,6 +308,7 @@ GameObject:
   - component: {fileID: 6274240498741786122}
   - component: {fileID: 4732015065427294672}
   - component: {fileID: 5180342271938475501}
+  - component: {fileID: 6617415543920518477}
   m_Layer: 0
   m_Name: NetworkPlayer
   m_TagString: Untagged
@@ -345,7 +346,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Mirror::Mirror.NetworkIdentity
   sceneId: 0
-  _assetId: 1952560444
+  _assetId: 0
   serverOnly: 0
   visibility: 0
   hasSpawned: 0
@@ -480,6 +481,7 @@ MonoBehaviour:
   inputActions: {fileID: -944628639613478452, guid: 052faaac586de48259a63d0c4782560b, type: 3}
   playerCamera: {fileID: 8864935223497675231}
   useDistance: 3.5
+  nametagDistance: 12
   interactionLayers:
     serializedVersion: 2
     m_Bits: 4294967291
@@ -598,6 +600,39 @@ MonoBehaviour:
   occlusionMask:
     serializedVersion: 2
     m_Bits: 4294967291
+--- !u!114 &5180342271938475501
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3831809166821954726}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a3f1c2d4e5b64a7f8c9d0e1f2a3b4c51, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Capstone.Player::PlayerName
+  syncDirection: 0
+  syncMode: 0
+  syncInterval: 0
+--- !u!114 &6617415543920518477
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3831809166821954726}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 69c9d6ef1084f3041a8f768f31e4596d, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Capstone.Player::PlayerInventory
+  syncDirection: 0
+  syncMode: 0
+  syncInterval: 0
+  inputActions: {fileID: -944628639613478452, guid: 052faaac586de48259a63d0c4782560b, type: 3}
+  catalog: {fileID: 11400000, guid: f6d4380c2cad5134f80a3a4bf1ed2b43, type: 2}
+  invertScroll: 0
 --- !u!1 &5437688195085614544
 GameObject:
   m_ObjectHideFlags: 0
@@ -702,8 +737,8 @@ Light:
   serializedVersion: 12
   m_Type: 0
   m_Color: {r: 1, g: 0.94, b: 0.82, a: 1}
-  m_Intensity: 8
-  m_Range: 30
+  m_Intensity: 10
+  m_Range: 32
   m_SpotAngle: 45.018585
   m_InnerSpotAngle: 30.018587
   m_CookieSize2D: {x: 0.5, y: 0.5}
@@ -1013,19 +1048,3 @@ Transform:
   - {fileID: 88488948288432510}
   m_Father: {fileID: 2869025832819141841}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &5180342271938475501
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 3831809166821954726}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: a3f1c2d4e5b64a7f8c9d0e1f2a3b4c51, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Capstone.Player::PlayerName
-  syncDirection: 0
-  syncMode: 0
-  syncInterval: 0
-  playerName: 

@@ -18,6 +18,8 @@ public struct AgimatStateMessage : NetworkMessage
     public int turnedIn;
     public int quota;
     public int round;
+    public int money;
+    public int roundReward;
 }
 
 /// <summary>Client request to sacrifice one agimat of a type at an Albularyo.</summary>
@@ -27,11 +29,12 @@ public struct AgimatSacrificeRequest : NetworkMessage
 }
 
 /// <summary>
-/// Global agimat inventory shared by every player (gold, silver and bronze counts), on the persistent NetworkManager
-/// object. Host-authoritative: the server changes it and broadcasts <see cref="AgimatStateMessage"/>. Counts persist
-/// across scenes and rounds and reset only with the game (<see cref="RoundClock.ServerGameReset"/>). Sacrificing at the
-/// Albularyo adds to the round's turned-in count; reaching the quota (<see cref="QuotaFor"/>) completes the round
-/// (timer reset, quota raised) and clears the turned-in count.
+/// Global agimat inventory and money (pesos) shared by every player (gold, silver and bronze counts), on the persistent
+/// NetworkManager object. Host-authoritative: the server changes it and broadcasts <see cref="AgimatStateMessage"/>.
+/// Counts and money persist across scenes and rounds and reset only with the game
+/// (<see cref="RoundClock.ServerGameReset"/>); a team wipe away from base halves both. Sacrificing at the Albularyo pays
+/// that type's reward and adds to the round's turned-in count; reaching the quota (<see cref="QuotaFor"/>) completes the
+/// round (timer reset, quota raised) and clears the turned-in count and round reward.
 /// </summary>
 [DisallowMultipleComponent]
 public sealed class AgimatBank : MonoBehaviour
@@ -40,9 +43,21 @@ public sealed class AgimatBank : MonoBehaviour
 
     [SerializeField, Min(1f), Tooltip("Players must be within this distance of an Albularyo for the host to accept a sacrifice.")]
     private float sacrificeRange = 6f;
+    [SerializeField, Min(1f), Tooltip("Players must be within this distance of an agimat pickup for the host to accept picking it up.")]
+    private float pickupRange = 5f;
+
+    [Header("Rewards (pesos per sacrificed agimat)")]
+    [SerializeField, Min(0)] private int goldReward = 20;
+    [SerializeField, Min(0)] private int silverReward = 10;
+    [SerializeField, Min(0)] private int bronzeReward = 5;
+
+    /// <summary>The Philippine peso sign (₱).</summary>
+    public const string PesoSign = "\u20B1";
 
     private readonly int[] serverCounts = new int[TypeCount];
     private int serverTurnedIn;
+    private int serverMoney;
+    private int serverRoundReward;
     private RoundClock subscribedClock;
     private int lastSentQuota = -1;
 
@@ -59,6 +74,10 @@ public sealed class AgimatBank : MonoBehaviour
     private bool UseServerState => NetworkServer.active || !clientHasState;
 
     public int TurnedIn => UseServerState ? serverTurnedIn : clientState.turnedIn;
+    /// <summary>Shared money in pesos.</summary>
+    public int Money => UseServerState ? serverMoney : clientState.money;
+    /// <summary>Pesos earned from this round's sacrifices so far (cleared with the turned-in count).</summary>
+    public int RoundReward => UseServerState ? serverRoundReward : clientState.roundReward;
     public int Quota => UseServerState ? QuotaFor(CurrentRound) : clientState.quota;
     public int Total => Count(AgimatType.Gold) + Count(AgimatType.Silver) + Count(AgimatType.Bronze);
     /// <summary>True while turned-in plus held agimats can still meet this round's quota.</summary>
@@ -80,6 +99,20 @@ public sealed class AgimatBank : MonoBehaviour
             default: return clientState.bronze;
         }
     }
+
+    /// <summary>Pesos paid for sacrificing one agimat of a type (gold 20, silver 10, bronze 5 by default).</summary>
+    public int RewardFor(AgimatType type)
+    {
+        switch (type)
+        {
+            case AgimatType.Gold: return goldReward;
+            case AgimatType.Silver: return silverReward;
+            case AgimatType.Bronze: return bronzeReward;
+            default: return 0;
+        }
+    }
+
+    public static string FormatPeso(int amount) => PesoSign + amount;
 
     /// <summary>
     /// Agimats to sacrifice in a round: 5, 7, 11, 19, 35... (3 + 2^round; each round adds twice the previous increase).
@@ -139,6 +172,7 @@ public sealed class AgimatBank : MonoBehaviour
     public void RegisterServerHandlers()
     {
         NetworkServer.ReplaceHandler<AgimatSacrificeRequest>(OnServerSacrifice);
+        NetworkServer.ReplaceHandler<AgimatPickupRequest>(OnServerPickup);
         Subscribe();
         Broadcast();
     }
@@ -148,6 +182,8 @@ public sealed class AgimatBank : MonoBehaviour
         Unsubscribe();
         Array.Clear(serverCounts, 0, TypeCount);
         serverTurnedIn = 0;
+        serverMoney = 0;
+        serverRoundReward = 0;
         lastSentQuota = -1;
     }
 
@@ -174,6 +210,7 @@ public sealed class AgimatBank : MonoBehaviour
             return;
         clock.QuotaReachable = () => QuotaReachable;
         clock.ServerGameReset += OnServerGameReset;
+        clock.ServerAllPlayersDied += ServerHalveForTeamWipe;
     }
 
     private void Unsubscribe()
@@ -182,6 +219,7 @@ public sealed class AgimatBank : MonoBehaviour
             return;
         subscribedClock.QuotaReachable = null;
         subscribedClock.ServerGameReset -= OnServerGameReset;
+        subscribedClock.ServerAllPlayersDied -= ServerHalveForTeamWipe;
         subscribedClock = null;
     }
 
@@ -192,6 +230,39 @@ public sealed class AgimatBank : MonoBehaviour
         if (!NetworkServer.active || index < 0 || index >= TypeCount || amount == 0)
             return;
         serverCounts[index] = Mathf.Max(0, serverCounts[index] + amount);
+        Broadcast();
+    }
+
+    /// <summary>Server: adds pesos to the shared money. Negative amounts remove them (never below zero).</summary>
+    public void ServerAddMoney(int amount)
+    {
+        if (!NetworkServer.active || amount == 0)
+            return;
+        serverMoney = Mathf.Max(0, serverMoney + amount);
+        Broadcast();
+    }
+
+    /// <summary>Server: spends pesos if the team has enough (for a future store). Returns false otherwise.</summary>
+    public bool ServerTrySpend(int amount)
+    {
+        if (!NetworkServer.active || amount < 0 || serverMoney < amount)
+            return false;
+        serverMoney -= amount;
+        Broadcast();
+        return true;
+    }
+
+    /// <summary>
+    /// Server: the team-wipe penalty (every player died away from base): each agimat type and the money are halved,
+    /// rounding down. Turned-in agimats are kept.
+    /// </summary>
+    public void ServerHalveForTeamWipe()
+    {
+        if (!NetworkServer.active)
+            return;
+        for (int index = 0; index < TypeCount; index++)
+            serverCounts[index] /= 2;
+        serverMoney /= 2;
         Broadcast();
     }
 
@@ -212,10 +283,14 @@ public sealed class AgimatBank : MonoBehaviour
 
         serverCounts[index]--;
         serverTurnedIn++;
+        int reward = RewardFor(type);
+        serverMoney += reward;
+        serverRoundReward += reward;
         ServerSacrificed?.Invoke(type, serverTurnedIn);
         if (serverTurnedIn >= Quota)
         {
             serverTurnedIn = 0;
+            serverRoundReward = 0;
             if (clock != null)
                 clock.ServerCompleteRound();
         }
@@ -236,10 +311,27 @@ public sealed class AgimatBank : MonoBehaviour
         ServerSacrifice(request.type);
     }
 
+    private void OnServerPickup(NetworkConnectionToClient connection, AgimatPickupRequest request)
+    {
+        if (connection?.identity == null || !NetworkServer.spawned.TryGetValue(request.netId, out NetworkIdentity target) ||
+            target == null || !target.TryGetComponent(out AgimatPickup pickup))
+            return;
+        if (connection.identity.TryGetComponent(out PlayerHealth health) && health.IsDead)
+            return;
+        if ((pickup.transform.position - connection.identity.transform.position).sqrMagnitude > pickupRange * pickupRange)
+        {
+            Debug.LogWarning($"Rejected agimat pickup from connection {connection.connectionId}: too far away.", this);
+            return;
+        }
+        pickup.ServerCollect();
+    }
+
     private void OnServerGameReset()
     {
         Array.Clear(serverCounts, 0, TypeCount);
         serverTurnedIn = 0;
+        serverMoney = 0;
+        serverRoundReward = 0;
         Broadcast();
     }
 
@@ -261,7 +353,12 @@ public sealed class AgimatBank : MonoBehaviour
         turnedIn = serverTurnedIn,
         quota = QuotaFor(CurrentRound),
         round = CurrentRound,
+        money = serverMoney,
+        roundReward = serverRoundReward,
     };
+
+    [ContextMenu("Debug/Add 100 Pesos")]
+    private void DebugAddMoney() => ServerAddMoney(100);
 
     [ContextMenu("Debug/Add 1 Gold Agimat")]
     private void DebugAddGold() => ServerAdd(AgimatType.Gold, 1);

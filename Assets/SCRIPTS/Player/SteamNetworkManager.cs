@@ -11,6 +11,7 @@ public sealed class SteamNetworkManager : NetworkManager
     private TravelDirector Travel => TryGetComponent(out TravelDirector director) && director.enabled ? director : null;
     private RoundClock Clock => TryGetComponent(out RoundClock clock) && clock.enabled ? clock : null;
     private AgimatBank Agimats => TryGetComponent(out AgimatBank bank) && bank.enabled ? bank : null;
+    private WhiteLadyDirector WhiteLady => TryGetComponent(out WhiteLadyDirector director) && director.enabled ? director : null;
 
     public override void OnStartHost()
     {
@@ -25,6 +26,7 @@ public sealed class SteamNetworkManager : NetworkManager
         Travel?.RegisterServerHandlers();
         Clock?.RegisterServerHandlers();
         Agimats?.RegisterServerHandlers();
+        WhiteLady?.RegisterServerHandlers();
     }
 
     public override void OnStartClient()
@@ -36,6 +38,7 @@ public sealed class SteamNetworkManager : NetworkManager
         Travel?.RegisterClientHandlers();
         Clock?.RegisterClientHandlers();
         Agimats?.RegisterClientHandlers();
+        WhiteLady?.RegisterClientHandlers();
     }
 
     public override void OnClientConnect()
@@ -101,6 +104,7 @@ public sealed class SteamNetworkManager : NetworkManager
         Travel?.ResetServer();
         Clock?.ResetServer();
         Agimats?.ResetServer();
+        WhiteLady?.ResetServer();
         base.OnStopServer();
     }
 
@@ -112,6 +116,7 @@ public sealed class SteamNetworkManager : NetworkManager
         Travel?.ResetClient();
         Clock?.ResetClient();
         Agimats?.ResetClient();
+        WhiteLady?.ResetClient();
         base.OnStopClient();
     }
 }

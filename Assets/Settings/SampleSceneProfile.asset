@@ -96,7 +96,7 @@ MonoBehaviour:
     m_Value: 1
   density:
     m_OverrideState: 1
-    m_Value: 0.05
+    m_Value: 0.04
   maxDistance:
     m_OverrideState: 1
     m_Value: 40
@@ -164,7 +164,7 @@ MonoBehaviour:
   active: 1
   postExposure:
     m_OverrideState: 1
-    m_Value: -0.7
+    m_Value: -0.55
   contrast:
     m_OverrideState: 1
     m_Value: 10

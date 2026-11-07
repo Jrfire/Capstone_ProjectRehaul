@@ -122,6 +122,41 @@ public sealed class PlayerHudTests
     }
 
     [UnityTest]
+    public IEnumerator TheMapOpensForTheLocalPlayerAndClosesWhenControlsLock()
+    {
+        yield return null;
+        MapScreen map = hud.GetComponentInChildren<MapScreen>(true);
+        Assert.That(map, Is.Not.Null);
+        Assert.That(map.IsOpen, Is.False);
+        Assert.That(MapManager.Active, Is.Null);
+
+        Assert.That(map.Open(), Is.True);
+        yield return null;
+        Assert.That(map.IsOpen, Is.True);
+        Assert.That(map.EmptyText.gameObject.activeInHierarchy, Is.True, "Without a generated map it says so.");
+        Assert.That(map.Graphic.PlayerDrawn, Is.False);
+        Assert.That(map.Graphic.raycastTarget, Is.False);
+
+        var owner = new object();
+        PlayerControlLock.Acquire(owner);
+        try
+        {
+            yield return null;
+            Assert.That(map.IsOpen, Is.False, "Menus, travel and death close the map.");
+            Assert.That(map.Open(), Is.False);
+        }
+        finally
+        {
+            PlayerControlLock.Release(owner);
+        }
+
+        map.Toggle();
+        Assert.That(map.IsOpen, Is.True);
+        map.Toggle();
+        Assert.That(map.IsOpen, Is.False);
+    }
+
+    [UnityTest]
     public IEnumerator AllSevenHealthValuesMapToThreeOwnerOnlyHearts()
     {
         yield return null;

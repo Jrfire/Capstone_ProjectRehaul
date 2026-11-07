@@ -53,6 +53,8 @@ public sealed class DistanceFadeSprite : MonoBehaviour
     public float Opacity { get; private set; } = 1f;
     /// <summary>The colour multiplier applied on the last refresh (1 when no viewer exists).</summary>
     public float Brightness { get; private set; } = 1f;
+    /// <summary>Extra 0-1 opacity factor set by other scripts (e.g. the White Lady's flicker); multiplies the distance fade.</summary>
+    public float OpacityMultiplier { get; set; } = 1f;
 
     private void Awake()
     {
@@ -79,7 +81,14 @@ public sealed class DistanceFadeSprite : MonoBehaviour
 
     private void LateUpdate() => Refresh();
 
-    private void OnDisable() => Apply(1f, 1f);
+    private void OnDisable()
+    {
+        // Restore the original look fully, ignoring any external multiplier.
+        float multiplier = OpacityMultiplier;
+        OpacityMultiplier = 1f;
+        Apply(1f, 1f);
+        OpacityMultiplier = multiplier;
+    }
 
     private void OnValidate()
     {
@@ -127,6 +136,7 @@ public sealed class DistanceFadeSprite : MonoBehaviour
 
     private void Apply(float opacity, float brightness)
     {
+        opacity *= Mathf.Clamp01(OpacityMultiplier);
         Opacity = opacity;
         Brightness = brightness;
         bool faded = opacity < OpaqueThreshold;

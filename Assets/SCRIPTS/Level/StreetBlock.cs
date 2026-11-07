@@ -57,6 +57,8 @@ public sealed class StreetBlock : MonoBehaviour
     [SerializeField] private List<StreetBlockEntrance> entrances = new List<StreetBlockEntrance>();
     [SerializeField, Tooltip("Walkable floor used to bake the NavMesh. Defaults to the generator's Generated/Floor group.")]
     private Transform floorRoot;
+    [SerializeField, Tooltip("Town block: MapManager removes its edge walls (StreetEdgeWall pieces) wherever it touches another town block, so towns connect seamlessly, and it never holds entrance obstacles. Set by the generator's Town Block toggle.")]
+    private bool townBlock;
 
     public Vector2Int SizeInTiles => sizeInTiles;
     public Vector2 TileSize => tileSize;
@@ -67,6 +69,8 @@ public sealed class StreetBlock : MonoBehaviour
     /// <summary>Footprint in metres (X, Z).</summary>
     public Vector2 Size => new Vector2(sizeInTiles.x * tileSize.x, sizeInTiles.y * tileSize.y);
     public int Seed => seed;
+    /// <summary>True for wall-less town blocks (walls only where no other town block touches them, no obstacles).</summary>
+    public bool IsTownBlock => townBlock;
     public IReadOnlyList<StreetBlockEntrance> Entrances => entrances;
     /// <summary>The walkable floor that MapManager bakes into the NavMesh; everything else in the block becomes an obstacle.</summary>
     public Transform FloorRoot => floorRoot != null ? floorRoot : transform.Find("Generated/Floor");
@@ -95,8 +99,9 @@ public sealed class StreetBlock : MonoBehaviour
 
     /// <summary>Called by the street block generator after it rebuilds the block.</summary>
     public void ApplyLayout(Vector2Int sizeInTiles, Vector2 tileSize, int tilesPerCell, int seed,
-        IEnumerable<StreetBlockEntrance> entrances)
+        IEnumerable<StreetBlockEntrance> entrances, bool townBlock = false)
     {
+        this.townBlock = townBlock;
         this.sizeInTiles = sizeInTiles;
         this.tileSize = tileSize;
         this.tilesPerCell = Mathf.Max(1, tilesPerCell);

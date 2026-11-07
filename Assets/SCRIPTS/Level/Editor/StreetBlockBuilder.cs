@@ -74,7 +74,8 @@ public static class StreetBlockBuilder
         Undo.RegisterCreatedObjectUndo(root, "Generate Street Block");
         StreetBlock block = generator.GetComponent<StreetBlock>();
         Undo.RecordObject(block, "Generate Street Block");
-        block.ApplyLayout(generator.sizeInTiles, context.TileSize, generator.tilesPerCell, generator.seed, context.Entrances);
+        block.ApplyLayout(generator.sizeInTiles, context.TileSize, generator.tilesPerCell, generator.seed, context.Entrances,
+            generator.townBlock);
         EditorUtility.SetDirty(block);
     }
 
@@ -385,6 +386,12 @@ public static class StreetBlockBuilder
             List<(BlockSide side, int cell, float center, float width)> openings)
         {
             var result = new Dictionary<BlockSide, EntranceObstacle>();
+            if (settings.townBlock)
+            {
+                if (settings.obstacleCount > 0)
+                    Debug.LogWarning($"Street block '{settings.name}' is a Town Block, so its Obstacle Count ({settings.obstacleCount}) is ignored: town blocks have no walls between them to hold obstacles.", settings);
+                return result;
+            }
             foreach (var opening in openings.OrderBy(_ => random.Next()).Take(settings.obstacleCount).OrderBy(o => (int)o.side))
             {
                 GameObject prefab = settings.obstaclePrefabs[random.Next(settings.obstaclePrefabs.Length)];
@@ -494,6 +501,8 @@ public static class StreetBlockBuilder
                     boundary.transform.SetParent(boundaries, false);
                     boundary.transform.localPosition = new Vector3(rect.center.x, settings.boundaryHeight * 0.5f, rect.center.y);
                     boundary.AddComponent<BoxCollider>().size = new Vector3(rect.width, settings.boundaryHeight, rect.height);
+                    if (settings.townBlock)
+                        boundary.AddComponent<StreetEdgeWall>().SetSide(side);
                     occupied.Add(rect);
                     edgeRects.Add(rect);
                     inset = Mathf.Max(inset, thickness);
@@ -506,7 +515,14 @@ public static class StreetBlockBuilder
         {
             Vector3 size = SizeOf(prefab);
             Rect rect = SideRect(side, along, along + size.x, 0f, size.z);
-            PlaceAt(prefab, walls, side.InwardYaw(), rect).name = $"{prefab.name} ({side})";
+            GameObject wall = PlaceAt(prefab, walls, side.InwardYaw(), rect);
+            wall.name = $"{prefab.name} ({side})";
+            if (settings.townBlock)
+            {
+                if (!wall.TryGetComponent(out StreetEdgeWall marker))
+                    marker = wall.AddComponent<StreetEdgeWall>();
+                marker.SetSide(side);
+            }
             edgeRects.Add(rect);
             return size.z;
         }

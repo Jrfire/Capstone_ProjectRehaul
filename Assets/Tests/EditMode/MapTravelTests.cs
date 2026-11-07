@@ -91,6 +91,55 @@ public sealed class MapTravelTests
     }
 
     [Test]
+    public void CompactPlansAreValidAndPackBlocksTighter()
+    {
+        Assert.That(MapLayoutPlanner.SharedEdge(new Rect(0f, 0f, 2f, 2f), new Rect(2f, 1f, 2f, 2f)), Is.EqualTo(1f).Within(0.001f));
+        Assert.That(MapLayoutPlanner.SharedEdge(new Rect(0f, 0f, 2f, 2f), new Rect(2f, 2f, 2f, 2f)), Is.Zero, "Corners share no edge.");
+        Assert.That(MapLayoutPlanner.SharedEdge(new Rect(0f, 0f, 2f, 2f), new Rect(3f, 0f, 2f, 2f)), Is.Zero);
+
+        float normalShared = 0f, compactShared = 0f;
+        for (int seed = 1; seed <= 12; seed++)
+        {
+            Assert.That(MapLayoutPlanner.TryPlan(Connectors, EndCaps, Spawns, 10, seed, 100, out List<MapBlockPlacement> compact, out string error,
+                0.75f, compact: true), Is.True, error);
+            Assert.That(MapLayoutPlanner.TryPlan(Connectors, EndCaps, Spawns, 10, seed, 100, out List<MapBlockPlacement> normal, out error,
+                0.75f), Is.True, error);
+            List<WorldEntrance> entrances = Entrances(compact);
+            foreach (WorldEntrance entrance in entrances)
+                Assert.That(entrances.Count(other => other.Block != entrance.Block && Vector2.Distance(other.Center, entrance.Center) < 0.05f),
+                    Is.EqualTo(1), $"Seed {seed}: every compact entrance is joined.");
+            for (int a = 0; a < compact.Count; a++)
+                for (int b = a + 1; b < compact.Count; b++)
+                {
+                    Rect ra = Footprint(compact[a]), rb = Footprint(compact[b]);
+                    Assert.That(Mathf.Min(ra.xMax, rb.xMax) - Mathf.Max(ra.xMin, rb.xMin) <= 0.01f ||
+                        Mathf.Min(ra.yMax, rb.yMax) - Mathf.Max(ra.yMin, rb.yMin) <= 0.01f, Is.True, $"Seed {seed}: blocks {a} and {b} overlap.");
+                    compactShared += MapLayoutPlanner.SharedEdge(ra, rb);
+                }
+            for (int a = 0; a < normal.Count; a++)
+                for (int b = a + 1; b < normal.Count; b++)
+                    normalShared += MapLayoutPlanner.SharedEdge(Footprint(normal[a]), Footprint(normal[b]));
+        }
+        Assert.That(compactShared, Is.GreaterThan(normalShared), "Town layouts hug their neighbours more than normal streets.");
+    }
+
+    [Test]
+    public void TownRollIsDeterministicAndFollowsItsChance()
+    {
+        int hits = 0;
+        for (int seed = 0; seed < 400; seed++)
+        {
+            Assert.That(MapManager.RollTownLayout(seed, 0f), Is.False);
+            Assert.That(MapManager.RollTownLayout(seed, 1f), Is.True);
+            bool roll = MapManager.RollTownLayout(seed, 0.5f);
+            Assert.That(MapManager.RollTownLayout(seed, 0.5f), Is.EqualTo(roll));
+            if (roll)
+                hits++;
+        }
+        Assert.That(hits, Is.InRange(140, 260));
+    }
+
+    [Test]
     public void LayoutsConnectEveryEntranceWithoutOverlaps([NUnit.Framework.Range(1, 25)] int seed)
     {
         List<MapBlockPlacement> layout = Plan(seed * 7919);
@@ -162,6 +211,202 @@ public sealed class MapTravelTests
         StringAssert.Contains("connectors need at least 2", error);
         Assert.That(MapLayoutPlanner.TryPlan(new StreetBlock[0], EndCaps, Spawns, 3, 1, 10, out _, out error), Is.False);
         StringAssert.Contains("Connector Blocks", error);
+    }
+
+    [Test]
+    public void SpawnBlocksParkTheJeepneyHomeClearOfSpawnPoints([NUnit.Framework.Range(1, 3)] int spawnIndex)
+    {
+        GameObject jeepneyPrefab = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/PREFABS/Jeepney.prefab");
+        Assert.That(jeepneyPrefab, Is.Not.Null);
+        Assert.That(jeepneyPrefab.GetComponentInChildren<TravelInteractable>(true), Is.Not.Null, "Its back takes players home.");
+        StreetBlock prefab = Block($"SpawnBlockStreetBlock_{spawnIndex}");
+
+        WithManager(new[] { prefab }, null, manager =>
+        {
+            Assert.That(manager.Build(spawnIndex * 31), Is.True);
+            int index = Enumerable.Range(0, manager.Layout.Count).Single(i => manager.Layout[i].Role == MapBlockRole.Spawn);
+            StreetBlock spawn = manager.GetBlock(index);
+            GameObject jeepney = manager.PlacedJeepney;
+            Assert.That(jeepney, Is.Not.Null, "A jeepney is parked in the spawn block.");
+            Assert.That(jeepney.activeInHierarchy && jeepney.transform.IsChildOf(spawn.transform), Is.True);
+            Assert.That(manager.GeneratedRoot.GetComponentsInChildren<TravelInteractable>(true).Length, Is.EqualTo(1));
+            Assert.That(MapScreen.TryGetJeepneyPosition(manager, out Vector3 labelled), Is.True);
+            Assert.That(Vector3.Distance(labelled, jeepney.transform.position), Is.LessThan(0.01f), "The map labels the parked jeepney.");
+
+            Physics.SyncTransforms();
+            Bounds body = new Bounds(jeepney.transform.position, Vector3.zero);
+            foreach (Collider collider in jeepney.GetComponentsInChildren<Collider>())
+                body.Encapsulate(collider.bounds);
+            foreach (Vector3 corner in new[] { body.min, body.max, new Vector3(body.min.x, 0f, body.max.z), new Vector3(body.max.x, 0f, body.min.z) })
+                Assert.That(spawn.ContainsXZ(corner), Is.True, "The jeepney stays inside the spawn block.");
+            Vector3 toCentre = spawn.transform.position - jeepney.transform.position;
+            toCentre.y = 0f;
+            if (toCentre.magnitude > 0.5f)
+                Assert.That(Vector3.Dot(-jeepney.transform.forward, toCentre.normalized), Is.GreaterThan(0f), "Its back faces the spawn area.");
+
+            var floors = Enumerable.Range(0, manager.BlockCount).Select(i => manager.GetBlock(i).FloorRoot).Where(f => f != null).ToArray();
+            Collider[] solids = Physics.OverlapBox(body.center, body.extents * 0.9f, Quaternion.identity, ~0, QueryTriggerInteraction.Ignore)
+                .Where(hit => hit.transform.IsChildOf(manager.GeneratedRoot) && !hit.transform.IsChildOf(jeepney.transform) && !floors.Any(f => hit.transform.IsChildOf(f)))
+                .ToArray();
+            Assert.That(solids, Is.Empty, $"The jeepney overlaps {string.Join(", ", solids.Select(s => s.name))}.");
+
+            Transform[] points = manager.GeneratedRoot.GetComponentsInChildren<PlayerSpawnPoints>(true).Single().transform.Cast<Transform>().ToArray();
+            Assert.That(points.Length, Is.EqualTo(manager.SpawnPointCount), "All six spawn points still fit beside the jeepney.");
+            float radius = manager.SpawnClearanceRadius;
+            foreach (Transform point in points)
+            {
+                Vector3 p = point.position;
+                Collider[] hits = Physics.OverlapCapsule(p + Vector3.up * radius, p + Vector3.up * (manager.SpawnClearanceHeight - radius), radius, ~0, QueryTriggerInteraction.Ignore);
+                Assert.That(hits.Any(hit => hit.transform.IsChildOf(jeepney.transform)), Is.False, $"{point.name} is inside the jeepney.");
+            }
+
+            Vector3 back = jeepney.GetComponentInChildren<TravelInteractable>().transform.position;
+            Vector3 boardingSpot = back - jeepney.transform.forward * 1f;
+            boardingSpot.y = points[0].position.y + radius + 0.05f;
+            Collider[] behind = Physics.OverlapCapsule(boardingSpot, boardingSpot + Vector3.up * (manager.SpawnClearanceHeight - 2f * radius), radius * 0.8f, ~0, QueryTriggerInteraction.Ignore)
+                .Where(hit => !floors.Any(f => hit.transform.IsChildOf(f))).ToArray();
+            Assert.That(behind, Is.Empty, "There is room to stand behind the jeepney's back.");
+        }, jeepneyPrefab);
+    }
+
+    [Test]
+    public void SomeAgimatsAlwaysLieOutsideSealedBlocks([NUnit.Framework.Range(1, 6)] int seed)
+    {
+        BuildObstructed(seed, 3, 0.75f, (manager, remaining) =>
+        {
+            bool[] open = manager.FindOpenlyReachableFromSpawn();
+            int spawn = Enumerable.Range(0, manager.BlockCount).Single(i => manager.GetRole(i) == MapBlockRole.Spawn);
+            bool anyOpenEligible = Enumerable.Range(0, manager.BlockCount).Any(i => i != spawn && open[i] && !manager.GetNeighbours(spawn).Contains(i));
+            int[] homes = Enumerable.Range(0, manager.BlockCount).Where(i => open[i] && i != spawn).Take(1).ToArray();
+            for (int count = 3; count <= 5; count++)
+            {
+                List<int> blocks = AgimatSpawner.PlanBlocks(manager, homes, count, new System.Random(seed * 7 + count), 2);
+                Assert.That(blocks.Count, Is.EqualTo(count));
+                Assert.That(blocks, Has.No.Member(spawn));
+                if (anyOpenEligible)
+                    Assert.That(blocks.Count(block => open[block]), Is.GreaterThanOrEqualTo(2), "At least two agimats can be collected without opening a barricade.");
+            }
+        });
+    }
+
+    [Test]
+    public void TheMapDrawsEveryBlockWithEntranceHolesRedObstaclesAndThePlayer([NUnit.Framework.Range(1, 4)] int seed)
+    {
+        BuildObstructed(seed, 3, 0.75f, (manager, remaining) =>
+        {
+            var view = new GameObject("Map View", typeof(RectTransform));
+            try
+            {
+                ((RectTransform)view.transform).sizeDelta = new Vector2(800f, 600f);
+                MapGraphic graphic = view.AddComponent<MapGraphic>();
+                int spawn = Enumerable.Range(0, manager.BlockCount).Single(i => manager.GetRole(i) == MapBlockRole.Spawn);
+                Vector3 player = manager.GetBlock(spawn).transform.position;
+                graphic.Show(manager, true, player);
+                var vh = new UnityEngine.UI.VertexHelper();
+                graphic.DrawTo(vh);
+
+                var blocks = Enumerable.Range(0, manager.BlockCount).Select(manager.GetBlock).ToList();
+                Assert.That(graphic.BlocksDrawn, Is.EqualTo(manager.BlockCount), "Every street block is a square.");
+                Assert.That(graphic.FillersDrawn, Is.EqualTo(manager.FillerCount + manager.PluggedCellCount));
+                Assert.That(graphic.GapsDrawn, Is.EqualTo(blocks.Sum(b => b.Entrances.Count)), "Every entrance leaves a hole in its block's outline.");
+                int blocked = blocks.SelectMany(b => b.Entrances).Count(e => e.Obstacle != null && !e.Obstacle.IsCleared);
+                Assert.That(blocked, Is.GreaterThan(0));
+                Assert.That(graphic.ObstaclesDrawn, Is.EqualTo(blocked), "Each obstacled entrance gets a red line.");
+                Assert.That(vh.currentVertCount, Is.GreaterThan(4));
+
+                Assert.That(graphic.PlayerDrawn, Is.True);
+                Assert.That(Vector2.Distance(graphic.PlayerPoint, graphic.WorldToMap(player)), Is.LessThan(0.01f));
+                Rect rect = ((RectTransform)view.transform).rect;
+                foreach (StreetBlock block in blocks)
+                    Assert.That(rect.Contains(graphic.WorldToMap(block.transform.position)), Is.True, "The whole street fits in the panel.");
+                StreetBlock west = blocks.OrderBy(b => b.transform.position.x).First();
+                StreetBlock east = blocks.OrderBy(b => b.transform.position.x).Last();
+                StreetBlock south = blocks.OrderBy(b => b.transform.position.z).First();
+                StreetBlock north = blocks.OrderBy(b => b.transform.position.z).Last();
+                Assert.That(graphic.WorldToMap(west.transform.position).x, Is.LessThan(graphic.WorldToMap(east.transform.position).x + 0.01f), "East is right.");
+                Assert.That(graphic.WorldToMap(south.transform.position).y, Is.LessThan(graphic.WorldToMap(north.transform.position).y + 0.01f), "North is up.");
+
+                graphic.Show(null, false, Vector3.zero);
+                graphic.DrawTo(vh);
+                Assert.That(graphic.BlocksDrawn + graphic.GapsDrawn + graphic.ObstaclesDrawn, Is.Zero);
+                Assert.That(graphic.PlayerDrawn, Is.False);
+                Assert.That(vh.currentVertCount, Is.GreaterThan(4), "Without a map only the grid background is drawn.");
+                vh.Dispose();
+            }
+            finally
+            {
+                Object.DestroyImmediate(view);
+            }
+        });
+    }
+
+    [Test]
+    public void TheMapScreenIsOnTheHudAndTabOpensIt()
+    {
+        var actions = AssetDatabase.LoadAssetAtPath<UnityEngine.InputSystem.InputActionAsset>("Assets/InputSystem_Actions.inputactions");
+        UnityEngine.InputSystem.InputAction map = actions.FindAction("Player/Map");
+        Assert.That(map, Is.Not.Null);
+        Assert.That(map.type, Is.EqualTo(UnityEngine.InputSystem.InputActionType.Button));
+        Assert.That(map.bindings.Select(b => b.path), Does.Contain("<Keyboard>/tab"));
+
+        GameObject hud = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/PREFABS/PlayerHud.prefab");
+        MapScreen screen = hud.GetComponentInChildren<MapScreen>(true);
+        Assert.That(screen, Is.Not.Null);
+        Assert.That(new SerializedObject(screen).FindProperty("inputActions").objectReferenceValue, Is.SameAs(actions));
+        Assert.That(screen.Panel != null && !screen.Panel.activeSelf, Is.True, "The map starts closed.");
+        Assert.That(screen.Graphic, Is.Not.Null);
+        Assert.That(screen.Graphic.raycastTarget, Is.False);
+        Assert.That(screen.Graphic.transform.IsChildOf(screen.Panel.transform), Is.True);
+        Assert.That(screen.TitleText != null && screen.EmptyText != null, Is.True);
+        Assert.That(AssetDatabase.GetAssetPath(screen.Font), Is.EqualTo("Assets/Fonts/blood_crow/bloodcrow.ttf"));
+        Canvas canvas = screen.GetComponent<Canvas>();
+        Assert.That(canvas != null && canvas.overrideSorting && canvas.sortingOrder < 500, Is.True, "It draws below the damage flash.");
+        Assert.That(hud.transform.GetChild(hud.transform.childCount - 1).name, Is.EqualTo("DamageFlash"));
+        Assert.That(screen.JeepneyLabel, Does.Contain("Jeepney"));
+    }
+
+    [Test]
+    public void TheCompassSitsTopCentreAndMatchesTheMapsDirections()
+    {
+        GameObject hudAsset = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/PREFABS/PlayerHud.prefab");
+        CompassHud asset = hudAsset.GetComponentInChildren<CompassHud>(true);
+        Assert.That(asset, Is.Not.Null);
+        var rect = (RectTransform)asset.transform;
+        Assert.That(rect.anchorMin, Is.EqualTo(new Vector2(0.5f, 1f)));
+        Assert.That(rect.anchorMax, Is.EqualTo(new Vector2(0.5f, 1f)));
+        Assert.That(asset.Strip, Is.Not.Null);
+        Assert.That(AssetDatabase.GetAssetPath(asset.Strip.texture), Is.EqualTo("Assets/SPRITES/UI/compassPNG2.png"));
+        Assert.That(asset.Strip.texture.wrapModeU, Is.EqualTo(TextureWrapMode.Repeat));
+        Assert.That(asset.Strip.raycastTarget, Is.False);
+        Assert.That(asset.Content != null && asset.Content != asset.gameObject && asset.Strip.transform.IsChildOf(asset.Content.transform), Is.True);
+        Assert.That(hudAsset.transform.GetChild(hudAsset.transform.childCount - 1).name, Is.EqualTo("DamageFlash"));
+
+        GameObject hud = Object.Instantiate(hudAsset);
+        try
+        {
+            CompassHud compass = hud.GetComponentInChildren<CompassHud>(true);
+            float width = compass.VisibleFraction;
+            Assert.That(width, Is.GreaterThan(0.1f).And.LessThan(1f));
+            float northU = new SerializedObject(compass).FindProperty("northU").floatValue;
+            float Centre() => Mathf.Repeat(compass.Strip.uvRect.x + compass.Strip.uvRect.width * 0.5f, 1f);
+            float Diff(float a, float b) => Mathf.Abs(Mathf.DeltaAngle(a * 360f, b * 360f)) / 360f;
+
+            // The strip reads N, E, S, W at quarter steps, so heading south (yaw 180, map down) centres the S mark.
+            compass.SetHeading(0f);
+            Assert.That(Diff(Centre(), northU), Is.LessThan(0.001f), "Facing +Z (map up) shows N.");
+            compass.SetHeading(90f);
+            Assert.That(Diff(Centre(), northU + 0.25f), Is.LessThan(0.001f), "Facing +X (map right) shows E.");
+            compass.SetHeading(180f);
+            Assert.That(Diff(Centre(), northU + 0.5f), Is.LessThan(0.001f), "Facing -Z (map down) shows S.");
+            compass.SetHeading(-90f);
+            Assert.That(compass.Heading, Is.EqualTo(270f).Within(0.001f));
+            Assert.That(Diff(Centre(), northU + 0.75f), Is.LessThan(0.001f), "Facing -X shows W.");
+            Assert.That(compass.Strip.uvRect.width, Is.EqualTo(width).Within(0.0001f));
+        }
+        finally
+        {
+            Object.DestroyImmediate(hud);
+        }
     }
 
     [Test]
@@ -302,6 +547,7 @@ public sealed class MapTravelTests
                 AssertCellsCovered(manager, rects, street, 12f);
                 Assert.That(manager.PluggedCellCount, Is.Zero, "A one-cell filler leaves nothing to plug.");
                 Assert.That(manager.GetFiller(0).transform.parent.name, Is.EqualTo("Fillers"));
+                AssertMapDrawsFillers(manager);
             });
         }
         finally
@@ -380,6 +626,10 @@ public sealed class MapTravelTests
                     rects.Add(new Rect(local.x - 1.5f, local.z - 1.5f, 3f, 3f));
                 }
                 AssertCellsCovered(manager, rects, street, 12f);
+                Assert.That(manager.PluggedCells.Count, Is.EqualTo(manager.PluggedCellCount));
+                foreach (Vector3[] cell in manager.PluggedCells)
+                    Assert.That(Vector3.Distance(cell[0], cell[2]), Is.EqualTo(Mathf.Sqrt(72f)).Within(0.01f), "Plugged cells are recorded as one 6 m cell.");
+                AssertMapDrawsFillers(manager);
 
                 var buildings = plugs.Cast<Transform>().Where(t => t.name.StartsWith("Gap ") && !t.name.StartsWith("Gap Floor")).ToList();
                 Assert.That(buildings.Count, Is.GreaterThan(0));
@@ -419,7 +669,43 @@ public sealed class MapTravelTests
         }
     }
 
-    private static void WithManager(StreetBlock[] spawns, StreetBlock[] fillers, System.Action<MapManager> check)
+    private static void AssertMapDrawsFillers(MapManager manager)
+    {
+        var view = new GameObject("Map View", typeof(RectTransform));
+        try
+        {
+            ((RectTransform)view.transform).sizeDelta = new Vector2(800f, 600f);
+            MapGraphic graphic = view.AddComponent<MapGraphic>();
+            graphic.Show(manager, false, Vector3.zero);
+            using var vh = new UnityEngine.UI.VertexHelper();
+            graphic.DrawTo(vh);
+            Assert.That(graphic.BlocksDrawn, Is.EqualTo(manager.BlockCount));
+            Assert.That(graphic.FillersDrawn, Is.EqualTo(manager.FillerCount + manager.PluggedCellCount), "Filler blocks and plugged cells are drawn as squares.");
+            Assert.That(graphic.FillersDrawn, Is.GreaterThan(0));
+            Assert.That(graphic.GapsDrawn, Is.EqualTo(Enumerable.Range(0, manager.BlockCount).Sum(i => manager.GetBlock(i).Entrances.Count)), "Fillers have no entrance holes.");
+
+            Rect rect = ((RectTransform)view.transform).rect;
+            for (int i = 0; i < manager.FillerCount; i++)
+            {
+                StreetBlock filler = manager.GetFiller(i);
+                Vector2 half = filler.Size * 0.5f;
+                foreach (Vector3 corner in new[] { new Vector3(-half.x, 0f, -half.y), new Vector3(half.x, 0f, half.y) })
+                {
+                    Vector2 point = graphic.WorldToMap(filler.transform.TransformPoint(corner));
+                    Assert.That(point.x >= rect.xMin - 0.01f && point.x <= rect.xMax + 0.01f && point.y >= rect.yMin - 0.01f && point.y <= rect.yMax + 0.01f,
+                        Is.True, $"Filler {i} fits in the panel.");
+                }
+            }
+            foreach (Vector3[] cell in manager.PluggedCells)
+                Assert.That(rect.Contains(graphic.WorldToMap((cell[0] + cell[2]) * 0.5f)), Is.True, "Plugged cells fit in the panel.");
+        }
+        finally
+        {
+            Object.DestroyImmediate(view);
+        }
+    }
+
+    private static void WithManager(StreetBlock[] spawns, StreetBlock[] fillers, System.Action<MapManager> check, GameObject jeepney = null)
     {
         var root = new GameObject("MapManager Spawn Test");
         try
@@ -438,6 +724,7 @@ public sealed class MapTravelTests
             Fill("spawnBlocks", spawns);
             Fill("fillerBlocks", fillers ?? new StreetBlock[0]);
             so.FindProperty("connectorBlockCount").intValue = 4;
+            so.FindProperty("jeepneyPrefab").objectReferenceValue = jeepney;
             so.ApplyModifiedPropertiesWithoutUndo();
             check(manager);
         }
@@ -621,6 +908,166 @@ public sealed class MapTravelTests
         Assert.That(loopBarricades, Is.GreaterThan(0), "Some barricades stand on loops, with a way around them.");
     }
 
+    [Test]
+    public void ReachableFloorOnlyHoldsFreeWalkableSpotsInsideEachBlock([NUnit.Framework.Range(1, 3)] int seed)
+    {
+        WithManager(Spawns, null, manager =>
+        {
+            Assert.That(manager.Build(seed * 13), Is.True);
+            Physics.SyncTransforms();
+            float radius = manager.SpawnClearanceRadius;
+            int nonEmpty = 0;
+            for (int i = 0; i < manager.BlockCount; i++)
+            {
+                IReadOnlyList<Vector3> points = manager.GetReachableFloor(i);
+                if (points.Count > 0)
+                    nonEmpty++;
+                StreetBlock block = manager.GetBlock(i);
+                Transform floor = block.FloorRoot;
+                foreach (Vector3 point in points)
+                {
+                    Assert.That(manager.TryGetBlockIndex(point, out int owner) && owner == i, Is.True, "Points stay in their block.");
+                    Collider[] hits = Physics.OverlapCapsule(point + Vector3.up * (radius + 0.1f), point + Vector3.up * (manager.SpawnClearanceHeight - radius),
+                        radius * 0.95f, ~0, QueryTriggerInteraction.Ignore)
+                        .Where(hit => hit.transform.IsChildOf(manager.GeneratedRoot) && (floor == null || !hit.transform.IsChildOf(floor)) &&
+                            hit.GetComponentInParent<EntranceObstacle>(true) == null)
+                        .ToArray();
+                    Assert.That(hits, Is.Empty, $"A player fits at {point} in block {i}: {string.Join(", ", hits.Select(h => h.name))}");
+                }
+            }
+            Assert.That(nonEmpty, Is.EqualTo(manager.BlockCount), "Every block has somewhere reachable to hide agimats.");
+            Assert.That(manager.GetReachableFloor(-1), Is.Empty);
+        });
+    }
+
+    [Test]
+    public void TownLayoutsOpenTheWallsBetweenTownBlocksAndKeepThemFreeOfObstacles([NUnit.Framework.Range(1, 3)] int seed)
+    {
+        var created = new List<GameObject>();
+        int tagged = 0;
+        StreetBlock Town(StreetBlock prefab)
+        {
+            // Scene copies flagged as town blocks with their edge walls tagged stand in for generated town blocks.
+            StreetBlock copy = Object.Instantiate(prefab, new Vector3(0f, -500f, 0f), Quaternion.identity);
+            created.Add(copy.gameObject);
+            var so = new SerializedObject(copy);
+            so.FindProperty("townBlock").boolValue = true;
+            so.ApplyModifiedPropertiesWithoutUndo();
+            Transform generated = copy.transform.Find(StreetBlockBuilder.GeneratedName);
+            foreach (string group in new[] { "Walls", "Boundaries" })
+            {
+                Transform parent = generated.Find(group);
+                if (parent == null)
+                    continue;
+                foreach (Transform piece in parent)
+                {
+                    Vector3 local = copy.transform.InverseTransformPoint(Center(piece.gameObject));
+                    BlockSide side = Mathf.Abs(local.x) > Mathf.Abs(local.z)
+                        ? (local.x > 0f ? BlockSide.East : BlockSide.West)
+                        : (local.z > 0f ? BlockSide.North : BlockSide.South);
+                    piece.gameObject.AddComponent<StreetEdgeWall>().SetSide(side);
+                    tagged++;
+                }
+            }
+            return copy;
+        }
+
+        var root = new GameObject("MapManager Town Test");
+        created.Add(root);
+        try
+        {
+            StreetBlock[] towns = Connectors.Select(Town).ToArray();
+            Assert.That(tagged, Is.GreaterThan(0));
+            var manager = root.AddComponent<MapManager>();
+            var so = new SerializedObject(manager);
+            void Fill(string property, StreetBlock[] blocks)
+            {
+                SerializedProperty list = so.FindProperty(property);
+                list.arraySize = blocks.Length;
+                for (int i = 0; i < blocks.Length; i++)
+                    list.GetArrayElementAtIndex(i).objectReferenceValue = blocks[i];
+            }
+            Fill("connectorBlocks", Connectors);
+            Fill("endCapBlocks", EndCaps);
+            Fill("spawnBlocks", Spawns);
+            Fill("townBlocks", towns);
+            so.FindProperty("connectorBlockCount").intValue = 8;
+            so.FindProperty("townLayoutChance").floatValue = 1f;
+            so.FindProperty("townMinConnectorCount").intValue = 6;
+            so.ApplyModifiedPropertiesWithoutUndo();
+
+            Assert.That(manager.Build(seed * 17), Is.True);
+            Assert.That(manager.IsTownLayout, Is.True);
+            int[] connectors = Enumerable.Range(0, manager.BlockCount).Where(i => manager.GetRole(i) == MapBlockRole.Connector).ToArray();
+            Assert.That(connectors.All(i => manager.GetBlock(i).IsTownBlock), Is.True, "Town layouts use the town pool.");
+            Assert.That(Enumerable.Range(0, manager.BlockCount).Where(i => manager.GetRole(i) != MapBlockRole.Connector)
+                .All(i => !manager.GetBlock(i).IsTownBlock), Is.True, "End caps and the spawn block keep their walls.");
+            Assert.That(manager.OpenSeams.Count, Is.GreaterThan(0), "Touching town blocks open up to each other.");
+
+            StreetEdgeWall[] remaining = manager.GeneratedRoot.GetComponentsInChildren<StreetEdgeWall>(true);
+            Assert.That(remaining.Length, Is.GreaterThan(0), "Walls facing the outside stay.");
+            foreach (Vector3[] seam in manager.OpenSeams)
+            {
+                bool alongZ = Mathf.Abs(seam[0].x - seam[1].x) < 0.01f;
+                float line = alongZ ? seam[0].x : seam[0].z;
+                float min = alongZ ? Mathf.Min(seam[0].z, seam[1].z) : Mathf.Min(seam[0].x, seam[1].x);
+                float max = alongZ ? Mathf.Max(seam[0].z, seam[1].z) : Mathf.Max(seam[0].x, seam[1].x);
+                foreach (StreetEdgeWall wall in remaining)
+                {
+                    Vector3 c = Center(wall.gameObject);
+                    float across = alongZ ? c.x : c.z;
+                    float along = alongZ ? c.z : c.x;
+                    Vector3 outward = wall.transform.GetComponentInParent<StreetBlock>().transform.TransformDirection(wall.Side.Outward());
+                    bool facesSeam = Mathf.Abs(alongZ ? outward.x : outward.z) > 0.9f;
+                    Assert.That(facesSeam && Mathf.Abs(across - line) < 1f && along > min + 1.5f && along < max - 1.5f, Is.False,
+                        $"{wall.name} still stands on an open town seam.");
+                }
+            }
+
+            foreach (MapJoint joint in manager.Joints)
+            {
+                StreetBlock a = manager.GetBlock(joint.BlockA), b = manager.GetBlock(joint.BlockB);
+                if (!a.IsTownBlock || !b.IsTownBlock)
+                    continue;
+                Assert.That(joint.Barricaded, Is.False, "Town-to-town joints are never barricaded.");
+                Assert.That(a.Entrances[joint.EntranceA].Obstacle == null && b.Entrances[joint.EntranceB].Obstacle == null, Is.True);
+            }
+            foreach (int town in connectors)
+                Assert.That(manager.GetBlock(town).GetComponentsInChildren<EntranceObstacle>(true), Is.Empty, "Wall-less town blocks hold no obstacles.");
+            foreach (MapJoint joint in manager.Joints)
+            {
+                bool endCap = manager.GetRole(joint.BlockA) == MapBlockRole.EndCap || manager.GetRole(joint.BlockB) == MapBlockRole.EndCap;
+                if (endCap)
+                    Assert.That(joint.Barricaded, Is.True, "Walled end caps at the map's edge still get gates.");
+            }
+
+            so.FindProperty("townMinConnectorCount").intValue = 50;
+            so.ApplyModifiedPropertiesWithoutUndo();
+            Assert.That(manager.Build(seed * 17), Is.True);
+            Assert.That(manager.IsTownLayout, Is.False, "Small maps keep the normal street layout.");
+            Assert.That(manager.OpenSeams, Is.Empty);
+        }
+        finally
+        {
+            foreach (GameObject obj in created)
+                Object.DestroyImmediate(obj);
+        }
+    }
+
+    private static Vector3 Center(GameObject target)
+    {
+        Renderer[] renderers = target.GetComponentsInChildren<Renderer>(true);
+        if (renderers.Length > 0)
+        {
+            Bounds bounds = renderers[0].bounds;
+            foreach (Renderer renderer in renderers)
+                bounds.Encapsulate(renderer.bounds);
+            return bounds.center;
+        }
+        BoxCollider box = target.GetComponentInChildren<BoxCollider>(true);
+        return box != null ? box.transform.TransformPoint(box.center) : target.transform.position;
+    }
+
     private static void BuildObstructed(int seed, int connectorCount, float loopChance, System.Action<MapManager, EntranceObstacle[]> check)
     {
         var created = new List<GameObject>();
@@ -744,6 +1191,70 @@ public sealed class MapTravelTests
         }
     }
 
+    [Test]
+    public void LaterRoundsMayRollSeveralDistinctEnemyTypes()
+    {
+        Assert.That(Enumerable.Range(1, 12).Select(TravelDestination.MaxEnemyTypesForRound),
+            Is.EqualTo(new[] { 1, 1, 2, 2, 2, 3, 3, 3, 4, 4, 4, 4 }), "Round 3 = up to 2, round 6 = up to 3, round 9+ = up to 4.");
+        var first = ScriptableObject.CreateInstance<EnemyDefinition>();
+        var second = ScriptableObject.CreateInstance<EnemyDefinition>();
+        var third = ScriptableObject.CreateInstance<EnemyDefinition>();
+        try
+        {
+            var destination = new TravelDestination { sceneName = "StreetsTest" };
+            Assert.That(destination.RollMany(4, 1f, () => 0f), Is.Empty);
+            destination.enemyPool.Add(new EnemyRollEntry { enemy = first, weight = 1f });
+            destination.enemyPool.Add(new EnemyRollEntry { enemy = second, weight = 1f });
+            destination.enemyPool.Add(new EnemyRollEntry { enemy = first, weight = 1f });
+            destination.enemyPool.Add(new EnemyRollEntry { enemy = third, weight = 1f });
+            Assert.That(destination.RollMany(1, 1f, () => 0f), Is.EqualTo(new[] { first }));
+            Assert.That(destination.RollMany(4, 1f, () => 0f), Is.EqualTo(new[] { first, second, third }), "Types are never repeated.");
+            Assert.That(destination.RollMany(2, 1f, () => 0f), Has.Count.EqualTo(2), "Capped at the round's maximum.");
+            Assert.That(destination.RollMany(4, 0.5f, () => 0.9f), Has.Count.EqualTo(1), "A failed chance stops further types.");
+        }
+        finally
+        {
+            Object.DestroyImmediate(first);
+            Object.DestroyImmediate(second);
+            Object.DestroyImmediate(third);
+        }
+    }
+
+    [Test]
+    public void EachQuotaGrowsTheMapUpToTheBlockCap()
+    {
+        Assert.That(MapManager.EffectiveConnectorCount(6, 0, 15), Is.EqualTo(6));
+        Assert.That(MapManager.EffectiveConnectorCount(6, 2, 15), Is.EqualTo(8));
+        Assert.That(MapManager.EffectiveConnectorCount(6, 20, 15), Is.EqualTo(15), "Never more than the cap.");
+        Assert.That(MapManager.EffectiveConnectorCount(18, 4, 15), Is.EqualTo(18), "A base above the cap is kept.");
+        for (int seed = 1; seed <= 6; seed++)
+        {
+            Assert.That(MapManager.TryPlanCapped(Connectors, EndCaps, Spawns, 4, 20, 15, seed, 100, 0.75f,
+                out List<MapBlockPlacement> grown, out int connectors, out string error), Is.True, error);
+            Assert.That(grown.Count, Is.LessThanOrEqualTo(15), $"Seed {seed}: end caps and the spawn block count toward the 15-block cap.");
+            Assert.That(connectors, Is.InRange(4, 15));
+            Assert.That(grown.Count(block => block.Role == MapBlockRole.Connector), Is.EqualTo(connectors));
+            Assert.That(MapManager.TryPlanCapped(Connectors, EndCaps, Spawns, 4, 0, 15, seed, 100, 0.75f,
+                out List<MapBlockPlacement> baseLayout, out int baseConnectors, out _), Is.True);
+            Assert.That(baseConnectors, Is.EqualTo(4), "Without extras the base layout is unchanged.");
+            Assert.That(grown.Count, Is.GreaterThanOrEqualTo(baseLayout.Count), "Extras never shrink the map.");
+        }
+        Assert.That(MapManager.TryPlanCapped(Connectors, EndCaps, Spawns, 6, 4, 3, 1, 100, 0.75f,
+            out List<MapBlockPlacement> overCap, out int kept, out _), Is.True);
+        Assert.That(kept, Is.EqualTo(6), "A base layout already above the cap is kept.");
+        Assert.That(overCap.Count, Is.GreaterThan(3));
+        var director = new GameObject("Director").AddComponent<TravelDirector>();
+        try
+        {
+            Assert.That(director.ExtraConnectorsForRound(1), Is.Zero);
+            Assert.That(director.ExtraConnectorsForRound(2), Is.EqualTo(2));
+            Assert.That(director.ExtraConnectorsForRound(4), Is.EqualTo(6));
+        }
+        finally
+        {
+            Object.DestroyImmediate(director.gameObject);
+        }
+    }
     [Test]
     public void ScenesAreWiredForTravel()
     {

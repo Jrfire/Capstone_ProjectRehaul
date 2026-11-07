@@ -15,7 +15,7 @@ public sealed class TravelDestination
 {
     [Tooltip("Scene name; it must be in the Build Profile's scene list.")]
     public string sceneName;
-    [Tooltip("Enemy types this destination can roll. One is rolled per trip; an empty pool rolls no enemies.")]
+    [Tooltip("Enemy types this destination can roll. One is rolled per trip (more different types from round 3 on); an empty pool rolls no enemies.")]
     public List<EnemyRollEntry> enemyPool = new List<EnemyRollEntry>();
 
     public string Name => sceneName != null ? sceneName.Trim() : string.Empty;
@@ -45,4 +45,52 @@ public sealed class TravelDestination
         }
         return last;
     }
+
+    /// <summary>
+    /// Rolls up to <paramref name="maxTypes"/> different enemy types: the first is always rolled (when the pool has
+    /// valid entries); each further slot is added with <paramref name="extraChance"/>, stopping at the first failed
+    /// chance. Types are weighted and never repeated.
+    /// </summary>
+    public List<EnemyDefinition> RollMany(int maxTypes, float extraChance, Func<float> random01 = null)
+    {
+        var result = new List<EnemyDefinition>();
+        if (maxTypes <= 0)
+            return result;
+        Func<float> random = random01 ?? (() => UnityEngine.Random.value);
+        var remaining = new List<EnemyRollEntry>();
+        foreach (EnemyRollEntry entry in enemyPool)
+        {
+            if (entry != null && entry.enemy != null && entry.weight > 0f && !remaining.Exists(e => e.enemy == entry.enemy))
+                remaining.Add(entry);
+        }
+
+        while (remaining.Count > 0 && result.Count < maxTypes)
+        {
+            if (result.Count > 0 && random() >= extraChance)
+                break;
+            float total = 0f;
+            foreach (EnemyRollEntry entry in remaining)
+                total += entry.weight;
+            float pick = random() * total;
+            int chosen = remaining.Count - 1;
+            for (int index = 0; index < remaining.Count; index++)
+            {
+                if (pick < remaining[index].weight)
+                {
+                    chosen = index;
+                    break;
+                }
+                pick -= remaining[index].weight;
+            }
+            result.Add(remaining[chosen].enemy);
+            remaining.RemoveAt(chosen);
+        }
+        return result;
+    }
+
+    /// <summary>
+    /// Most different enemy types a destination may roll in a round: 1, then one more every third round (round 3 = up
+    /// to 2, round 6 = up to 3, round 9 onwards = up to 4).
+    /// </summary>
+    public static int MaxEnemyTypesForRound(int round) => Mathf.Clamp(1 + Mathf.Max(0, round) / 3, 1, 4);
 }

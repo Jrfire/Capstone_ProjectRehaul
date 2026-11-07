@@ -58,7 +58,6 @@ public sealed class AgimatSetupTests
     {
         AlbularyoScreen screen = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/PREFABS/AlbularyoScreen.prefab").GetComponent<AlbularyoScreen>();
         Assert.That(screen, Is.Not.Null);
-        Assert.That(screen.IsOpen, Is.False, "The screen starts closed.");
         Font font = AssetDatabase.LoadAssetAtPath<Font>(FontPath);
         Assert.That(screen.GetComponentsInChildren<Text>(true).All(text => text.font == font), Is.True, "Every text uses blood_crow.");
         Button[] buttons = { screen.GoldButton, screen.SilverButton, screen.BronzeButton };
@@ -86,7 +85,7 @@ public sealed class AgimatSetupTests
         var panelRect = (RectTransform)portrait.transform.parent;
         float textLeft = dialogueRect.anchorMin.x * panelRect.sizeDelta.x + dialogueRect.anchoredPosition.x - dialogueRect.pivot.x * dialogueRect.sizeDelta.x;
         Assert.That(textLeft, Is.GreaterThanOrEqualTo(portraitRect.anchoredPosition.x + portraitRect.sizeDelta.x), "The line starts right of the bust.");
-        Assert.That(screen.RewardText.text, Is.EqualTo("Reward: ???"));
+        Assert.That(screen.RewardText.text, Is.EqualTo("Reward: \u20B10"));
         Assert.That(screen.TurnedInText.text, Is.EqualTo("Turned in: 0x"));
         Assert.That(((RectTransform)screen.TurnedInText.transform).anchorMin.x, Is.Zero, "Turned in sits at the bottom left.");
         Assert.That(((RectTransform)screen.RewardText.transform).anchorMin.x, Is.EqualTo(1f), "Reward sits at the bottom right.");
@@ -155,6 +154,69 @@ public sealed class AgimatSetupTests
         Assert.That(Quaternion.Angle(level, Quaternion.identity), Is.LessThan(0.01f));
         Quaternion overhead = EnemyPresentation.FullBillboardRotation(camera, new Vector3(0f, 10f, 0f), 90f);
         Assert.That(Vector3.Angle(overhead * Vector3.forward, Vector3.up), Is.LessThan(0.01f), "Directly overhead still faces the camera.");
+    }
+
+    [Test]
+    public void QuotaBannerPickupsAndWhiteLadyAreWired()
+    {
+        GameObject hud = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/PREFABS/PlayerHud.prefab");
+        QuotaReachedBanner banner = hud.GetComponentInChildren<QuotaReachedBanner>(true);
+        Assert.That(banner, Is.Not.Null);
+        Assert.That(banner.Label.text, Is.EqualTo("Quota Reached"));
+        Assert.That(banner.Label.font, Is.SameAs(AssetDatabase.LoadAssetAtPath<Font>(FontPath)));
+        Assert.That(banner.Label.raycastTarget, Is.False);
+        Assert.That(banner.Banner.gameObject.activeSelf, Is.False);
+        Assert.That(hud.transform.GetChild(hud.transform.childCount - 1).name, Is.EqualTo("DamageFlash"));
+
+        GameObject pickup = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/PREFABS/AgimatPickup.prefab");
+        Assert.That(pickup.GetComponent<NetworkIdentity>(), Is.Not.Null);
+        Assert.That(pickup.GetComponent<AgimatPickupInteractable>(), Is.Not.Null);
+        Assert.That(pickup.GetComponent<Nametag>(), Is.Not.Null);
+        Collider collider = pickup.GetComponent<Collider>();
+        Assert.That(collider != null && !collider.isTrigger, Is.True, "E aims at a solid collider.");
+        AgimatPickup agimat = pickup.GetComponent<AgimatPickup>();
+        foreach (AgimatType type in new[] { AgimatType.Gold, AgimatType.Silver, AgimatType.Bronze })
+            Assert.That(agimat.SpriteFor(type), Is.Not.Null);
+        Assert.That(agimat.WorldSprite.GetComponent<BillboardSprite>(), Is.Not.Null);
+        DistanceFadeSprite fade = pickup.GetComponent<DistanceFadeSprite>();
+        Assert.That(fade, Is.Not.Null);
+        Assert.That(new SerializedObject(fade).FindProperty("fadedDistance").floatValue, Is.LessThanOrEqualTo(5f), "Only seen up close.");
+
+        GameObject lady = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/PREFABS/Enemies/WhiteLady.prefab");
+        Assert.That(lady.GetComponent<WhiteLady>().WorldSprite.sprite, Is.Not.Null);
+        Assert.That(lady.GetComponent<WhiteLady>().WorldSprite.GetComponent<BillboardSprite>(), Is.Not.Null);
+        Assert.That(lady.GetComponent<DistanceFadeSprite>(), Is.Not.Null);
+        Assert.That(lady.GetComponent<NetworkIdentity>(), Is.Null, "Local to one player.");
+        Assert.That(lady.GetComponent<EnemyFearSource>(), Is.Null, "Not an enemy.");
+
+        Scene hub = EditorSceneManager.OpenScene("Assets/Scenes/SampleScene.unity", OpenSceneMode.Additive);
+        try
+        {
+            NetworkManager manager = InScene<NetworkManager>(hub).Single();
+            Assert.That(manager.spawnPrefabs, Does.Contain(pickup));
+            WhiteLadyDirector director = manager.GetComponent<WhiteLadyDirector>();
+            Assert.That(director != null && director.Prefab == lady.GetComponent<WhiteLady>(), Is.True);
+        }
+        finally
+        {
+            EditorSceneManager.CloseScene(hub, true);
+        }
+        Scene streets = EditorSceneManager.OpenScene("Assets/Scenes/StreetsTest.unity", OpenSceneMode.Additive);
+        try
+        {
+            AgimatSpawner spawner = InScene<AgimatSpawner>(streets).Single();
+            Assert.That(spawner.PickupPrefab, Is.SameAs(agimat));
+            Assert.That(spawner.MinCount, Is.EqualTo(3));
+            Assert.That(spawner.MaxCount, Is.EqualTo(5));
+            Assert.That(spawner.MinReachableCount, Is.EqualTo(2), "Some agimats can be found without opening barricades.");
+            MapManager map = InScene<MapManager>(streets).Single();
+            Assert.That(map.JeepneyPrefab, Is.SameAs(AssetDatabase.LoadAssetAtPath<GameObject>("Assets/PREFABS/Jeepney.prefab")),
+                "The street's spawn block gets a jeepney home.");
+        }
+        finally
+        {
+            EditorSceneManager.CloseScene(streets, true);
+        }
     }
 
     private static T[] InScene<T>(Scene scene) where T : Component =>

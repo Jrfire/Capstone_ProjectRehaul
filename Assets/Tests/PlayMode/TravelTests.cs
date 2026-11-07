@@ -279,6 +279,7 @@ public sealed class TravelTests : InputTestFixture
         manager.transport = transport;
         manager.playerPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(PlayerPath);
         manager.spawnPrefabs.Add(AssetDatabase.LoadAssetAtPath<GameObject>("Assets/PREFABS/Enemies/Tikbalang.prefab"));
+        manager.spawnPrefabs.Add(AssetDatabase.LoadAssetAtPath<GameObject>("Assets/PREFABS/AgimatPickup.prefab"));
         manager.autoCreatePlayer = true;
         manager.dontDestroyOnLoad = true;
         var director = managerObject.AddComponent<TravelDirector>();
@@ -414,12 +415,29 @@ public sealed class TravelTests : InputTestFixture
             "Only the base has a travel map; away from base the jeepney heads home.");
         StreetBlock spawnBlock = Enumerable.Range(0, map.BlockCount).Where(i => map.GetRole(i) == MapBlockRole.Spawn).Select(map.GetBlock).Single();
         Assert.That(spawnBlock.Entrances.All(entrance => entrance.Obstacle == null), Is.True, "The spawn block's entrance is never obstructed.");
+        Assert.That(map.PlacedJeepney, Is.Not.Null, "A jeepney home waits in the spawn block.");
+        Assert.That(map.PlacedJeepney.transform.IsChildOf(spawnBlock.transform), Is.True);
+        Assert.That(map.PlacedJeepney.GetComponentInChildren<TravelInteractable>(), Is.Not.Null);
         Assert.That(tikbalang.netIdentity.netId, Is.Not.EqualTo(0u));
         var candidates = EnemySpawner.FindCandidateBlocks(map, out bool relaxed);
         Assert.That(relaxed, Is.False);
         Assert.That(candidates, Does.Contain(tikbalang.HomeBlockIndex), "It guards a block away from the player spawn.");
         Assert.That(map.GetRole(tikbalang.HomeBlockIndex), Is.Not.EqualTo(MapBlockRole.Spawn));
         yield return WaitUntil(() => tikbalang.Motor.IsActive, 1f, "The Tikbalang's agent did not activate on the NavMesh.");
+
+        AgimatSpawner agimats = Object.FindAnyObjectByType<AgimatSpawner>();
+        Assert.That(agimats, Is.Not.Null, "The map scene distributes agimats.");
+        yield return WaitUntil(() => agimats.HasSpawned, 3f, "The agimats were not distributed.");
+        Assert.That(agimats.Spawned.Count, Is.InRange(3, 5));
+        var agimatBlocks = agimats.Spawned.Select(pickup => map.TryGetBlockIndex(pickup.transform.position, out int block) ? block : -1).ToList();
+        Assert.That(agimatBlocks, Does.Contain(tikbalang.HomeBlockIndex), "One agimat waits in the Tikbalang's territory.");
+        Assert.That(agimatBlocks.All(block => block >= 0 && map.GetRole(block) != MapBlockRole.Spawn), Is.True, "Agimats lie inside the map, never in the spawn block.");
+        Assert.That(agimats.Spawned.All(pickup => pickup.netIdentity.netId != 0u), Is.True, "Agimats are networked.");
+        bool[] reachable = map.FindOpenlyReachableFromSpawn();
+        int sealedCaps = Enumerable.Range(0, map.BlockCount).Count(i => map.GetRole(i) == MapBlockRole.EndCap && !reachable[i]);
+        if (sealedCaps > 0)
+            Assert.That(agimatBlocks.Any(block => map.GetRole(block) == MapBlockRole.EndCap && !reachable[block]), Is.True, "Sealed end caps hide agimats.");
+        Assert.That(agimatBlocks.Count(block => reachable[block]), Is.GreaterThanOrEqualTo(2), "Some agimats can be collected without opening a barricade.");
     }
 
     private static IEnumerator WaitUntil(System.Func<bool> condition, float seconds, string message)

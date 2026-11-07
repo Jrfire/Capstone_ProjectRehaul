@@ -33,20 +33,25 @@ public sealed class EnemySpawner : MonoBehaviour
     private bool hasSpawned;
 
     public IReadOnlyList<GameObject> Spawned => spawned;
+    /// <summary>True once the server has run <see cref="SpawnAll"/>.</summary>
+    public bool HasSpawned => hasSpawned;
     public List<EnemySpawnEntry> Enemies => enemies;
     public int RolledEnemyCount => rolledEnemyCount;
 
-    /// <summary>The rolled enemy from the trip into this scene, otherwise the fallback list.</summary>
+    /// <summary>The rolled enemy types from the trip into this scene (Rolled Enemy Count of each), otherwise the fallback list.</summary>
     public List<EnemySpawnEntry> ResolveEntries()
     {
         TravelDirector travel = TravelDirector.Instance;
         if (travel == null || !travel.HasArrivalRoll)
             return enemies;
         var rolled = new List<EnemySpawnEntry>();
-        if (travel.ArrivalEnemy != null && travel.ArrivalEnemy.prefab != null)
-            rolled.Add(new EnemySpawnEntry { prefab = travel.ArrivalEnemy.prefab, count = rolledEnemyCount });
-        else if (travel.ArrivalEnemy != null)
-            Debug.LogError($"Enemy definition '{travel.ArrivalEnemy.name}' has no prefab.", travel.ArrivalEnemy);
+        foreach (EnemyDefinition enemy in travel.ArrivalEnemies)
+        {
+            if (enemy != null && enemy.prefab != null)
+                rolled.Add(new EnemySpawnEntry { prefab = enemy.prefab, count = rolledEnemyCount });
+            else if (enemy != null)
+                Debug.LogError($"Enemy definition '{enemy.name}' has no prefab.", enemy);
+        }
         return rolled;
     }
 

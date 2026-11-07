@@ -45,8 +45,8 @@ public sealed class AlbularyoScreen : MonoBehaviour
     private string countFormat = "x{0}";
     [SerializeField, Tooltip("{0} = agimats turned in this round.")]
     private string turnedInFormat = "Turned in: {0}x";
-    [SerializeField, Tooltip("Placeholder until the currency system exists.")]
-    private string rewardLabel = "Reward: ???";
+    [SerializeField, Tooltip("Bottom-right label; {0} = pesos earned from this round's sacrifices, e.g. \"₱40\".")]
+    private string rewardFormat = "Reward: {0}";
     [SerializeField, Tooltip("Sacrifice label colour while none of that agimat is held.")]
     private Color unavailableTextColor = new Color(0.5f, 0.5f, 0.5f, 0.8f);
 
@@ -195,7 +195,7 @@ public sealed class AlbularyoScreen : MonoBehaviour
         SetCount(silverCountText, silverButton, bank.Count(AgimatType.Silver));
         SetCount(bronzeCountText, bronzeButton, bank.Count(AgimatType.Bronze));
         SetText(turnedInText, string.Format(turnedInFormat, bank.TurnedIn));
-        SetText(rewardText, rewardLabel);
+        SetText(rewardText, string.Format(rewardFormat, AgimatBank.FormatPeso(bank.RoundReward)));
         SetText(dialogueText, AlbularyoDialogue.Format(showingQuotaMet ? quotaMetLine : requestLine,
             Mathf.Max(0, bank.Quota - bank.TurnedIn), bank.Quota, bank.TurnedIn));
     }

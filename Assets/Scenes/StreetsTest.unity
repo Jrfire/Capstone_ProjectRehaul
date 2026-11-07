@@ -129,6 +129,7 @@ GameObject:
   m_Component:
   - component: {fileID: 494850883}
   - component: {fileID: 494850882}
+  - component: {fileID: 494850884}
   m_Layer: 0
   m_Name: MapManager
   m_TagString: Untagged
@@ -177,6 +178,7 @@ MonoBehaviour:
   - {fileID: 8445120967365032703, guid: 29215ed96ff906946b72fd8d3ff5b0b2, type: 3}
   - {fileID: 3103207494426375018, guid: 0e8d3edbd0bd49143a0cfd6a3df13fff, type: 3}
   connectorBlockCount: 6
+  maxBlockCount: 15
   maxAttempts: 100
   buildOnStart: 1
   useFixedSeed: 0
@@ -192,6 +194,8 @@ MonoBehaviour:
   spawnPointSpacing: 1.5
   spawnClearanceRadius: 0.45
   spawnClearanceHeight: 2
+  jeepneyPrefab: {fileID: 1474712399268956110, guid: 41288c77e2c17ad4cbb24cda0539b611, type: 3}
+  jeepneyRearClearance: 2
   fillerBlocks:
   - {fileID: 1296405092145811542, guid: 1493f9eee56a86148b7b9c0e878defa8, type: 3}
   - {fileID: 5346572578585674532, guid: 51dd36a9b90181f4180f1aecab6c563e, type: 3}
@@ -223,6 +227,31 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &494850884
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 494850881}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d4e5f60718293a4b5c6d7e8f01122334, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Capstone.Enemies::AgimatSpawner
+  map: {fileID: 494850882}
+  pickupPrefab: {fileID: 8691754137658474014, guid: ebf90e217366a7f4b971bef02e005e5c, type: 3}
+  minCount: 3
+  maxCount: 5
+  goldWeight: 1
+  silverWeight: 2
+  bronzeWeight: 3
+  placeInEnemyHomes: 1
+  minReachableCount: 2
+  heightAboveFloor: 0.35
+  minSpacing: 3
+  entranceClearance: 3
+  settleFrames: 3
 --- !u!1 &564393576
 GameObject:
   m_ObjectHideFlags: 0

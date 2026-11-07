@@ -5,7 +5,8 @@ using UnityEngine.UI;
 /// <summary>
 /// HUD column (left side, below health and stamina) showing the shared agimat inventory from <see cref="AgimatBank"/>:
 /// one icon + "x0" row each for gold, silver and bronze, then the quota row ("turned in/quota"). Hidden while no local
-/// player exists or a menu hides the HUD (<see cref="HudVisibility"/>).
+/// player exists or a menu hides the HUD (<see cref="HudVisibility"/>). Also writes the shared money ("₱100") next to
+/// the hearts.
 /// </summary>
 [DisallowMultipleComponent]
 public sealed class AgimatHud : MonoBehaviour
@@ -19,8 +20,11 @@ public sealed class AgimatHud : MonoBehaviour
     private Text quotaText;
     [SerializeField, Tooltip("Format for each type's count; {0} = amount.")]
     private string countFormat = "x{0}";
+    [SerializeField, Tooltip("Shared money next to the hearts (inside HealthPanel, so it hides with them).")]
+    private Text moneyText;
 
     public GameObject Panel => panel;
+    public Text MoneyText => moneyText;
     public Text GoldText => goldText;
     public Text SilverText => silverText;
     public Text BronzeText => bronzeText;
@@ -40,6 +44,7 @@ public sealed class AgimatHud : MonoBehaviour
         bool visible = bank != null && NetworkClient.isConnected && NetworkClient.localPlayer != null && !HudVisibility.Hidden;
         if (panel != null && panel.activeSelf != visible)
             panel.SetActive(visible);
+        SetText(moneyText, AgimatBank.FormatPeso(bank != null ? bank.Money : 0));
         if (!visible)
             return;
 

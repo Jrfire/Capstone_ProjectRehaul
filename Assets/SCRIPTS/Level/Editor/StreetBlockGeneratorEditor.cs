@@ -21,6 +21,16 @@ public sealed class StreetBlockGeneratorEditor : Editor
                 "Filler block (0 entrances): the inside is packed with buildings separated by narrow alleys (see Filler settings); " +
                 "Middle Building Count is ignored. Add it to a MapManager's Filler Blocks pool.", MessageType.Info);
         }
+        if (generator.townBlock)
+        {
+            EditorGUILayout.HelpBox(
+                "Town block: its edge walls are removed by MapManager wherever another town block touches it, and it never holds " +
+                "entrance obstacles. Needs 2+ entrances; add it to a MapManager's Town Blocks pool.", MessageType.Info);
+        }
+        if (block != null && block.Size.x > 0f && block.IsTownBlock != generator.townBlock)
+        {
+            EditorGUILayout.HelpBox("Town Block changed since the last generation; click Generate to apply it.", MessageType.Warning);
+        }
         if (block != null && block.Size.x > 0f)
         {
             EditorGUILayout.HelpBox(

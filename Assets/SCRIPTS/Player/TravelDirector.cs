@@ -22,6 +22,8 @@ public struct TravelSeedMessage : NetworkMessage
 {
     public string sceneName;
     public int seed;
+    /// <summary>Connector blocks added to the scene's MapManager count (grows with each quota met).</summary>
+    public int extraConnectors;
 }
 
 public struct TravelBeginMessage : NetworkMessage
@@ -47,7 +49,7 @@ public struct TravelCompleteMessage : NetworkMessage
 {
 }
 
-/// <summary>Every destination's rolled enemy for the current scene's terminals ("" = no enemies).</summary>
+/// <summary>Every destination's rolled enemies for the current scene's terminals (names joined by ", "; "" = none).</summary>
 public struct TravelEnemyRollMessage : NetworkMessage
 {
     public string[] scenes;
@@ -73,7 +75,12 @@ public sealed class TravelDirector : MonoBehaviour
     private float readyTimeout = 60f;
     [SerializeField, Min(0f), Tooltip("The loading screen stays up at least this many seconds, even when the scene builds sooner.")]
     private float minimumLoadingSeconds = 8f;
+    [SerializeField, Range(0f, 1f), Tooltip("From round 3 on, the chance of each extra enemy type (up to 2 in round 3, 3 in round 6, 4 from round 9).")]
+    private float extraEnemyChance = 0.5f;
+    [SerializeField, Min(0), Tooltip("Connector blocks added to every map per quota met (MapManager keeps the whole map, end caps and spawn included, within its Max Block Count).")]
+    private int extraBlocksPerQuota = 2;
     private float serverLoadingShownAt;
+    private int serverRolledRound = -1;
 
     private readonly HashSet<int> pendingConnections = new HashSet<int>();
     private readonly HashSet<int> readyConnections = new HashSet<int>();
@@ -84,17 +91,32 @@ public sealed class TravelDirector : MonoBehaviour
     private string serverDestination;
     private string serverTravelScene;
     private int serverTravelSeed;
-    private readonly Dictionary<string, EnemyDefinition> serverRolls = new Dictionary<string, EnemyDefinition>();
+    private int serverTravelExtraConnectors;
+    private readonly Dictionary<string, List<EnemyDefinition>> serverRolls = new Dictionary<string, List<EnemyDefinition>>();
+    private readonly List<EnemyDefinition> arrivalEnemies = new List<EnemyDefinition>();
     private readonly Dictionary<string, string> clientRolls = new Dictionary<string, string>();
 
     public static TravelDirector Instance { get; private set; }
 
     /// <summary>
-    /// Server only: true once a travel started, so the arrival scene's EnemySpawner spawns <see cref="ArrivalEnemy"/>
-    /// (null = the destination rolled no enemies) instead of its own fallback list.
+    /// Server only: true once a travel started, so the arrival scene's EnemySpawner spawns <see cref="ArrivalEnemies"/>
+    /// (empty = the destination rolled no enemies) instead of its own fallback list.
     /// </summary>
     public bool HasArrivalRoll { get; private set; }
-    public EnemyDefinition ArrivalEnemy { get; private set; }
+    /// <summary>Server: every different enemy type rolled for the trip's destination.</summary>
+    public IReadOnlyList<EnemyDefinition> ArrivalEnemies => arrivalEnemies;
+    /// <summary>Server: the first rolled enemy type, or null.</summary>
+    public EnemyDefinition ArrivalEnemy => arrivalEnemies.Count > 0 ? arrivalEnemies[0] : null;
+    public float ExtraEnemyChance
+    {
+        get => extraEnemyChance;
+        set => extraEnemyChance = Mathf.Clamp01(value);
+    }
+
+    /// <summary>Connector blocks added to every map in <paramref name="round"/> (2 per quota met by default).</summary>
+    public int ExtraConnectorsForRound(int round) => Mathf.Max(0, round - 1) * extraBlocksPerQuota;
+
+    private static int CurrentRound => RoundClock.Instance != null && RoundClock.Instance.enabled ? RoundClock.Instance.Round : 1;
     /// <summary>Raised on clients whenever the rolled enemy roster changes.</summary>
     public event System.Action RollsChanged;
     /// <summary>Server: a trip is starting from the current scene (first argument) to the destination (second argument).</summary>
@@ -192,33 +214,73 @@ public sealed class TravelDirector : MonoBehaviour
             terminal.gameObject.scene != SceneManager.GetActiveScene())
             return;
         bool changed = false;
+        int maxTypes = TravelDestination.MaxEnemyTypesForRound(CurrentRound);
+        serverRolledRound = CurrentRound;
         foreach (TravelDestination destination in terminal.DestinationEntries)
         {
             if (destination == null || string.IsNullOrEmpty(destination.Name) || serverRolls.ContainsKey(destination.Name))
                 continue;
-            serverRolls[destination.Name] = destination.Roll();
+            serverRolls[destination.Name] = destination.RollMany(maxTypes, extraEnemyChance);
             changed = true;
         }
         if (changed)
             NetworkServer.SendToAll(BuildRollMessage());
     }
 
-    public EnemyDefinition ServerRollFor(string sceneName) =>
-        sceneName != null && serverRolls.TryGetValue(sceneName, out EnemyDefinition enemy) ? enemy : null;
+    private void Update()
+    {
+        // A quota met (or the game reset) changes the round at base: reroll the terminals for the new difficulty.
+        if (!NetworkServer.active || Instance != this || ServerTraveling || serverRolledRound < 0 || serverRolledRound == CurrentRound)
+            return;
+        serverRolls.Clear();
+        serverRolledRound = CurrentRound;
+        foreach (MapTerminal terminal in FindObjectsByType<MapTerminal>(FindObjectsInactive.Exclude, FindObjectsSortMode.None))
+            ServerRollDestinations(terminal);
+        NetworkServer.SendToAll(BuildRollMessage());
+    }
 
-    /// <summary>Client: rolled enemy name for a destination, "" when it rolled none, or null when not rolled yet.</summary>
+    /// <summary>Server: the first enemy type rolled for a destination, or null.</summary>
+    public EnemyDefinition ServerRollFor(string sceneName)
+    {
+        IReadOnlyList<EnemyDefinition> rolls = ServerRollsFor(sceneName);
+        return rolls.Count > 0 ? rolls[0] : null;
+    }
+
+    /// <summary>Server: every enemy type rolled for a destination (empty when none or not rolled).</summary>
+    public IReadOnlyList<EnemyDefinition> ServerRollsFor(string sceneName) =>
+        sceneName != null && serverRolls.TryGetValue(sceneName, out List<EnemyDefinition> enemies) && enemies != null
+            ? enemies
+            : (IReadOnlyList<EnemyDefinition>)System.Array.Empty<EnemyDefinition>();
+
+    /// <summary>
+    /// Client: rolled enemy names for a destination (joined by ", "), "" when it rolled none, or null when not rolled yet.
+    /// </summary>
     public string RolledEnemyName(string sceneName) =>
         sceneName != null && clientRolls.TryGetValue(sceneName, out string enemy) ? enemy : null;
+
+    public static string JoinEnemyNames(IEnumerable<EnemyDefinition> enemies)
+    {
+        var names = new List<string>();
+        if (enemies != null)
+        {
+            foreach (EnemyDefinition enemy in enemies)
+            {
+                if (enemy != null)
+                    names.Add(enemy.DisplayName);
+            }
+        }
+        return string.Join(", ", names);
+    }
 
     private TravelEnemyRollMessage BuildRollMessage()
     {
         var scenes = new string[serverRolls.Count];
         var enemies = new string[serverRolls.Count];
         int index = 0;
-        foreach (KeyValuePair<string, EnemyDefinition> roll in serverRolls)
+        foreach (KeyValuePair<string, List<EnemyDefinition>> roll in serverRolls)
         {
             scenes[index] = roll.Key;
-            enemies[index] = roll.Value != null ? roll.Value.DisplayName : string.Empty;
+            enemies[index] = JoinEnemyNames(roll.Value);
             index++;
         }
         return new TravelEnemyRollMessage { scenes = scenes, enemies = enemies };
@@ -235,7 +297,8 @@ public sealed class TravelDirector : MonoBehaviour
         serverFadeInEndsAt = 0f;
         serverRolls.Clear();
         HasArrivalRoll = false;
-        ArrivalEnemy = null;
+        arrivalEnemies.Clear();
+        serverRolledRound = -1;
         pendingConnections.Clear();
         readyConnections.Clear();
         if (!NetworkClient.active)
@@ -249,9 +312,9 @@ public sealed class TravelDirector : MonoBehaviour
         connection.Send(BuildRollMessage());
 
         if (ServerTraveling && !string.IsNullOrEmpty(serverTravelScene))
-            connection.Send(new TravelSeedMessage { sceneName = serverTravelScene, seed = serverTravelSeed });
+            connection.Send(new TravelSeedMessage { sceneName = serverTravelScene, seed = serverTravelSeed, extraConnectors = serverTravelExtraConnectors });
         else if (MapManager.Active != null && MapManager.Active.IsBuilt)
-            connection.Send(new TravelSeedMessage { sceneName = MapManager.Active.gameObject.scene.name, seed = MapManager.Active.Seed });
+            connection.Send(new TravelSeedMessage { sceneName = MapManager.Active.gameObject.scene.name, seed = MapManager.Active.Seed, extraConnectors = MapManager.Active.ExtraConnectors });
     }
 
     public void OnServerDisconnect(NetworkConnectionToClient connection)
@@ -355,13 +418,16 @@ public sealed class TravelDirector : MonoBehaviour
 
         // The destination keeps the enemy rolled while choosing it; the new scene's terminals roll afresh.
         HasArrivalRoll = true;
-        ArrivalEnemy = ServerRollFor(sceneName);
+        arrivalEnemies.Clear();
+        arrivalEnemies.AddRange(ServerRollsFor(sceneName));
         serverRolls.Clear();
         NetworkServer.SendToAll(BuildRollMessage());
 
         // The seed goes out before the scene message so every peer builds the same street.
-        MapManager.SetNetworkSeed(sceneName, serverTravelSeed);
-        NetworkServer.SendToAll(new TravelSeedMessage { sceneName = sceneName, seed = serverTravelSeed });
+        // Every quota met grows the maps.
+        serverTravelExtraConnectors = ExtraConnectorsForRound(CurrentRound);
+        MapManager.SetNetworkSeed(sceneName, serverTravelSeed, serverTravelExtraConnectors);
+        NetworkServer.SendToAll(new TravelSeedMessage { sceneName = sceneName, seed = serverTravelSeed, extraConnectors = serverTravelExtraConnectors });
         NetworkServer.SendToAll(new TravelBeginMessage
         {
             sceneName = sceneName,
@@ -386,12 +452,15 @@ public sealed class TravelDirector : MonoBehaviour
         NetworkManager.singleton.ServerChangeScene(sceneName);
     }
 
-    /// <summary>Server: the enemies rolled for the trip's destination (one today; ready for several).</summary>
+    /// <summary>Server: the enemy prefabs rolled for the trip's destination.</summary>
     private uint[] ArrivalEnemyAssetIds()
     {
         var ids = new List<uint>();
-        if (ArrivalEnemy != null && ArrivalEnemy.prefab != null && ArrivalEnemy.prefab.assetId != 0)
-            ids.Add(ArrivalEnemy.prefab.assetId);
+        foreach (EnemyDefinition enemy in arrivalEnemies)
+        {
+            if (enemy != null && enemy.prefab != null && enemy.prefab.assetId != 0 && !ids.Contains(enemy.prefab.assetId))
+                ids.Add(enemy.prefab.assetId);
+        }
         return ids.ToArray();
     }
 
@@ -463,7 +532,7 @@ public sealed class TravelDirector : MonoBehaviour
     {
         MapManager.WaitForNetworkSeed = true;
         NetworkClient.ReplaceHandler<TravelDestinationMessage>(OnClientDestination);
-        NetworkClient.ReplaceHandler<TravelSeedMessage>(message => MapManager.SetNetworkSeed(message.sceneName, message.seed));
+        NetworkClient.ReplaceHandler<TravelSeedMessage>(message => MapManager.SetNetworkSeed(message.sceneName, message.seed, message.extraConnectors));
         NetworkClient.ReplaceHandler<TravelBeginMessage>(OnClientBegin);
         NetworkClient.ReplaceHandler<TravelArrivalMessage>(OnClientArrival);
         NetworkClient.ReplaceHandler<TravelCompleteMessage>(_ => OnClientComplete());

@@ -560,6 +560,8 @@ public sealed class RoundClock : MonoBehaviour
                 health.SetHealth(PlayerHealth.MaxHealth);
             if (connection.identity.TryGetComponent(out PlayerStamina stamina))
                 stamina.ServerRestore();
+            if (connection.identity.TryGetComponent(out PlayerInventory inventory))
+                inventory.ServerClear();
             if (connection.identity.TryGetComponent(out PlayerPersistence player))
                 player.ServerSetAboard(false);
             TravelDirector.SendArrival(connection);

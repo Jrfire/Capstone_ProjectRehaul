@@ -80,7 +80,7 @@ public static class MapLayoutPlanner
 
     public static bool TryPlan(IEnumerable<StreetBlock> connectors, IEnumerable<StreetBlock> endCaps,
         IEnumerable<StreetBlock> spawnBlocks, int connectorCount, int seed, int maxAttempts,
-        out List<MapBlockPlacement> layout, out string error, float loopChance = 0f)
+        out List<MapBlockPlacement> layout, out string error, float loopChance = 0f, bool compact = false)
     {
         layout = null;
         List<StreetBlock> connectorPool = Collect(connectors);
@@ -92,7 +92,7 @@ public static class MapLayoutPlanner
         var random = new System.Random(seed);
         for (int attempt = 0; attempt < Mathf.Max(1, maxAttempts); attempt++)
         {
-            if (TryAttempt(connectorPool, capPool, spawnPool, connectorCount, Mathf.Clamp01(loopChance), random, out layout))
+            if (TryAttempt(connectorPool, capPool, spawnPool, connectorCount, Mathf.Clamp01(loopChance), compact, random, out layout))
             {
                 error = null;
                 return true;
@@ -188,7 +188,7 @@ public static class MapLayoutPlanner
     }
 
     private static bool TryAttempt(List<StreetBlock> connectors, List<StreetBlock> caps, List<StreetBlock> spawns,
-        int connectorCount, float loopChance, System.Random random, out List<MapBlockPlacement> layout)
+        int connectorCount, float loopChance, bool compact, System.Random random, out List<MapBlockPlacement> layout)
     {
         layout = new List<MapBlockPlacement>();
         var placed = new List<PlacedBlock>();
@@ -200,7 +200,9 @@ public static class MapLayoutPlanner
             while (placed.Count < connectorCount)
             {
                 if (!TryCloseLoop(connectors, loopChance, OpenEntrances(placed), random, placed, layout) &&
-                    !TryGrow(connectors, MapBlockRole.Connector, OpenEntrances(placed), random, placed, layout))
+                    !(compact
+                        ? TryGrowCompact(connectors, OpenEntrances(placed), random, placed, layout)
+                        : TryGrow(connectors, MapBlockRole.Connector, OpenEntrances(placed), random, placed, layout)))
                     return false;
             }
 
@@ -262,6 +264,58 @@ public static class MapLayoutPlanner
                 return true;
         }
         return false;
+    }
+
+    /// <summary>
+    /// Town growth: of every connector that fits an open entrance, places one sharing the most edge length with blocks
+    /// already placed (ties broken randomly), so the street packs into a compact cluster instead of a long snake.
+    /// </summary>
+    private static bool TryGrowCompact(List<StreetBlock> pool, List<PlacedEntrance> frontier,
+        System.Random random, List<PlacedBlock> placed, List<MapBlockPlacement> layout)
+    {
+        var best = new List<(StreetBlock prefab, Vector2 origin, int turns)>();
+        float bestContact = -1f;
+        foreach (PlacedEntrance target in frontier)
+        {
+            foreach (Candidate candidate in Candidates(pool, target))
+            {
+                Vector2 origin = Origin(candidate, target);
+                if (!Fits(candidate.Prefab, origin, candidate.Turns, placed))
+                    continue;
+                float contact = Contact(Describe(candidate.Prefab, origin, candidate.Turns).Footprint, placed);
+                if (contact > bestContact + Epsilon)
+                {
+                    bestContact = contact;
+                    best.Clear();
+                }
+                if (contact >= bestContact - Epsilon)
+                    best.Add((candidate.Prefab, origin, candidate.Turns));
+            }
+        }
+        if (best.Count == 0)
+            return false;
+        (StreetBlock prefab, Vector2 origin, int turns) chosen = best[random.Next(best.Count)];
+        Place(chosen.prefab, MapBlockRole.Connector, chosen.origin, chosen.turns, placed, layout);
+        return true;
+    }
+
+    /// <summary>Total edge length <paramref name="footprint"/> shares with the placed blocks.</summary>
+    private static float Contact(Rect footprint, List<PlacedBlock> placed)
+    {
+        float total = 0f;
+        foreach (PlacedBlock block in placed)
+            total += SharedEdge(footprint, block.Footprint);
+        return total;
+    }
+
+    /// <summary>Length of the edge two touching, non-overlapping rectangles share (0 if they do not touch).</summary>
+    public static float SharedEdge(Rect a, Rect b)
+    {
+        if (Mathf.Abs(a.xMax - b.xMin) <= Epsilon || Mathf.Abs(b.xMax - a.xMin) <= Epsilon)
+            return Mathf.Max(0f, Mathf.Min(a.yMax, b.yMax) - Mathf.Max(a.yMin, b.yMin));
+        if (Mathf.Abs(a.yMax - b.yMin) <= Epsilon || Mathf.Abs(b.yMax - a.yMin) <= Epsilon)
+            return Mathf.Max(0f, Mathf.Min(a.xMax, b.xMax) - Mathf.Max(a.xMin, b.xMin));
+        return 0f;
     }
 
     /// <summary>
