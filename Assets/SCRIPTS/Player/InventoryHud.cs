@@ -60,9 +60,8 @@ public sealed class InventoryHud : MonoBehaviour
 
     private void LateUpdate()
     {
-        PlayerInventory inventory = NetworkClient.isConnected && NetworkClient.localPlayer != null && !HudVisibility.Hidden
-            ? NetworkClient.localPlayer.GetComponent<PlayerInventory>()
-            : null;
+        NetworkIdentity hudPlayer = !HudVisibility.Hidden ? PlayerDeathScreen.HudPlayer : null;
+        PlayerInventory inventory = hudPlayer != null ? hudPlayer.GetComponent<PlayerInventory>() : null;
         if (bar == null)
             return;
         if (bar.gameObject.activeSelf != (inventory != null))

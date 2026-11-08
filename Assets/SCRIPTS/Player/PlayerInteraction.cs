@@ -22,16 +22,16 @@ public sealed class PlayerInteraction : NetworkBehaviour
 
     public override void OnStartLocalPlayer()
     {
-        InputAction configuredAction = inputActions != null ? inputActions.FindAction("Player/Use") : null;
+        InputAction configuredAction = inputActions != null ? inputActions.FindAction("Player/Interact") : null;
         if (configuredAction == null || configuredAction.type != InputActionType.Button ||
             playerCamera == null || !playerCamera.transform.IsChildOf(transform))
         {
-            Debug.LogError("PlayerInteraction requires a Button Player/Use action and its own child player camera.", this);
+            Debug.LogError("PlayerInteraction requires a Button Player/Interact action and its own child player camera.", this);
             enabled = false;
             return;
         }
 
-        useAction = configuredAction.Clone();
+        useAction = GameSettings.TrackBindings(configuredAction.Clone());
         if (isActiveAndEnabled)
             useAction.Enable();
     }

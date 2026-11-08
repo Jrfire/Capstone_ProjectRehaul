@@ -66,6 +66,22 @@ public sealed class PlayerDeathScreen : MonoBehaviour
     public static GameObject SpectatedPlayer =>
         active != null && active.Target != null ? active.Target.gameObject : null;
 
+    /// <summary>
+    /// The player the HUD should show: the spectated player while spectating, otherwise the local player.
+    /// Health, stamina, inventory and the damage flash read this so a spectator sees the watched player's HUD.
+    /// </summary>
+    public static NetworkIdentity HudPlayer
+    {
+        get
+        {
+            if (!NetworkClient.isConnected)
+                return null;
+            if (active != null && active.Phase == DeathScreenPhase.Spectating && active.Target != null)
+                return active.Target.netIdentity;
+            return NetworkClient.localPlayer;
+        }
+    }
+
     public DeathScreenPhase Phase { get; private set; }
     public PlayerPersistence Target { get; private set; }
     public Sprite JumpscareSprite => jumpscareImage != null ? jumpscareImage.sprite : null;
@@ -96,7 +112,7 @@ public sealed class PlayerDeathScreen : MonoBehaviour
             Debug.LogError("PlayerDeathScreen requires a Button Player/SpectateNext action.", this);
             return;
         }
-        spectateAction = configured.Clone();
+        spectateAction = GameSettings.TrackBindings(configured.Clone());
         spectateAction.Enable();
     }
 
@@ -158,6 +174,8 @@ public sealed class PlayerDeathScreen : MonoBehaviour
         HideLocalCanvases(health.gameObject);
 
         EnemyJumpscare jumpscare = EnemyJumpscare.Find(health.KillerAssetId);
+        if (jumpscare != null)
+            Capstone.Audio.AudioManager.Play2D(jumpscare.JumpscareSound, Capstone.Audio.AudioChannel.Jumpscare);
         jumpscareShown = jumpscare != null && jumpscare.FrontView != null && jumpscareImage != null;
         if (jumpscareShown)
         {
@@ -242,6 +260,8 @@ public sealed class PlayerDeathScreen : MonoBehaviour
                 spectateFadeIn = Mathf.Clamp01(phaseTime / fadeSeconds);
                 SetBlackout(1f - spectateFadeIn);
                 FollowTarget();
+                // Names can arrive after spectating starts.
+                UpdateLabel();
                 break;
         }
     }
@@ -308,10 +328,10 @@ public sealed class PlayerDeathScreen : MonoBehaviour
     {
         if (spectatingLabel == null)
             return;
-        int index = livingPlayers.IndexOf(Target) + 1;
+        string name = Target != null && Target.TryGetComponent(out PlayerName playerName) ? playerName.DisplayName : "Player";
         spectatingLabel.text = livingPlayers.Count > 1
-            ? $"Spectating ({index}/{livingPlayers.Count}) - Left click: next player"
-            : "Spectating";
+            ? $"Spectating: {name}\nLeft click: next player"
+            : $"Spectating: {name}";
         SetLabelVisible(true);
     }
 

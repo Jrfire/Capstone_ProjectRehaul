@@ -82,7 +82,7 @@ public sealed class PlayerFlashlight : NetworkBehaviour
             Debug.LogError("PlayerFlashlight requires a Button Player/Flashlight action.", this);
             return;
         }
-        toggleAction = configured.Clone();
+        toggleAction = GameSettings.TrackBindings(configured.Clone());
         if (isActiveAndEnabled)
             toggleAction.Enable();
     }

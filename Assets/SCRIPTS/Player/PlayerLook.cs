@@ -31,7 +31,7 @@ public sealed class PlayerLook : NetworkBehaviour
             return;
         }
 
-        lookAction = configuredAction.Clone();
+        lookAction = GameSettings.TrackBindings(configuredAction.Clone());
         lookAction.bindingMask = InputBinding.MaskByGroup("Keyboard&Mouse");
         pitch = Mathf.DeltaAngle(0f, playerCamera.transform.localEulerAngles.x);
         ownsCursor = true;
@@ -94,7 +94,8 @@ public sealed class PlayerLook : NetworkBehaviour
             captureRequested = hasFocus;
         }
 
-        if (hasFocus && !overlayActive && Keyboard.current?.escapeKey.wasPressedThisFrame == true)
+        // Without a pause menu (tests, legacy scenes) Escape toggles mouse capture for HUD access.
+        if (PauseMenu.Instance == null && hasFocus && !overlayActive && Keyboard.current?.escapeKey.wasPressedThisFrame == true)
             captureRequested = !captureRequested;
 
         bool wasCaptured = cursorCaptured;

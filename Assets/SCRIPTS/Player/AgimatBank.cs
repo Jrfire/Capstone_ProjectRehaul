@@ -28,6 +28,26 @@ public struct AgimatSacrificeRequest : NetworkMessage
     public AgimatType type;
 }
 
+/// <summary>Client: opened (talking = true) or closed the Albularyo screen.</summary>
+public struct AlbularyoTalkRequest : NetworkMessage
+{
+    public bool talking;
+}
+
+/// <summary>Server: the player currently talking to the Albularyo (netId; 0 = nobody).</summary>
+public struct AlbularyoTalkerMessage : NetworkMessage
+{
+    public uint netId;
+    /// <summary>True when sent only to a player whose request to talk was refused.</summary>
+    public bool refused;
+}
+
+/// <summary>Server: the quota was met and the talker left the Albularyo; every client shows "NIGHT: round".</summary>
+public struct NightTransitionMessage : NetworkMessage
+{
+    public int round;
+}
+
 /// <summary>
 /// Global agimat inventory and money (pesos) shared by every player (gold, silver and bronze counts), on the persistent
 /// NetworkManager object. Host-authoritative: the server changes it and broadcasts <see cref="AgimatStateMessage"/>.
@@ -63,8 +83,32 @@ public sealed class AgimatBank : MonoBehaviour
 
     private AgimatStateMessage clientState;
     private bool clientHasState;
+    private uint serverTalker;
+    private uint clientTalker;
+    private int serverPendingNight;
 
     public static AgimatBank Instance { get; private set; }
+
+    /// <summary>Raised on every client (host included) when the night transition starts; the argument is the new round.</summary>
+    public static event Action<int> NightTransitionStarted;
+    /// <summary>Raised on a client whose request to talk to the Albularyo was refused (someone else is talking, or readied).</summary>
+    public static event Action TalkRefused;
+
+    /// <summary>netId of the player talking to the Albularyo (only one at a time), or 0.</summary>
+    public uint Talker => NetworkServer.active ? serverTalker : clientTalker;
+
+    /// <summary>True on this client while another player has the Albularyo screen open.</summary>
+    public bool SomeoneElseTalking
+    {
+        get
+        {
+            uint talker = Talker;
+            return talker != 0 && (NetworkClient.localPlayer == null || NetworkClient.localPlayer.netId != talker);
+        }
+    }
+
+    /// <summary>Server: the round whose night transition waits for the talker to close the Albularyo screen (0 = none).</summary>
+    public int PendingNight => serverPendingNight;
 
     /// <summary>Raised on clients (and the host) whenever the shared state changes.</summary>
     public event Action Changed;
@@ -143,13 +187,31 @@ public sealed class AgimatBank : MonoBehaviour
 
     // ---------------------------------------------------------------- client
 
-    public void RegisterClientHandlers() => NetworkClient.ReplaceHandler<AgimatStateMessage>(OnClientState);
+    public void RegisterClientHandlers()
+    {
+        NetworkClient.ReplaceHandler<AgimatStateMessage>(OnClientState);
+        NetworkClient.ReplaceHandler<AlbularyoTalkerMessage>(message =>
+        {
+            clientTalker = message.netId;
+            if (message.refused)
+                TalkRefused?.Invoke();
+        });
+        NetworkClient.ReplaceHandler<NightTransitionMessage>(message => NightTransitionStarted?.Invoke(message.round));
+    }
 
     public void ResetClient()
     {
         clientHasState = false;
         clientState = default;
+        clientTalker = 0;
         Changed?.Invoke();
+    }
+
+    /// <summary>Client: tells the host this player opened (true) or closed (false) the Albularyo screen.</summary>
+    public void RequestTalk(bool talking)
+    {
+        if (NetworkClient.isConnected)
+            NetworkClient.Send(new AlbularyoTalkRequest { talking = talking });
     }
 
     /// <summary>Client: asks the host to sacrifice one agimat of <paramref name="type"/> (must be near an Albularyo).</summary>
@@ -173,6 +235,7 @@ public sealed class AgimatBank : MonoBehaviour
     {
         NetworkServer.ReplaceHandler<AgimatSacrificeRequest>(OnServerSacrifice);
         NetworkServer.ReplaceHandler<AgimatPickupRequest>(OnServerPickup);
+        NetworkServer.ReplaceHandler<AlbularyoTalkRequest>(OnServerTalk);
         Subscribe();
         Broadcast();
     }
@@ -185,9 +248,21 @@ public sealed class AgimatBank : MonoBehaviour
         serverMoney = 0;
         serverRoundReward = 0;
         lastSentQuota = -1;
+        serverTalker = 0;
+        serverPendingNight = 0;
     }
 
-    public void OnServerConnect(NetworkConnectionToClient connection) => connection.Send(BuildMessage());
+    public void OnServerConnect(NetworkConnectionToClient connection)
+    {
+        connection.Send(BuildMessage());
+        connection.Send(new AlbularyoTalkerMessage { netId = serverTalker });
+    }
+
+    public void OnServerDisconnect(NetworkConnectionToClient connection)
+    {
+        if (connection?.identity != null && connection.identity.netId == serverTalker)
+            ServerReleaseTalker();
+    }
 
     private void Update()
     {
@@ -197,6 +272,68 @@ public sealed class AgimatBank : MonoBehaviour
         // The quota follows the round, which can change without passing through the bank (e.g. the game reset).
         if (Quota != lastSentQuota)
             Broadcast();
+        if (serverTalker != 0 && !TalkerStillValid(serverTalker))
+            ServerReleaseTalker();
+    }
+
+    private static bool TalkerStillValid(uint netId)
+    {
+        if (!NetworkServer.spawned.TryGetValue(netId, out NetworkIdentity identity) || identity == null)
+            return false;
+        if (identity.TryGetComponent(out PlayerHealth health) && health.IsDead)
+            return false;
+        if (TravelDirector.Instance != null && TravelDirector.Instance.ServerTraveling)
+            return false;
+        return RoundClock.Instance == null || RoundClock.Instance.Phase != RoundPhase.GameOver;
+    }
+
+    private void OnServerTalk(NetworkConnectionToClient connection, AlbularyoTalkRequest request)
+    {
+        NetworkIdentity identity = connection?.identity;
+        if (identity == null)
+            return;
+        if (!request.talking)
+        {
+            if (identity.netId == serverTalker)
+                ServerReleaseTalker();
+            return;
+        }
+        bool readied = identity.TryGetComponent(out PlayerPersistence player) && (player.IsReady || player.IsAboard);
+        if ((serverTalker != 0 && serverTalker != identity.netId && TalkerStillValid(serverTalker)) ||
+            readied || !TalkerStillValid(identity.netId))
+        {
+            // Refused: the requester's optimistically opened screen closes.
+            connection.Send(new AlbularyoTalkerMessage { netId = serverTalker, refused = true });
+            return;
+        }
+        serverTalker = identity.netId;
+        NetworkServer.SendToAll(new AlbularyoTalkerMessage { netId = serverTalker });
+    }
+
+    /// <summary>
+    /// Server: nobody is talking to the Albularyo any more. A quota met during the conversation starts the night
+    /// transition for everyone now.
+    /// </summary>
+    public void ServerReleaseTalker()
+    {
+        serverTalker = 0;
+        if (NetworkServer.active)
+            NetworkServer.SendToAll(new AlbularyoTalkerMessage { netId = 0 });
+        if (serverPendingNight > 0)
+        {
+            int round = serverPendingNight;
+            serverPendingNight = 0;
+            ServerStartNight(round);
+        }
+    }
+
+    /// <summary>Server: fades every client to black with "NIGHT: round" (skipped while traveling or after a game over).</summary>
+    public void ServerStartNight(int round)
+    {
+        if (!NetworkServer.active || (TravelDirector.Instance != null && TravelDirector.Instance.ServerTraveling) ||
+            (RoundClock.Instance != null && RoundClock.Instance.Phase == RoundPhase.GameOver))
+            return;
+        NetworkServer.SendToAll(new NightTransitionMessage { round = round });
     }
 
     private void Subscribe()
@@ -230,6 +367,20 @@ public sealed class AgimatBank : MonoBehaviour
         if (!NetworkServer.active || index < 0 || index >= TypeCount || amount == 0)
             return;
         serverCounts[index] = Mathf.Max(0, serverCounts[index] + amount);
+        Broadcast();
+    }
+
+    /// <summary>Server: restores saved agimat counts, turned-in count, money and round reward (loading a save file).</summary>
+    public void ServerRestore(int gold, int silver, int bronze, int turnedIn, int money, int roundReward)
+    {
+        if (!NetworkServer.active)
+            return;
+        serverCounts[(int)AgimatType.Gold] = Mathf.Max(0, gold);
+        serverCounts[(int)AgimatType.Silver] = Mathf.Max(0, silver);
+        serverCounts[(int)AgimatType.Bronze] = Mathf.Max(0, bronze);
+        serverTurnedIn = Mathf.Max(0, turnedIn);
+        serverMoney = Mathf.Max(0, money);
+        serverRoundReward = Mathf.Max(0, roundReward);
         Broadcast();
     }
 
@@ -292,7 +443,14 @@ public sealed class AgimatBank : MonoBehaviour
             serverTurnedIn = 0;
             serverRoundReward = 0;
             if (clock != null)
+            {
                 clock.ServerCompleteRound();
+                // The night starts once the talker closes the Albularyo screen (or now, when nobody is talking).
+                if (serverTalker != 0)
+                    serverPendingNight = clock.Round;
+                else
+                    ServerStartNight(clock.Round);
+            }
         }
         Broadcast();
         return true;
@@ -308,6 +466,11 @@ public sealed class AgimatBank : MonoBehaviour
         }
         if (connection.identity.TryGetComponent(out PlayerHealth health) && health.IsDead)
             return;
+        if (serverTalker != 0 && connection.identity.netId != serverTalker)
+        {
+            Debug.LogWarning($"Rejected agimat sacrifice from connection {connection.connectionId}: someone else is talking to the Albularyo.", this);
+            return;
+        }
         ServerSacrifice(request.type);
     }
 
@@ -332,6 +495,7 @@ public sealed class AgimatBank : MonoBehaviour
         serverTurnedIn = 0;
         serverMoney = 0;
         serverRoundReward = 0;
+        serverPendingNight = 0;
         Broadcast();
     }
 

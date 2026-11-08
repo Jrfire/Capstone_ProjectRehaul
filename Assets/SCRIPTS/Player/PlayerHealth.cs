@@ -7,6 +7,11 @@ using UnityEngine;
 public sealed class PlayerHealth : NetworkBehaviour
 {
     public const int MaxHealth = 6;
+    /// <summary>Damage that leaves this much health or less (half a heart) kills instead.</summary>
+    public const int LethalThreshold = 1;
+
+    /// <summary>Server: raised when damage or <see cref="SetHealth"/> takes a living player to 0.</summary>
+    public static event Action<PlayerHealth> ServerDied;
 
     // Declared before currentHealth so clients receive the killer no later than the fatal health value.
     [SyncVar] private uint killerAssetId;
@@ -26,7 +31,10 @@ public sealed class PlayerHealth : NetworkBehaviour
         killerAssetId = 0;
     }
 
-    /// <summary>Server: deals damage. Pass the attacker's identity so a fatal hit records the killer for its jumpscare.</summary>
+    /// <summary>
+    /// Server: deals damage. Pass the attacker's identity so a fatal hit records the killer for its jumpscare. Players
+    /// cannot be left on half a heart: damage that would leave <see cref="LethalThreshold"/> or less kills outright.
+    /// </summary>
     [Server]
     public void TakeDamage(int amount, NetworkIdentity source = null)
     {
@@ -36,9 +44,13 @@ public sealed class PlayerHealth : NetworkBehaviour
             return;
 
         int remaining = currentHealth - Mathf.Min(amount, currentHealth);
+        if (remaining <= LethalThreshold)
+            remaining = 0;
         if (remaining == 0)
             killerAssetId = source != null ? source.assetId : 0;
         currentHealth = remaining;
+        if (remaining == 0)
+            OnServerDeath();
     }
 
     [Server]
@@ -55,8 +67,18 @@ public sealed class PlayerHealth : NetworkBehaviour
     [Server]
     public void SetHealth(int value)
     {
+        bool wasAlive = currentHealth > 0;
         killerAssetId = 0;
         currentHealth = Mathf.Clamp(value, 0, MaxHealth);
+        if (wasAlive && currentHealth == 0)
+            OnServerDeath();
+    }
+
+    private void OnServerDeath()
+    {
+        if (TryGetComponent(out PlayerInventory inventory))
+            inventory.ServerDropAll();
+        ServerDied?.Invoke(this);
     }
 
     private void OnHealthChanged(int previous, int current)

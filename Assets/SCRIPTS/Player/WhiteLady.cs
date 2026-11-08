@@ -98,7 +98,29 @@ public sealed class WhiteLady : MonoBehaviour
     [SerializeField, Min(1f), Tooltip("Peeking unseen this long, she gives up and comes back later.")]
     private float peekTimeout = 45f;
 
+    [Header("Sounds (only the chosen player hears her)")]
+    [SerializeField, Tooltip("Laughs played from her position while she lingers, peeks or waits to lunge.")]
+    private Capstone.Audio.AudioClipSet laughSound = new Capstone.Audio.AudioClipSet();
+    [SerializeField, Min(0.5f)] private float minLaughInterval = 6f;
+    [SerializeField, Min(0.5f)] private float maxLaughInterval = 14f;
+    [SerializeField, Min(0.5f), Tooltip("Shorter laugh interval after she comes back for the jumpscare, so the player turns towards her.")]
+    private float primedLaughInterval = 3.5f;
+    [SerializeField, Tooltip("Laugh played when she vanishes (the jumpscare is now primed).")]
+    private Capstone.Audio.AudioClipSet vanishLaughSound = new Capstone.Audio.AudioClipSet();
+    [SerializeField, Tooltip("Played on the Jumpscare channel when she lunges at the camera.")]
+    private Capstone.Audio.AudioClipSet jumpscareSound = new Capstone.Audio.AudioClipSet();
+    [SerializeField, Min(0.1f)] private float laughMinDistance = 3f;
+    [SerializeField, Min(1f)] private float laughMaxDistance = 40f;
+
     private const float BodyRadius = 0.45f;
+    private float nextLaughAt;
+
+    public int LaughsPlayed { get; private set; }
+    public int VanishLaughsPlayed { get; private set; }
+    public int JumpscaresPlayed { get; private set; }
+    public Capstone.Audio.AudioClipSet LaughSound => laughSound;
+    public Capstone.Audio.AudioClipSet VanishLaughSound => vanishLaughSound;
+    public Capstone.Audio.AudioClipSet JumpscareSound => jumpscareSound;
     private const float PeekOffset = -0.1f;
     private const float HideOffset = 1.1f;
 
@@ -265,6 +287,8 @@ public sealed class WhiteLady : MonoBehaviour
                     Current = Phase.Lunging;
                     phaseStart = Time.time;
                     lungeFrom = transform.position;
+                    JumpscaresPlayed++;
+                    Capstone.Audio.AudioManager.Play2D(jumpscareSound, Capstone.Audio.AudioChannel.Jumpscare);
                 }
                 break;
 
@@ -280,7 +304,40 @@ public sealed class WhiteLady : MonoBehaviour
                     Finish();
                 break;
         }
+        UpdateLaughs();
         UpdateFlicker();
+    }
+
+    private void UpdateLaughs()
+    {
+        bool laughing = Visible && (Current == Phase.Lingering || Current == Phase.Peeking || Current == Phase.Stalking);
+        if (!laughing)
+            return;
+        if (nextLaughAt <= 0f)
+        {
+            ScheduleLaugh(true);
+            return;
+        }
+        if (Time.time < nextLaughAt)
+            return;
+        LaughsPlayed++;
+        Capstone.Audio.AudioManager.PlayAt(laughSound, FacePosition, Capstone.Audio.AudioChannel.Sfx, laughMinDistance, laughMaxDistance);
+        ScheduleLaugh(false);
+    }
+
+    private void ScheduleLaugh(bool first)
+    {
+        float interval = Current == Phase.Stalking
+            ? primedLaughInterval
+            : Mathf.Lerp(minLaughInterval, Mathf.Max(minLaughInterval, maxLaughInterval), random != null ? (float)random.NextDouble() : Random.value);
+        // The first laugh of an appearance comes quickly so she is noticed.
+        nextLaughAt = Time.time + (first ? Mathf.Min(1.5f, interval) : interval);
+    }
+
+    private void PlayVanishLaugh()
+    {
+        VanishLaughsPlayed++;
+        Capstone.Audio.AudioManager.PlayAt(vanishLaughSound, FacePosition, Capstone.Audio.AudioChannel.Sfx, laughMinDistance, laughMaxDistance);
     }
 
     private void EnterLingering()
@@ -292,6 +349,8 @@ public sealed class WhiteLady : MonoBehaviour
 
     private void EnterHidden()
     {
+        PlayVanishLaugh();
+        nextLaughAt = 0f;
         SetVisible(false);
         Current = Phase.Hidden;
         reappearAt = Time.time + Mathf.Lerp(minReappearSeconds, Mathf.Max(minReappearSeconds, maxReappearSeconds), (float)random.NextDouble());
@@ -299,6 +358,7 @@ public sealed class WhiteLady : MonoBehaviour
 
     private void EnterAway()
     {
+        nextLaughAt = 0f;
         SetVisible(false);
         spotted = false;
         Current = Phase.Away;

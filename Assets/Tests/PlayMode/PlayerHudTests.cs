@@ -165,7 +165,7 @@ public sealed class PlayerHudTests
         for (int health = 6; health >= 0; health--)
         {
             if (health < 6)
-                local.TakeDamage(1);
+                local.SetHealth(health);
             yield return null;
             yield return null;
             AssertHearts(health);

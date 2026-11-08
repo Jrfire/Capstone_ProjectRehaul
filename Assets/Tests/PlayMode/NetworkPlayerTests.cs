@@ -84,7 +84,9 @@ public sealed class NetworkPlayerTests : InputTestFixture
         Assert.That(identity.sceneId, Is.Zero);
         Assert.That(prefab.GetComponent<CharacterController>(), Is.Not.Null);
 
-        NetworkTransformReliable networkTransform = prefab.GetComponent<NetworkTransformReliable>();
+        // Unreliable sends absolute values; Reliable's delta compression desyncs clients that respawn remote players after scene changes.
+        NetworkTransformUnreliable networkTransform = prefab.GetComponent<NetworkTransformUnreliable>();
+        Assert.That(prefab.GetComponent<NetworkTransformReliable>(), Is.Null);
         Assert.That(networkTransform, Is.Not.Null);
         Assert.That(networkTransform.target, Is.EqualTo(prefab.transform));
         Assert.That(networkTransform.syncDirection, Is.EqualTo(SyncDirection.ClientToServer));
@@ -938,6 +940,10 @@ public sealed class NetworkPlayerTests : InputTestFixture
         var vision = new SerializedObject(remotePlayer.GetComponent<PlayerVision>());
         vision.FindProperty("characterDefinition").objectReferenceValue = testDefinition;
         vision.ApplyModifiedPropertiesWithoutUndo();
+        // The chosen character overrides PlayerVision's own definition, so select the test definition.
+        PlayerCharacterSelection selection = remotePlayer.GetComponent<PlayerCharacterSelection>();
+        selection.Options[0].definition = testDefinition;
+        selection.ServerSelect(0);
     }
 
     private void CheckMovement(KeyControl key, Vector2 expectedDirection)

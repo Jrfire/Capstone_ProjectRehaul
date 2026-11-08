@@ -36,6 +36,8 @@ public sealed class PlayerHud : MonoBehaviour
     public bool StaminaBlinking { get; private set; }
     /// <summary>True while the whole bar, including its background, blinks after full depletion.</summary>
     public bool StaminaPanelBlinking { get; private set; }
+    /// <summary>The health shown: the local player's, or the spectated player's while spectating.</summary>
+    public PlayerHealth ObservedHealth => observedHealth;
 
     private void Awake()
     {
@@ -72,7 +74,7 @@ public sealed class PlayerHud : MonoBehaviour
         if (!configured)
             return;
 
-        NetworkIdentity localPlayer = NetworkClient.isConnected && !HudVisibility.Hidden ? NetworkClient.localPlayer : null;
+        NetworkIdentity localPlayer = !HudVisibility.Hidden ? PlayerDeathScreen.HudPlayer : null;
         PlayerHealth localHealth = localPlayer != null ? localPlayer.GetComponent<PlayerHealth>() : null;
         if (observedHealth != localHealth)
             Bind(localHealth);

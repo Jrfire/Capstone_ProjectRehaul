@@ -3,6 +3,7 @@
     "references": [
         "Mirror",
         "Capstone.Level",
-        "Capstone.Player"
+        "Capstone.Player",
+        "Capstone.Audio"
     ]
 }

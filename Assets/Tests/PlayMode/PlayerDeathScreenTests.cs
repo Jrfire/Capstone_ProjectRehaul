@@ -144,6 +144,13 @@ public sealed class PlayerDeathScreenTests
         Assert.That(screen.Target.GetComponent<PlayerVision>().WorldSprites.forceRenderingOff, Is.True,
             "The spectated player's own sprite is hidden so it does not block their view.");
         Assert.That(screen.SpectatingLabel.enabled, Is.True);
+        Assert.That(screen.SpectatingLabel.text, Does.StartWith("Spectating: " + screen.Target.GetComponent<PlayerName>().DisplayName),
+            "The label names the spectated player.");
+        Assert.That(PlayerDeathScreen.HudPlayer, Is.SameAs(screen.Target.netIdentity));
+        PlayerHud hud = screen.GetComponentInParent<PlayerHud>();
+        yield return null;
+        Assert.That(hud.ObservedHealth, Is.SameAs(screen.Target.GetComponent<PlayerHealth>()),
+            "The spectator's HUD shows the spectated player's health and stamina.");
         foreach (Canvas canvas in firstPersonCanvases)
             Assert.That(canvas.enabled, Is.False, "First-person sprites are hidden while spectating.");
 
@@ -177,6 +184,8 @@ public sealed class PlayerDeathScreenTests
         foreach (Canvas canvas in firstPersonCanvases)
             Assert.That(canvas.enabled, Is.True);
         Assert.That(PlayerDeathScreen.SpectatedPlayer, Is.Null);
+        yield return null;
+        Assert.That(screen.GetComponentInParent<PlayerHud>().ObservedHealth, Is.SameAs(local), "Reviving restores the player's own HUD.");
     }
 
     [Test]

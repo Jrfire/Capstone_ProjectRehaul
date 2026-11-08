@@ -109,7 +109,7 @@ public sealed class TravelMapScreen : MonoBehaviour
             return;
         }
 
-        if (Keyboard.current?.escapeKey.wasPressedThisFrame == true)
+        if (MenuEscape.TryConsume())
         {
             if (ConfirmationOpen)
                 HideConfirmation();

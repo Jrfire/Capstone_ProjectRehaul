@@ -84,6 +84,11 @@ public sealed class PlayerFlashlightTests : InputTestFixture
         Assert.That(world.transform.IsChildOf(prefab.transform.Find("WorldView")), Is.True, "Others see the beam on the world body.");
         Assert.That(world.GetComponentInParent<SpriteRenderer>(true), Is.Null, "The world beam is not billboarded with the sprite.");
         Assert.That(world.intensity, Is.GreaterThan(0f), "Others can see the beam (intensities are user-tunable).");
+        Assert.That(world.intensity, Is.LessThan(owner.intensity), "Other players' beams are dimmer than your own.");
+        Vector3 shoulder = world.transform.localPosition;
+        Assert.That(shoulder.y, Is.InRange(1.2f, 1.5f), "The world beam starts at shoulder height.");
+        Assert.That(Mathf.Abs(shoulder.x), Is.LessThan(0.2f));
+        Assert.That(shoulder.z, Is.InRange(0f, 0.2f), "The world beam starts at the body, not in front of it.");
         Assert.That(world.range, Is.LessThan(owner.range));
         Assert.That(owner.innerSpotAngle, Is.LessThan(owner.spotAngle));
         Assert.That(owner.shadows, Is.Not.EqualTo(LightShadows.None));

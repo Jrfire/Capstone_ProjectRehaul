@@ -382,6 +382,18 @@ public sealed class RoundClock : MonoBehaviour
         Broadcast();
     }
 
+    /// <summary>Server: restores a saved round and elapsed time (loading a save file).</summary>
+    public void ServerRestore(int round, float elapsedSeconds)
+    {
+        if (!NetworkServer.active)
+            return;
+        serverRound = Mathf.Max(1, round);
+        serverElapsed = Mathf.Clamp(elapsedSeconds, 0f, RoundSeconds);
+        serverCountdown = 0f;
+        serverPhase = RoundPhase.Running;
+        Broadcast();
+    }
+
     /// <summary>Server: a player pressed E on the jeepney back away from base.</summary>
     public void ServerBoard(NetworkConnectionToClient connection)
     {
@@ -547,6 +559,7 @@ public sealed class RoundClock : MonoBehaviour
         if (!NetworkServer.active)
             return;
         serverGameOverRemaining = gameOverSeconds;
+        TravelDirector.ServerClearReady();
         SetPhase(RoundPhase.GameOver);
     }
 
@@ -563,7 +576,10 @@ public sealed class RoundClock : MonoBehaviour
             if (connection.identity.TryGetComponent(out PlayerInventory inventory))
                 inventory.ServerClear();
             if (connection.identity.TryGetComponent(out PlayerPersistence player))
+            {
                 player.ServerSetAboard(false);
+                player.ServerSetReady(false);
+            }
             TravelDirector.SendArrival(connection);
         }
 

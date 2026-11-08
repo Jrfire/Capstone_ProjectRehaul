@@ -1,7 +1,7 @@
 using UnityEngine;
 
 /// <summary>
-/// Base for objects the local player can use with <c>Player/Use</c> (E) by looking at one of their non-trigger colliders.
+/// Base for objects the local player can use with <c>Player/Interact</c> (E) by looking at one of their non-trigger colliders.
 /// </summary>
 public abstract class Interactable : MonoBehaviour
 {

@@ -1,4 +1,4 @@
 {
     "name": "Capstone.Level",
-    "references": ["Mirror"]
+    "references": ["Mirror", "Capstone.Audio"]
 }

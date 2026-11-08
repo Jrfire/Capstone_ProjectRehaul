@@ -191,19 +191,25 @@ Shader "Hidden/Capstone/NightVision"
                     }
                 }
                 float2 centered = (input.texcoord - 0.5) * 2.0;
-                float vignette = smoothstep(0.25, 1.2, length(centered));
-                scene.rgb *= 1.0 - vignette * _Panic.x * _Panic.y;
+                // Starts close to the centre so the darkening still reads on an already dark night image.
+                float vignette = smoothstep(0.1, 1.05, length(centered));
+                scene.rgb *= 1.0 - saturate(vignette * 1.15) * _Panic.x * _Panic.y;
 
                 // Full-height vertical scratches drift between film frames.
                 float frame = floor(_FilmTime);
                 float drift = FilmHash(float2(frame, 7.0));
                 float column = input.texcoord.x * max(_Panic.w, 1.0) + drift;
                 float lineSeed = FilmHash(float2(floor(column), frame));
-                float scratchMask = 1.0 - smoothstep(0.015 * _FilmLineThickness,
-                    0.11 * _FilmLineThickness, abs(frac(column) - 0.5));
+                // Widths are in columns; at least ~1.5 screen pixels so thin lines never vanish between pixel
+                // centres on smaller windows/resolutions.
+                float columnsPerPixel = max(_Panic.w, 1.0) / max(_ScreenParams.x, 1.0);
+                float innerWidth = max(0.015 * _FilmLineThickness, 0.35 * columnsPerPixel);
+                float outerWidth = max(0.11 * _FilmLineThickness, innerWidth + 0.9 * columnsPerPixel);
+                float scratchMask = 1.0 - smoothstep(innerWidth, outerWidth, abs(frac(column) - 0.5));
                 float scratches = scratchMask * step(0.4, lineSeed);
                 float amount = scratches * _Panic.x * _Panic.z;
-                float tone = step(0.75, lineSeed) * 0.65;
+                // Mostly pale scratches (dark ones disappear on a night image), with a few dark ones.
+                float tone = lerp(0.75, 0.05, step(0.85, lineSeed));
                 scene.rgb = lerp(scene.rgb, tone.xxx, amount);
                 return scene;
             }

@@ -77,8 +77,9 @@ public sealed class InventoryTests
         Assert.That(inventory.SelectedSlot, Is.EqualTo(1), "Slots 3 and 4 need the upgrade.");
         yield return null;
         Assert.That(hud.Pulsing, Is.True, "Changing slots enlarges the bar.");
-        yield return new WaitForSecondsRealtime(0.4f);
-        Assert.That(hud.Bar.localScale.x, Is.GreaterThan(1.05f));
+        yield return WaitUntil(() => hud.Bar.localScale.x > 1.05f, 2f, "The bar did not pulse larger.");
+        yield return WaitUntil(() => Mathf.Abs(hud.Slots[1].preferredWidth - hud.SelectedSlotSize) <= 0.5f, 2f,
+            "The new slot did not ease to the larger size.");
         Assert.That(hud.Slots[1].preferredWidth, Is.EqualTo(hud.SelectedSlotSize).Within(0.5f), "The new slot eases to the larger size.");
         Assert.That(hud.Slots[0].preferredWidth, Is.EqualTo(hud.SlotSize).Within(0.5f));
         yield return WaitUntil(() => SyncedSelection(inventory) == 1, 2f, "The selection did not reach the server.");
@@ -152,6 +153,164 @@ public sealed class InventoryTests
         Assert.That(inventory.ServerRemove(0), Is.SameAs(bandage));
         inventory.ServerClear();
         Assert.That(inventory.GetItem(1), Is.Null);
+    }
+
+    [UnityTest]
+    public IEnumerator LeftMouseUsesTheSelectedItemHealingOrAttacking()
+    {
+        Track(GroundAt(Vector3.zero));
+        StartHost();
+        yield return WaitUntil(() => NetworkClient.localPlayer != null, 5f, "The host player did not spawn.");
+        GameObject player = NetworkClient.localPlayer.gameObject;
+        PlayerInventory inventory = player.GetComponent<PlayerInventory>();
+        PlayerItemUse itemUse = player.GetComponent<PlayerItemUse>();
+        PlayerHealth health = player.GetComponent<PlayerHealth>();
+        PlayerAudio playerAudio = player.GetComponent<PlayerAudio>();
+        Assert.That(itemUse, Is.Not.Null, "NetworkPlayer handles left mouse item use.");
+        var catalog = Track(ScriptableObject.CreateInstance<ItemCatalog>());
+        ItemDefinition medkit = Item(catalog, "medkit", ItemSlotKind.Active);
+        medkit.ConfigureUse(ItemUseKind.Consumable, 2);
+        ItemDefinition itak = Item(catalog, "itak", ItemSlotKind.Active);
+        itak.ConfigureUse(ItemUseKind.Weapon);
+        var settings = new SerializedObject(inventory);
+        settings.FindProperty("catalog").objectReferenceValue = catalog;
+        settings.ApplyModifiedPropertiesWithoutUndo();
+        var used = new List<ItemDefinition>();
+        System.Action<PlayerItemUse, ItemDefinition, int> onUsed = (_, item, __) => used.Add(item);
+        PlayerItemUse.ServerItemUsed += onUsed;
+        try
+        {
+            Assert.That(itemUse.TryUseSelected(), Is.False, "An empty slot does nothing.");
+            Assert.That(inventory.ServerTryAdd(medkit) && inventory.ServerTryAdd(itak), Is.True);
+            inventory.SelectSlot(0);
+            Assert.That(itemUse.ServerUse(0), Is.False, "Healing is refused at full health.");
+            Assert.That(inventory.GetItem(0), Is.SameAs(medkit), "A refused heal keeps the item.");
+
+            health.TakeDamage(2);
+            Assert.That(itemUse.TryUseSelected(), Is.True);
+            yield return WaitUntil(() => health.CurrentHealth == PlayerHealth.MaxHealth, 2f, "The medkit did not heal.");
+            Assert.That(inventory.GetItem(0), Is.Null, "Consumables are used up.");
+            Assert.That(used, Is.EqualTo(new[] { medkit }));
+
+            inventory.SelectSlot(1);
+            yield return new WaitForSeconds(0.4f);
+            int attacks = playerAudio.AttacksPlayed;
+            Assert.That(itemUse.TryUseSelected(), Is.True, "Left mouse attacks with a weapon.");
+            Assert.That(playerAudio.AttacksPlayed, Is.EqualTo(attacks + 1), "The attack sound plays.");
+            Assert.That(itemUse.TryUseSelected(), Is.False, "The use cooldown applies.");
+            yield return WaitUntil(() => used.Count == 2, 2f, "The weapon use did not reach the server.");
+            Assert.That(used[1], Is.SameAs(itak));
+            Assert.That(inventory.GetItem(1), Is.SameAs(itak), "Weapons are not consumed.");
+
+            PlayerControlLock.Acquire(this);
+            yield return new WaitForSeconds(0.4f);
+            Assert.That(itemUse.CanUse, Is.False, "Menus block item use.");
+            PlayerControlLock.Release(this);
+        }
+        finally
+        {
+            PlayerItemUse.ServerItemUsed -= onUsed;
+        }
+    }
+
+    [UnityTest]
+    public IEnumerator WeaponSwingsHitTheTargetInFrontBreakBarricadesAndAreBlockedByWalls()
+    {
+        Track(GroundAt(Vector3.zero));
+        StartHost();
+        yield return WaitUntil(() => NetworkClient.localPlayer != null, 5f, "The host player did not spawn.");
+        GameObject player = NetworkClient.localPlayer.gameObject;
+        PlayerItemUse itemUse = player.GetComponent<PlayerItemUse>();
+        ItemDefinition stick = Track(ScriptableObject.CreateInstance<ItemDefinition>());
+        stick.Configure("stick", "Stick", null, ItemSlotKind.Active);
+        stick.ConfigureWeapon(2.5f, 1.5f, breaks: false);
+        ItemDefinition itak = Track(ScriptableObject.CreateInstance<ItemDefinition>());
+        itak.Configure("itak", "Itak", null, ItemSlotKind.Active);
+        itak.ConfigureWeapon(2.5f, 1.5f, breaks: true);
+        Vector3 origin = player.transform.position + Vector3.up * 1.6f;
+        Vector3 forward = Vector3.forward;
+        player.transform.rotation = Quaternion.identity;
+        yield return null;
+        itemUse.GetAim(out Vector3 cameraOrigin, out Vector3 cameraForward);
+        Assert.That(Vector3.Distance(cameraOrigin, player.transform.position), Is.LessThan(2.5f), "The aim starts at the player's camera.");
+        origin = cameraOrigin;
+        forward = cameraForward;
+
+        TestWeaponTarget target = Track(Box("Target", origin + forward * 2f, Vector3.one * 0.8f)).AddComponent<TestWeaponTarget>();
+        Physics.SyncTransforms();
+        Assert.That(itemUse.ServerAttack(stick, origin, forward), Is.SameAs(target.gameObject), "The target in reach is hit.");
+        Assert.That(target.Hits, Is.EqualTo(1));
+        Assert.That(target.LastWeapon, Is.SameAs(stick));
+        Assert.That(itemUse.ServerAttack(stick, origin, -forward), Is.Null, "Swinging the other way misses.");
+        Assert.That(itemUse.ServerAttack(stick, origin + Vector3.right * 50f, forward), Is.SameAs(target.gameObject),
+            "An implausible aim origin falls back to the player's own camera.");
+
+        target.transform.position = origin + forward * 4f;
+        Physics.SyncTransforms();
+        Assert.That(itemUse.ServerAttack(stick, origin, forward), Is.Null, "Targets beyond the weapon's range are not hit.");
+
+        target.transform.position = origin + forward * 2f;
+        GameObject wall = Track(Box("Wall", origin + forward * 1.2f, new Vector3(3f, 3f, 0.2f)));
+        Physics.SyncTransforms();
+        int hits = target.Hits;
+        Assert.That(itemUse.ServerAttack(stick, origin, forward), Is.Null, "A wall in front blocks the swing.");
+        Assert.That(target.Hits, Is.EqualTo(hits));
+        Object.DestroyImmediate(wall);
+        Object.DestroyImmediate(target.gameObject);
+
+        GameObject barricade = Track(Box("Barricade", origin + forward * 1.8f, new Vector3(3f, 3f, 0.3f)));
+        EntranceObstacle obstacle = barricade.AddComponent<EntranceObstacle>();
+        var obstacleSettings = new SerializedObject(obstacle);
+        obstacleSettings.FindProperty("requirement").enumValueIndex = (int)ObstacleRequirement.Destruction;
+        obstacleSettings.ApplyModifiedPropertiesWithoutUndo();
+        Physics.SyncTransforms();
+        Assert.That(itemUse.ServerAttack(stick, origin, forward), Is.Null, "Only weapons that break obstacles break barricades.");
+        Assert.That(obstacle.Destroyed, Is.False);
+
+        var usedHits = new List<GameObject>();
+        System.Action<PlayerItemUse, ItemDefinition, GameObject> onHit = (_, __, hit) => usedHits.Add(hit);
+        PlayerItemUse.ServerWeaponHit += onHit;
+        try
+        {
+            PlayerInventory inventory = player.GetComponent<PlayerInventory>();
+            ItemCatalog catalog = Track(ScriptableObject.CreateInstance<ItemCatalog>());
+            catalog.Register(itak);
+            var settings = new SerializedObject(inventory);
+            settings.FindProperty("catalog").objectReferenceValue = catalog;
+            settings.ApplyModifiedPropertiesWithoutUndo();
+            Assert.That(inventory.ServerTryAdd(itak), Is.True);
+            Assert.That(itemUse.ServerUse(0, "itak", origin, forward), Is.True, "Left mouse with the itak swings it.");
+            Assert.That(obstacle.Destroyed, Is.True, "The itak breaks the barricade.");
+            Assert.That(itemUse.LastWeaponHit, Is.SameAs(barricade));
+            Assert.That(usedHits, Is.EqualTo(new[] { barricade }));
+            Assert.That(inventory.GetItem(0), Is.SameAs(itak), "Weapons are kept.");
+        }
+        finally
+        {
+            PlayerItemUse.ServerWeaponHit -= onHit;
+        }
+    }
+
+    private sealed class TestWeaponTarget : MonoBehaviour, IWeaponTarget
+    {
+        public int Hits;
+        public ItemDefinition LastWeapon;
+
+        public bool ServerTakeWeaponHit(ItemDefinition weapon, NetworkIdentity attacker)
+        {
+            Hits++;
+            LastWeapon = weapon;
+            return true;
+        }
+    }
+
+    private static GameObject Box(string name, Vector3 position, Vector3 size)
+    {
+        GameObject box = GameObject.CreatePrimitive(PrimitiveType.Cube);
+        box.name = name;
+        box.transform.position = position;
+        box.transform.localScale = size;
+        return box;
     }
 
     [UnityTest]

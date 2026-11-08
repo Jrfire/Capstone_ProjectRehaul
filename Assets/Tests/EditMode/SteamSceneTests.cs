@@ -66,13 +66,18 @@ public sealed class SteamSceneTests
     }
 
     [Test]
-    public void UseIsAnEKeyButtonAndThePlayerPrefabReferencesIt()
+    public void InteractIsAnEKeyButtonAndThePlayerPrefabReferencesIt()
     {
         InputActionAsset input = AssetDatabase.LoadAssetAtPath<InputActionAsset>("Assets/InputSystem_Actions.inputactions");
-        InputAction action = input.FindAction("Player/Use", true);
+        InputAction action = input.FindAction("Player/Interact", true);
         Assert.That(action.type, Is.EqualTo(InputActionType.Button));
-        Assert.That(action.bindings.Count, Is.EqualTo(1));
-        Assert.That(action.bindings[0].path, Is.EqualTo("<Keyboard>/e"));
+        Assert.That(action.bindings.Select(binding => binding.path), Is.EqualTo(new[] { "<Keyboard>/e", "" }),
+            "E, plus an empty alternate slot the player can bind in Controls.");
+        Assert.That(input.FindAction("Player/Use", false), Is.Null);
+        Assert.That(input.FindAction("Player/Jump", false), Is.Null);
+        Assert.That(input.FindAction("Player/Crouch", false), Is.Null);
+        Assert.That(input.FindAction("Player/UseItem", true).bindings.Select(binding => binding.path), Does.Contain("<Mouse>/leftButton"),
+            "Left mouse uses / attacks with the held item.");
         Assert.That(action.interactions, Is.Empty);
 
         GameObject player = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/PREFABS/NetworkPlayer.prefab");

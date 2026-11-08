@@ -180,7 +180,7 @@ public sealed class AgimatSetupTests
         Assert.That(agimat.WorldSprite.GetComponent<BillboardSprite>(), Is.Not.Null);
         DistanceFadeSprite fade = pickup.GetComponent<DistanceFadeSprite>();
         Assert.That(fade, Is.Not.Null);
-        Assert.That(new SerializedObject(fade).FindProperty("fadedDistance").floatValue, Is.LessThanOrEqualTo(5f), "Only seen up close.");
+        Assert.That(new SerializedObject(fade).FindProperty("fadedDistance").floatValue, Is.LessThan(30f), "Fades out sooner than enemies (user-tuned).");
 
         GameObject lady = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/PREFABS/Enemies/WhiteLady.prefab");
         Assert.That(lady.GetComponent<WhiteLady>().WorldSprite.sprite, Is.Not.Null);

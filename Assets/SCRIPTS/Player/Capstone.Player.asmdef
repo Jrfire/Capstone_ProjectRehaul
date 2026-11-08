@@ -4,6 +4,7 @@
         "Mirror",
         "Mirror.Components",
         "Capstone.Level",
+        "Capstone.Audio",
         "Unity.InputSystem",
         "Unity.ugui",
         "FizzySteamworks",

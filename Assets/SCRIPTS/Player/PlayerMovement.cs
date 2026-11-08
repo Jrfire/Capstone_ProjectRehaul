@@ -41,7 +41,7 @@ public sealed class PlayerMovement : NetworkBehaviour
             return;
         }
 
-        runtimeInputActions = Instantiate(inputActions);
+        runtimeInputActions = GameSettings.TrackBindings(Instantiate(inputActions));
         movementAction = runtimeInputActions.FindAction("Player/Movement", true);
         sprintAction = runtimeInputActions.FindAction("Player/Sprint");
         if (sprintAction == null || sprintAction.type != InputActionType.Button)
@@ -101,7 +101,8 @@ public sealed class PlayerMovement : NetworkBehaviour
         if (!isLocalPlayer || movementAction == null || !movementAction.enabled)
             return;
 
-        if (PlayerControlLock.IsLocked || (SteamSession.Instance != null && SteamSession.Instance.OverlayActive))
+        if (PlayerControlLock.IsLocked || (AlbularyoScreen.Current != null && AlbularyoScreen.Current.IsOpen) ||
+            (SteamSession.Instance != null && SteamSession.Instance.OverlayActive))
         {
             IsMoving = false;
             IsSprinting = false;

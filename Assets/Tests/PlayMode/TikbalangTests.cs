@@ -345,6 +345,40 @@ public sealed class TikbalangTests : InputTestFixture
     }
 
     [UnityTest]
+    public IEnumerator PlayerWeaponHitsStunTheTikbalangAndDropItsChase()
+    {
+        profile.walkSpeed = 0f;
+        SpawnArena();
+        Place(remotePlayer, new Vector3(-45f, 0f, -45f));
+        Place(localPlayer, new Vector3(0f, 0f, 5f));
+        TikbalangBrain brain = CreateTikbalang(Vector3.zero, 0f, homeHalfSize: 6f);
+        yield return WaitUntil(() => brain.StateName == "Chase", 1f, "The chase did not start.");
+
+        Vector3 body = brain.GetComponent<Collider>().bounds.center;
+        Vector3 standAt = new Vector3(body.x, 0f, body.z + 2f);
+        Place(localPlayer, standAt, 180f);
+        ItemDefinition stick = ScriptableObject.CreateInstance<ItemDefinition>();
+        try
+        {
+            stick.Configure("stick", "Stick", null, ItemSlotKind.Active);
+            stick.ConfigureWeapon(2.5f, 0.4f, breaks: false);
+            Vector3 origin = standAt + Vector3.up * 1.6f;
+            GameObject hit = localPlayer.GetComponent<PlayerItemUse>().ServerAttack(stick, origin, (body - origin).normalized);
+            Assert.That(hit, Is.SameAs(brain.gameObject), "The swing hits the Tikbalang.");
+            Assert.That(brain.StateName, Is.EqualTo("Stunned"));
+            Assert.That(brain.ChaseTarget, Is.Null, "A stunned Tikbalang drops its chase.");
+            yield return null;
+            Assert.That(brain.Motor.IsMoving, Is.False);
+            yield return WaitUntil(() => brain.StateName == "Returning" || brain.StateName == "Idle", 2f,
+                "It stayed stunned longer than the weapon's stun time.");
+        }
+        finally
+        {
+            Object.DestroyImmediate(stick);
+        }
+    }
+
+    [UnityTest]
     public IEnumerator SpriteDirectionFollowsMovementWhileItsEyesStayOnTheTarget()
     {
         profile.walkSpeed = 0f;

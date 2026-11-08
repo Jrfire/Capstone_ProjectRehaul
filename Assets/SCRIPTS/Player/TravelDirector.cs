@@ -119,10 +119,14 @@ public sealed class TravelDirector : MonoBehaviour
     private static int CurrentRound => RoundClock.Instance != null && RoundClock.Instance.enabled ? RoundClock.Instance.Round : 1;
     /// <summary>Raised on clients whenever the rolled enemy roster changes.</summary>
     public event System.Action RollsChanged;
+    /// <summary>Server: a trip is about to start, before any <see cref="ServerTravelStarting"/> handler (e.g. the travel-time cost) runs. Used to save the state at departure.</summary>
+    public event System.Action<string, string> ServerTravelPreparing;
     /// <summary>Server: a trip is starting from the current scene (first argument) to the destination (second argument).</summary>
     public event System.Action<string, string> ServerTravelStarting;
     /// <summary>Server: every player has arrived in this scene and is fading back in.</summary>
     public event System.Action<string> ServerTravelCompleted;
+    /// <summary>Client: the loading screen has gone and the game is fading back in after a trip.</summary>
+    public static event System.Action ClientArrived;
 
     /// <summary>Destination confirmed on a map terminal and shared with every client, or null.</summary>
     public string SelectedDestination { get; private set; }
@@ -229,6 +233,10 @@ public sealed class TravelDirector : MonoBehaviour
 
     private void Update()
     {
+        // Someone leaving or dying may leave only readied players behind.
+        if (NetworkServer.active && Instance == this && !ServerTraveling && !string.IsNullOrEmpty(serverDestination) &&
+            Time.frameCount % 10 == 0 && AnyReady())
+            ServerStartIfEveryoneReady();
         // A quota met (or the game reset) changes the round at base: reroll the terminals for the new difficulty.
         if (!NetworkServer.active || Instance != this || ServerTraveling || serverRolledRound < 0 || serverRolledRound == CurrentRound)
             return;
@@ -237,6 +245,16 @@ public sealed class TravelDirector : MonoBehaviour
         foreach (MapTerminal terminal in FindObjectsByType<MapTerminal>(FindObjectsInactive.Exclude, FindObjectsSortMode.None))
             ServerRollDestinations(terminal);
         NetworkServer.SendToAll(BuildRollMessage());
+    }
+
+    private static bool AnyReady()
+    {
+        foreach (PlayerPersistence player in PlayerPersistence.ActivePlayers)
+        {
+            if (player != null && player.IsReady)
+                return true;
+        }
+        return false;
     }
 
     /// <summary>Server: the first enemy type rolled for a destination, or null.</summary>
@@ -366,6 +384,7 @@ public sealed class TravelDirector : MonoBehaviour
         }
 
         serverDestination = sceneName;
+        ServerClearReady();
         NetworkServer.SendToAll(new TravelDestinationMessage { sceneName = sceneName });
     }
 
@@ -387,7 +406,49 @@ public sealed class TravelDirector : MonoBehaviour
             Debug.LogWarning($"Cannot travel to '{serverDestination}': {error}", this);
             return;
         }
+        // At base every living player readies at the jeepney (E toggles); the trip starts once all of them have.
+        if (connection?.identity == null || !connection.identity.TryGetComponent(out PlayerPersistence player) ||
+            (player.TryGetComponent(out PlayerHealth health) && health.IsDead))
+            return;
+        player.ServerSetReady(!player.IsReady);
+        ServerStartIfEveryoneReady();
+    }
+
+    /// <summary>True when every connected, living player has readied at the jeepney (dead players are not waited for).</summary>
+    public static bool ServerEveryoneReady()
+    {
+        bool any = false;
+        foreach (NetworkConnectionToClient connection in NetworkServer.connections.Values)
+        {
+            if (connection?.identity == null || !connection.identity.TryGetComponent(out PlayerPersistence player))
+                continue;
+            if (player.TryGetComponent(out PlayerHealth health) && health.IsDead)
+                continue;
+            if (!player.IsReady)
+                return false;
+            any = true;
+        }
+        return any;
+    }
+
+    /// <summary>Server: starts the selected trip if every living player is ready. Returns true when travel started.</summary>
+    public bool ServerStartIfEveryoneReady()
+    {
+        if (ServerTraveling || string.IsNullOrEmpty(serverDestination) || !ServerEveryoneReady() ||
+            ValidateDestination(serverDestination) != null)
+            return false;
         serverRoutine = StartCoroutine(ServerTravel(serverDestination));
+        return true;
+    }
+
+    /// <summary>Server: clears every player's ready flag (destination changed or travel started).</summary>
+    public static void ServerClearReady()
+    {
+        foreach (PlayerPersistence player in PlayerPersistence.ActivePlayers)
+        {
+            if (player != null && player.IsReady)
+                player.ServerSetReady(false);
+        }
     }
 
     /// <summary>
@@ -410,6 +471,8 @@ public sealed class TravelDirector : MonoBehaviour
     private IEnumerator ServerTravel(string sceneName)
     {
         ServerTraveling = true;
+        ServerClearReady();
+        ServerTravelPreparing?.Invoke(SceneManager.GetActiveScene().name, sceneName);
         ServerTravelStarting?.Invoke(SceneManager.GetActiveScene().name, sceneName);
         serverTravelScene = sceneName;
         serverTravelSeed = Random.Range(int.MinValue, int.MaxValue);
@@ -673,6 +736,7 @@ public sealed class TravelDirector : MonoBehaviour
         PlayerControlLock.Release(this);
         PlayerStamina.TravelPaused = false;
         IsTraveling = false;
+        ClientArrived?.Invoke();
         if (loadingScreen != null)
             yield return loadingScreen.FadeTo(0f, fadeDuration);
         clientFadeRoutine = null;

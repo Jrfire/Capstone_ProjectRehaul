@@ -27,6 +27,8 @@ public sealed class ManananggalBrain : EnemyBrain
     public EnemyFlightMotor Flight { get; private set; }
     /// <summary>The player being chased (synced so clients can react later).</summary>
     public NetworkIdentity ChaseTarget => chaseTarget;
+    public override NetworkIdentity ChasedPlayer => chaseTarget;
+    public override bool IsPresent => !hidden;
     public bool IsChasing => chaseTarget != null;
     /// <summary>True while despawned between passes (invisible, no collider, no fear effect).</summary>
     public bool IsHidden => hidden;
@@ -35,6 +37,7 @@ public sealed class ManananggalBrain : EnemyBrain
     public ManananggalHuntingState Hunting { get; private set; }
     public ManananggalChaseState Chase { get; private set; }
     public ManananggalLeavingState Leaving { get; private set; }
+    public ManananggalStunnedState Stunned { get; private set; }
 
     protected override void Awake()
     {
@@ -57,6 +60,7 @@ public sealed class ManananggalBrain : EnemyBrain
         Hunting = new ManananggalHuntingState(this);
         Chase = new ManananggalChaseState(this);
         Leaving = new ManananggalLeavingState(this);
+        Stunned = new ManananggalStunnedState(this);
         ApplyVision();
         ApplyHidden();
     }
@@ -125,9 +129,25 @@ public sealed class ManananggalBrain : EnemyBrain
         ChangeState(Leaving);
     }
 
+    /// <summary>Server: drops any chase and hovers still for <paramref name="seconds"/> (negative = profile default), then leaves.</summary>
+    [Server]
+    public void Stun(float seconds = -1f)
+    {
+        Stunned.Duration = seconds >= 0f ? seconds : profile.defaultStunSeconds;
+        ChangeState(Stunned);
+    }
+
+    public override bool ServerTakeWeaponHit(ItemDefinition weapon, NetworkIdentity attacker)
+    {
+        if (!isServer || hidden)
+            return false;
+        Stun(weapon != null && weapon.StunSeconds > 0f ? weapon.StunSeconds : -1f);
+        return true;
+    }
+
     internal void ClearChaseTarget() => chaseTarget = null;
 
-    internal PlayerPersistence ChasedPlayer =>
+    internal PlayerPersistence ChasedPersistence =>
         chaseTarget != null && chaseTarget.TryGetComponent(out PlayerPersistence player) && player.isActiveAndEnabled ? player : null;
 
     /// <summary>

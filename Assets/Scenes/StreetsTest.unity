@@ -130,6 +130,7 @@ GameObject:
   - component: {fileID: 494850883}
   - component: {fileID: 494850882}
   - component: {fileID: 494850884}
+  - component: {fileID: 494850885}
   m_Layer: 0
   m_Name: MapManager
   m_TagString: Untagged
@@ -184,6 +185,9 @@ MonoBehaviour:
   useFixedSeed: 0
   fixedSeed: 0
   loopChance: 0.75
+  townBlocks: []
+  townLayoutChance: 0.5
+  townMinConnectorCount: 10
   barricadeEndCaps: 1
   barricadeLoops: 1
   endCapObstacleChance: 1
@@ -252,6 +256,21 @@ MonoBehaviour:
   minSpacing: 3
   entranceClearance: 3
   settleFrames: 3
+--- !u!114 &494850885
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 494850881}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fbaa7d0fad6b88148bdb7414ce2d389d, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Capstone.Player::SceneMusic
+  arrivalTheme: {fileID: 0}
+  volume: 0.8
+  loop: 0
 --- !u!1 &564393576
 GameObject:
   m_ObjectHideFlags: 0
@@ -288,6 +307,12 @@ MonoBehaviour:
   - prefab: {fileID: 3659812021488451613, guid: a7833c19caa344b7bd8bcb62408c3ab3, type: 3}
     count: 1
   rolledEnemyCount: 1
+  quotasPerExtraEnemy: 2
+  maxEnemiesPerType: 4
+  smallMapExtraChance: 0.3
+  largeMapExtraChance: 0.8
+  smallMapBlocks: 5
+  largeMapBlocks: 15
   settleFrames: 3
 --- !u!4 &564393578
 Transform:

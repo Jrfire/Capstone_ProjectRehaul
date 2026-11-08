@@ -119,6 +119,7 @@ public sealed class AlbularyoScreen : MonoBehaviour
             return;
         PlayerControlLock.Release(this);
         HudVisibility.Show(this);
+        AgimatBank.TalkRefused -= OnTalkRefused;
         instance = null;
     }
 
@@ -132,16 +133,31 @@ public sealed class AlbularyoScreen : MonoBehaviour
         quotaMetUntil = 0f;
         NextRequestLine();
         Refresh();
+        // Only one player may talk at a time: the host refuses (and this screen closes) when someone else already is.
+        AgimatBank.TalkRefused -= OnTalkRefused;
+        AgimatBank.TalkRefused += OnTalkRefused;
+        if (AgimatBank.Instance != null)
+            AgimatBank.Instance.RequestTalk(true);
+    }
+
+    private void OnTalkRefused()
+    {
+        if (IsOpen)
+            Close();
     }
 
     public void Close()
     {
+        bool wasOpen = IsOpen;
         if (screenRoot != null)
             screenRoot.SetActive(false);
         PlayerControlLock.Release(this);
         HudVisibility.Show(this);
         if (EventSystem.current != null)
             EventSystem.current.SetSelectedGameObject(null);
+        AgimatBank.TalkRefused -= OnTalkRefused;
+        if (wasOpen && AgimatBank.Instance != null)
+            AgimatBank.Instance.RequestTalk(false);
     }
 
     public void Sacrifice(AgimatType type)
@@ -156,12 +172,13 @@ public sealed class AlbularyoScreen : MonoBehaviour
             return;
         bool gameOver = RoundClock.Instance != null && RoundClock.Instance.enabled && RoundClock.Instance.Phase == RoundPhase.GameOver;
         if ((NetworkClient.active && NetworkClient.localPlayer == null) || AgimatBank.Instance == null || gameOver ||
+            AgimatBank.Instance.SomeoneElseTalking || PlayerPersistence.LocalReadied ||
             (TravelDirector.Instance != null && TravelDirector.Instance.IsTraveling))
         {
             Close();
             return;
         }
-        if (Keyboard.current?.escapeKey.wasPressedThisFrame == true)
+        if (MenuEscape.TryConsume())
         {
             Close();
             return;

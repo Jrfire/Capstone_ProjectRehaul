@@ -25,6 +25,18 @@ public sealed class EntranceObstacle : MonoBehaviour
     private GameObject clearedPrefab;
     [Tooltip("Invoked once when the requirement is met.")]
     public UnityEvent cleared = new UnityEvent();
+    [Header("Sounds")]
+    [SerializeField, Tooltip("Played where the obstacle stands when it is opened with a key (gates).")]
+    private Capstone.Audio.AudioClipSet openedSound = new Capstone.Audio.AudioClipSet();
+    [SerializeField, Tooltip("Played where the obstacle stands when it is destroyed (barricades). Used for KeyAndDestruction too.")]
+    private Capstone.Audio.AudioClipSet destroyedSound = new Capstone.Audio.AudioClipSet();
+    [SerializeField, Min(0.1f)] private float soundMinDistance = 2f;
+    [SerializeField, Min(1f)] private float soundMaxDistance = 35f;
+
+    public Capstone.Audio.AudioClipSet OpenedSound => openedSound;
+    public Capstone.Audio.AudioClipSet DestroyedSound => destroyedSound;
+    /// <summary>The set chosen for this obstacle's clearing: destruction for barricades, otherwise the opening sound.</summary>
+    public Capstone.Audio.AudioClipSet ClearSound => RequiresDestruction ? destroyedSound : openedSound;
 
     public ObstacleRequirement Requirement => requirement;
     public bool RequiresKey => requirement != ObstacleRequirement.Destruction;
@@ -100,6 +112,9 @@ public sealed class EntranceObstacle : MonoBehaviour
             return;
 
         clearApplied = true;
+        if (Application.isPlaying)
+            Capstone.Audio.AudioManager.PlayAt(ClearSound, transform.position + Vector3.up, Capstone.Audio.AudioChannel.Sfx,
+                soundMinDistance, soundMaxDistance);
         // The NavMesh "fills in" once the entrance opens, whether or not the obstacle object stays visible.
         foreach (NavMeshObstacle carver in GetComponentsInChildren<NavMeshObstacle>(true))
             carver.enabled = false;

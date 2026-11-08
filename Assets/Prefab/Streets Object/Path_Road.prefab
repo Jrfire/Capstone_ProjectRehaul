@@ -11,6 +11,7 @@ GameObject:
   - component: {fileID: 8072507235913794719}
   - component: {fileID: 2206341075322440265}
   - component: {fileID: 7299167377079002948}
+  - component: {fileID: 4207121300402549887}
   m_Layer: 0
   m_Name: Path_Road
   m_TagString: Untagged
@@ -90,3 +91,16 @@ MeshRenderer:
   m_SortingOrder: 0
   m_MaskInteraction: 0
   m_AdditionalVertexStreams: {fileID: 0}
+--- !u!114 &4207121300402549887
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4044440630460453797}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 944fa3f384fd9ad419d6b1026a44a78a, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Capstone.Audio::Capstone.Audio.GroundSurface
+  type: 0

@@ -50,6 +50,10 @@ public sealed class ManananggalProfile : ScriptableObject
     [Min(0f), Tooltip("Seconds it hovers still after a hit before resuming the chase.")]
     public float hitPauseSeconds = 2.5f;
 
+    [Header("Stun (player weapons)")]
+    [Min(0f), Tooltip("Seconds it hovers stunned when a weapon item has no stun time of its own; then it flies away.")]
+    public float defaultStunSeconds = 3f;
+
     [Header("Leaving")]
     [Min(1f), Tooltip("Gives up flying away after this long and despawns anyway.")]
     public float leaveTimeoutSeconds = 15f;

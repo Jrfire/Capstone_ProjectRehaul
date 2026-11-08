@@ -7,6 +7,7 @@
         "Capstone.Level.Editor",
         "Capstone.Enemies",
         "Capstone.Enemies.Editor",
+        "Capstone.Audio",
         "Mirror",
         "Mirror.Components",
         "FizzySteamworks",

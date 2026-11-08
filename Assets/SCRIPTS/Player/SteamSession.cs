@@ -25,6 +25,9 @@ public sealed class SteamSession : MonoBehaviour
     private bool joinNetworkAfterLobby;
     private int publishedPlayerCount = -1;
     private string failureMessage;
+    private bool ownsSteamApi;
+    private static bool launchArgumentsConsumed;
+    private static bool applicationQuitting;
 
     public static SteamSession Instance { get; private set; }
     public bool Initialized { get; private set; }
@@ -45,11 +48,15 @@ public sealed class SteamSession : MonoBehaviour
         manager = GetComponent<NetworkManager>();
         try
         {
-            ESteamAPIInitResult result = SteamAPI.InitEx(out string error);
-            if (result != ESteamAPIInitResult.k_ESteamAPIInitResult_OK)
+            if (!SteamBootstrap.SteamReady)
             {
-                FailInitialization($"Steam initialization failed ({result}): {error}. Start Steam and check steam_appid.txt.");
-                return;
+                ESteamAPIInitResult result = SteamAPI.InitEx(out string error);
+                if (result != ESteamAPIInitResult.k_ESteamAPIInitResult_OK)
+                {
+                    FailInitialization($"Steam initialization failed ({result}): {error}. Start Steam and check steam_appid.txt.");
+                    return;
+                }
+                ownsSteamApi = true;
             }
 
             Initialized = true;
@@ -82,6 +89,39 @@ public sealed class SteamSession : MonoBehaviour
         if (!Initialized)
             return;
 
+        switch (MenuLaunch.Consume(out int _, out ulong menuLobby, out string menuHost))
+        {
+            case MenuLaunch.Mode.Host:
+                manager.StartHost();
+                return;
+            case MenuLaunch.Mode.Join:
+                if (menuLobby != 0)
+                    AcceptLobbyInvite(menuLobby);
+                else if (menuHost != null)
+                    TryJoinHost("+connect " + menuHost);
+                return;
+        }
+
+        if (!ConsumeLaunchArguments(out ulong lobby, out string hostId))
+            return;
+        if (lobby != 0)
+            AcceptLobbyInvite(lobby);
+        else if (hostId != null)
+            TryJoinHost("+connect " + hostId);
+    }
+
+    /// <summary>
+    /// Reads a Steam invite from the launch command line (+connect_lobby id / +connect SteamID64), only once per
+    /// application run so returning to the menu and re-entering the game does not join again.
+    /// </summary>
+    public static bool ConsumeLaunchArguments(out ulong lobby, out string hostId)
+    {
+        lobby = 0;
+        hostId = null;
+        if (launchArgumentsConsumed)
+            return false;
+        launchArgumentsConsumed = true;
+
         SteamApps.GetLaunchCommandLine(out string launchArguments, 1024);
         string[] arguments = string.IsNullOrWhiteSpace(launchArguments)
             ? Environment.GetCommandLineArgs()
@@ -92,21 +132,27 @@ public sealed class SteamSession : MonoBehaviour
             if (lobbyIndex + 1 < arguments.Length &&
                 ulong.TryParse(arguments[lobbyIndex + 1], NumberStyles.None, CultureInfo.InvariantCulture, out ulong id) &&
                 IsValidLobbyId(id))
-                AcceptLobbyInvite(id);
-            else
-                Debug.LogError("Steam launch invite has an invalid +connect_lobby ID.", this);
-            return;
+            {
+                lobby = id;
+                return true;
+            }
+            Debug.LogError("Steam launch invite has an invalid +connect_lobby ID.");
+            return false;
         }
         int connectIndex = Array.IndexOf(arguments, "+connect");
         if (connectIndex < 0)
-            return;
+            return false;
         if (connectIndex + 1 >= arguments.Length)
         {
-            Debug.LogError("Steam launch invite has a +connect flag without a host SteamID64.", this);
-            return;
+            Debug.LogError("Steam launch invite has a +connect flag without a host SteamID64.");
+            return false;
         }
-
-        TryJoinHost("+connect " + arguments[connectIndex + 1]);
+        if (!TryParseConnectString("+connect " + arguments[connectIndex + 1], out hostId))
+        {
+            Debug.LogWarning("Rejected a Steam launch invite with an invalid +connect SteamID64.");
+            return false;
+        }
+        return true;
     }
 
     private void Update()
@@ -393,7 +439,8 @@ public sealed class SteamSession : MonoBehaviour
             lobbyJoinRequested?.Dispose();
             lobbyCreated?.Dispose();
             lobbyEntered?.Dispose();
-            SteamAPI.Shutdown();
+            if (ownsSteamApi)
+                SteamAPI.Shutdown();
             Initialized = false;
         }
 
@@ -414,7 +461,18 @@ public sealed class SteamSession : MonoBehaviour
 
     private void OnApplicationQuit()
     {
+        applicationQuitting = true;
         Shutdown();
+    }
+
+    /// <summary>True once the application has started quitting (leaving then must not load the menu).</summary>
+    public static bool ApplicationQuitting => applicationQuitting;
+
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+    private static void ResetStatics()
+    {
+        launchArgumentsConsumed = false;
+        applicationQuitting = false;
     }
 
     private void OnDestroy()
@@ -447,7 +505,12 @@ public sealed class SteamSession : MonoBehaviour
             lobbyJoinRequested?.Dispose();
             lobbyCreated?.Dispose();
             lobbyEntered?.Dispose();
-            SteamAPI.Shutdown();
+            // A Steam runtime started by the menu's SteamBootstrap stays up when returning to the menu.
+            if (ownsSteamApi || applicationQuitting)
+            {
+                SteamAPI.Shutdown();
+                SteamBootstrap.MarkShutdown();
+            }
             Initialized = false;
         }
 

@@ -17,6 +17,7 @@ public sealed class PlayerVision : NetworkBehaviour
 
     private PlayerMovement movement;
     private PlayerHealth health;
+    private PlayerCharacterSelection selection;
     private CharacterAnimationState? requestedState;
     private bool restartRequested;
     private bool hasSentVision;
@@ -31,11 +32,14 @@ public sealed class PlayerVision : NetworkBehaviour
     public CharacterDirection DisplayedDirection { get; private set; }
     public Camera PlayerCamera => playerCamera;
     public SpriteRenderer WorldSprites => worldSprites;
+    /// <summary>The chosen character (null until selected) when the player has a PlayerCharacterSelection, else the assigned default.</summary>
+    public CharacterDefinition ActiveDefinition => selection != null ? selection.Definition : characterDefinition;
 
     private void Awake()
     {
         movement = GetComponent<PlayerMovement>();
         health = GetComponent<PlayerHealth>();
+        selection = GetComponent<PlayerCharacterSelection>();
         if (characterDefinition == null || playerCamera == null || worldSprites == null ||
             !playerCamera.transform.IsChildOf(transform) || !worldSprites.transform.IsChildOf(transform) ||
             worldSprites.transform == transform)
@@ -114,18 +118,24 @@ public sealed class PlayerVision : NetworkBehaviour
         worldSprites.transform.rotation = BillboardRotation(camera.transform.position,
             worldSprites.transform.position, camera.transform.eulerAngles.y);
 
-        if (renderedDefinition != characterDefinition)
+        CharacterDefinition definition = ActiveDefinition;
+        if (definition == null)
         {
-            renderedDefinition = characterDefinition;
+            worldSprites.sprite = null;
+            return;
+        }
+        if (renderedDefinition != definition)
+        {
+            renderedDefinition = definition;
             missingStates.Clear();
         }
 
-        CharacterAnimation animation = characterDefinition.GetAnimation(animationState);
+        CharacterAnimation animation = definition.GetAnimation(animationState);
         if (!animation.IsReady)
         {
             worldSprites.sprite = null;
             if (missingStates.Add(animationState))
-                Debug.LogWarning($"Configure complete {animationState} frames and a positive FPS in '{characterDefinition.name}' before displaying it.", this);
+                Debug.LogWarning($"Configure complete {animationState} frames and a positive FPS in '{definition.name}' before displaying it.", this);
             return;
         }
 
@@ -142,7 +152,8 @@ public sealed class PlayerVision : NetworkBehaviour
         if (!movement.IsMoving)
             return CharacterAnimationState.Idle;
         // Fall back to Walk until Run frames are configured so sprinting players never turn invisible.
-        return movement.IsSprinting && characterDefinition.GetAnimation(CharacterAnimationState.Run).IsReady
+        CharacterDefinition definition = ActiveDefinition;
+        return movement.IsSprinting && definition != null && definition.GetAnimation(CharacterAnimationState.Run).IsReady
             ? CharacterAnimationState.Run : CharacterAnimationState.Walk;
     }
 

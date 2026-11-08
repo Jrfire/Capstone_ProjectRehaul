@@ -12,6 +12,8 @@ public sealed class RoundClockHud : MonoBehaviour
     [Header("Clock")]
     [SerializeField] private RectTransform clockPanel;
     [SerializeField] private Image clockImage;
+    [SerializeField, Tooltip("Digital time under the clock face (12:00 to 12:00); blinks with it in the last hours.")]
+    private Text timeText;
     [Tooltip("Index 0 = 12 o'clock, 1..11 = that hour (the ClockUI sheet's left-to-right order).")]
     [SerializeField] private Sprite[] hourSprites = new Sprite[12];
     [SerializeField, Min(0.1f)] private float lowTimeBlinksPerSecond = 2f;
@@ -28,12 +30,14 @@ public sealed class RoundClockHud : MonoBehaviour
     [SerializeField] private GameObject gameOverPanel;
 
     private Color clockColor = Color.white;
+    private Color timeColor = Color.white;
     private Vector3 clockScale = Vector3.one;
     private bool configured;
 
     public bool ClockBlinking { get; private set; }
     public RectTransform ClockPanel => clockPanel;
     public Image ClockImage => clockImage;
+    public Text TimeText => timeText;
     public GameObject CountdownPanel => countdownPanel;
     public Text CountdownLabel => countdownLabel;
     public GameObject GameOverPanel => gameOverPanel;
@@ -48,6 +52,8 @@ public sealed class RoundClockHud : MonoBehaviour
         }
         configured = true;
         clockColor = clockImage.color;
+        if (timeText != null)
+            timeColor = timeText.color;
         clockScale = clockPanel.localScale;
         Hide();
     }
@@ -78,22 +84,40 @@ public sealed class RoundClockHud : MonoBehaviour
 
         ClockBlinking = clock.IsLowTime && clock.Phase != RoundPhase.GameOver;
         Color color = clockColor;
+        Color textColor = timeColor;
         Vector3 scale = clockScale;
         if (ClockBlinking)
         {
             float blink = 0.5f + 0.5f * Mathf.Cos(Time.unscaledTime * lowTimeBlinksPerSecond * Mathf.PI * 2f);
-            color.a *= Mathf.Lerp(lowTimeMinimumAlpha, 1f, blink);
+            float alpha = Mathf.Lerp(lowTimeMinimumAlpha, 1f, blink);
+            color.a *= alpha;
+            textColor.a *= alpha;
             float pulse = 0.5f - 0.5f * Mathf.Cos(Time.unscaledTime * lowTimePulsesPerSecond * Mathf.PI * 2f);
             scale *= 1f + lowTimePulseScale * pulse;
         }
         clockImage.color = color;
         clockPanel.localScale = scale;
+        if (timeText != null)
+        {
+            timeText.text = TimeString(clock.Elapsed, clock.HourSeconds, clock.ClockHours);
+            timeText.color = textColor;
+        }
 
         bool countdown = clock.Phase == RoundPhase.ReturnCountdown && !clock.InBase;
         countdownPanel.SetActive(countdown);
         if (countdown)
             countdownLabel.text = CountdownText(clock.IsMidnight, clock.CountdownRemaining, RoundClock.LocalPlayerAboard);
         gameOverPanel.SetActive(clock.Phase == RoundPhase.GameOver);
+    }
+
+    /// <summary>Clock time for the elapsed seconds since noon: "12:00" at the start, "9:00" after nine hours, "12:00" at midnight.</summary>
+    public static string TimeString(float elapsedSeconds, float hourSeconds, int hours)
+    {
+        if (hourSeconds <= 0f)
+            return "12:00";
+        int totalMinutes = Mathf.Clamp(Mathf.FloorToInt(elapsedSeconds / hourSeconds * 60f + 0.001f), 0, Mathf.Max(1, hours) * 60);
+        int hour = (totalMinutes / 60) % 12;
+        return $"{(hour == 0 ? 12 : hour)}:{totalMinutes % 60:00}";
     }
 
     public static string CountdownText(bool midnight, float seconds, bool aboard)

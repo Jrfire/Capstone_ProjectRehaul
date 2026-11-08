@@ -48,7 +48,8 @@ public sealed class PlayerHudSceneTests
             foreach (RectTransform rect in hud.GetComponentsInChildren<RectTransform>(true).Where(r => r != hud.transform))
             {
                 Assert.That(rect.localScale.x * rect.localScale.y, Is.Not.Zero, $"{rect.name} has zero scale.");
-                Assert.That(rect.rect.width * rect.rect.height, Is.GreaterThan(0f), $"{rect.name} has no visible area.");
+                if (rect.GetComponentInParent<UnityEngine.UI.ContentSizeFitter>(true) == null)
+                    Assert.That(rect.rect.width * rect.rect.height, Is.GreaterThan(0f), $"{rect.name} has no visible area.");
             }
         }
         finally

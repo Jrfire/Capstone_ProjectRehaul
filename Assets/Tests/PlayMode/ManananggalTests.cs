@@ -206,6 +206,46 @@ public sealed class ManananggalTests : InputTestFixture
     }
 
     [UnityTest]
+    public IEnumerator PlayerWeaponHitsStunItMidAirThenItFliesAway()
+    {
+        profile.firstPassDelaySeconds = new Vector2(30f, 30f);
+        profile.contactDamage = 0;
+        SpawnPlayers();
+        ManananggalBrain brain = CreateManananggal(new Vector3(0f, 0f, -10f));
+        yield return WaitUntil(() => brain.CurrentState == brain.Hunting, 1f, "It did not start hunting.");
+        brain.Flight.Warp(new Vector3(0f, 1.5f, 0f));
+        Place(localPlayer, new Vector3(0f, 0f, 2f), 180f);
+        PlayerItemUse itemUse = localPlayer.GetComponent<PlayerItemUse>();
+        ItemDefinition stick = ScriptableObject.CreateInstance<ItemDefinition>();
+        try
+        {
+            stick.Configure("stick", "Stick", null, ItemSlotKind.Active);
+            stick.ConfigureWeapon(2.5f, 0.4f, breaks: false);
+            Vector3 origin = new Vector3(0f, 1.6f, 2f);
+            Assert.That(itemUse.ServerAttack(stick, origin, Vector3.back), Is.Null, "A despawned Manananggal cannot be hit.");
+
+            brain.SetHidden(false);
+            brain.StartChase(localPlayer.GetComponent<PlayerPersistence>());
+            brain.Flight.Warp(new Vector3(0f, 1.5f, 0f));
+            Physics.SyncTransforms();
+            Vector3 body = brain.GetComponent<Collider>().bounds.center;
+            GameObject hit = itemUse.ServerAttack(stick, origin, (body - origin).normalized);
+            Assert.That(hit, Is.SameAs(brain.gameObject), "The swing hits the Manananggal.");
+            Assert.That(brain.StateName, Is.EqualTo("Stunned"));
+            Assert.That(brain.ChaseTarget, Is.Null, "A stunned Manananggal drops its chase.");
+            Vector3 stunnedAt = brain.transform.position;
+            yield return new WaitForSeconds(0.2f);
+            Assert.That(Vector3.Distance(brain.transform.position, stunnedAt), Is.LessThan(0.05f), "It hovers still while stunned.");
+            yield return WaitUntil(() => brain.StateName == "Leaving", 2f, "It did not fly away after the stun.");
+            Assert.That(brain.IsHidden, Is.False);
+        }
+        finally
+        {
+            Object.DestroyImmediate(stick);
+        }
+    }
+
+    [UnityTest]
     public IEnumerator PlayersSeenDuringAPassAreChased()
     {
         SpawnPlayers();

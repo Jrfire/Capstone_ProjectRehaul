@@ -64,8 +64,8 @@ public sealed class HudContextSetupTests
         LoadingTips tips = AssetDatabase.LoadAssetAtPath<LoadingTips>("Assets/Settings/LoadingTips.asset");
         Assert.That(tips, Is.Not.Null);
         Assert.That(screen.Tips, Is.SameAs(tips));
-        Assert.That(tips.Count, Is.EqualTo(5));
-        Assert.That(tips.tips.Count(tip => tip.StartsWith("TIP: ")), Is.EqualTo(3));
+        Assert.That(tips.Count, Is.GreaterThanOrEqualTo(5), "Users add more tips over time.");
+        Assert.That(tips.tips.Count(tip => tip.StartsWith("TIP: ")), Is.GreaterThanOrEqualTo(3));
         Assert.That(tips.tips.Any(tip => tip.Contains("Manananggal")), Is.True);
         Assert.That(screen.TipText, Is.Not.Null);
         Assert.That(screen.TipText.font, Is.SameAs(BloodCrow));

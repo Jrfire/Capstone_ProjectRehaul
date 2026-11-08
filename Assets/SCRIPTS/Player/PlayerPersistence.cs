@@ -26,6 +26,32 @@ public sealed class PlayerPersistence : NetworkBehaviour
     /// <summary>True while this player waits aboard the jeepney back to base; enemies ignore them and their controls are locked.</summary>
     public bool IsAboard => aboard;
 
+    // Set by TravelDirector while this player has readied up at the jeepney at base.
+    [SyncVar] private bool ready;
+
+    /// <summary>True while this player has pressed E on the jeepney at base and waits for everyone else to ready.</summary>
+    public bool IsReady => ready;
+
+    /// <summary>The local player's object on this peer, or null.</summary>
+    public static PlayerPersistence Local =>
+        NetworkClient.localPlayer != null && NetworkClient.localPlayer.TryGetComponent(out PlayerPersistence player) ? player : null;
+
+    /// <summary>
+    /// True while the local player has readied at the jeepney (or boarded it away from base). Readied players cannot use
+    /// the map terminal, the Albularyo or the invite terminal.
+    /// </summary>
+    public static bool LocalReadied
+    {
+        get
+        {
+            PlayerPersistence local = Local;
+            return local != null && (local.ready || local.aboard);
+        }
+    }
+
+    [Server]
+    public void ServerSetReady(bool value) => ready = value;
+
     private void OnEnable() => activePlayers.Add(this);
 
     private void OnDisable()

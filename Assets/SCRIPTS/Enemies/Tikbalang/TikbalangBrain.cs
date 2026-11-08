@@ -17,6 +17,7 @@ public sealed class TikbalangBrain : EnemyBrain
     public TikbalangProfile Profile => profile;
     /// <summary>The player being chased (synced so clients can react, e.g. with fear effects later).</summary>
     public NetworkIdentity ChaseTarget => chaseTarget;
+    public override NetworkIdentity ChasedPlayer => chaseTarget;
     public bool IsChasing => chaseTarget != null;
 
     public TikbalangIdleState Idle { get; private set; }
@@ -98,6 +99,14 @@ public sealed class TikbalangBrain : EnemyBrain
         ChangeState(Stunned);
     }
 
+    public override bool ServerTakeWeaponHit(ItemDefinition weapon, NetworkIdentity attacker)
+    {
+        if (!isServer)
+            return false;
+        Stun(weapon != null && weapon.StunSeconds > 0f ? weapon.StunSeconds : -1f);
+        return true;
+    }
+
     [Server]
     public void EndChase()
     {
@@ -106,7 +115,7 @@ public sealed class TikbalangBrain : EnemyBrain
 
     internal void ClearChaseTarget() => chaseTarget = null;
 
-    internal PlayerPersistence ChasedPlayer =>
+    internal PlayerPersistence ChasedPersistence =>
         chaseTarget != null && chaseTarget.TryGetComponent(out PlayerPersistence player) && player.isActiveAndEnabled ? player : null;
 
     /// <summary>

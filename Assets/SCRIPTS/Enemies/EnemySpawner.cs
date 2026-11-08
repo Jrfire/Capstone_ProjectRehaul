@@ -24,8 +24,19 @@ public sealed class EnemySpawner : MonoBehaviour
     private MapManager map;
     [SerializeField, Tooltip("Fallback enemies, used when this scene was not reached through a travel roll (e.g. opened directly in the Editor).")]
     private List<EnemySpawnEntry> enemies = new List<EnemySpawnEntry>();
-    [SerializeField, Min(0), Tooltip("How many of the travel terminal's rolled enemy type to spawn.")]
+    [SerializeField, Min(0), Tooltip("Base number of each rolled enemy type (before the per-quota extras below).")]
     private int rolledEnemyCount = 1;
+    [Header("More enemies per quota")]
+    [SerializeField, Min(1), Tooltip("Quotas met per extra possible enemy of each rolled type (2 = +1 every 2 quotas).")]
+    private int quotasPerExtraEnemy = 2;
+    [SerializeField, Min(1), Tooltip("Most enemies of one rolled type.")]
+    private int maxEnemiesPerType = 4;
+    [SerializeField, Range(0f, 1f), Tooltip("Chance of each possible extra enemy on a small map (Small Map Blocks or fewer).")]
+    private float smallMapExtraChance = 0.3f;
+    [SerializeField, Range(0f, 1f), Tooltip("Chance of each possible extra enemy on a large map (Large Map Blocks or more).")]
+    private float largeMapExtraChance = 0.8f;
+    [SerializeField, Min(1)] private int smallMapBlocks = 5;
+    [SerializeField, Min(1)] private int largeMapBlocks = 15;
     [SerializeField, Min(0), Tooltip("Frames to wait after the map is built so NavMesh carving is applied.")]
     private int settleFrames = 3;
 
@@ -38,6 +49,34 @@ public sealed class EnemySpawner : MonoBehaviour
     public List<EnemySpawnEntry> Enemies => enemies;
     public int RolledEnemyCount => rolledEnemyCount;
 
+    private static int CurrentRound => RoundClock.Instance != null && RoundClock.Instance.enabled ? RoundClock.Instance.Round : 1;
+
+    /// <summary>Most enemies of one rolled type in <paramref name="round"/>: base, +1 every Quotas Per Extra Enemy quotas met, capped.</summary>
+    public int MaxCountForRound(int round) =>
+        Mathf.Clamp(rolledEnemyCount + Mathf.Max(0, round - 1) / Mathf.Max(1, quotasPerExtraEnemy), Mathf.Min(rolledEnemyCount, maxEnemiesPerType), maxEnemiesPerType);
+
+    /// <summary>Chance of each possible extra enemy; grows from the small-map to the large-map chance with the block count.</summary>
+    public float ExtraChanceForBlocks(int blockCount) =>
+        Mathf.Lerp(smallMapExtraChance, largeMapExtraChance, Mathf.InverseLerp(smallMapBlocks, largeMapBlocks, blockCount));
+
+    /// <summary>
+    /// Rolls how many of one rolled type spawn: the base count, plus each possible extra (up to
+    /// <see cref="MaxCountForRound"/>) with <see cref="ExtraChanceForBlocks"/>.
+    /// </summary>
+    public int RollCount(int round, int blockCount, Func<float> random01 = null)
+    {
+        Func<float> random = random01 ?? (() => UnityEngine.Random.value);
+        int max = MaxCountForRound(round);
+        int count = Mathf.Min(rolledEnemyCount, max);
+        float chance = ExtraChanceForBlocks(blockCount);
+        for (int extra = count; extra < max; extra++)
+        {
+            if (random() < chance)
+                count++;
+        }
+        return count;
+    }
+
     /// <summary>The rolled enemy types from the trip into this scene (Rolled Enemy Count of each), otherwise the fallback list.</summary>
     public List<EnemySpawnEntry> ResolveEntries()
     {
@@ -45,10 +84,11 @@ public sealed class EnemySpawner : MonoBehaviour
         if (travel == null || !travel.HasArrivalRoll)
             return enemies;
         var rolled = new List<EnemySpawnEntry>();
+        int blockCount = map != null ? map.BlockCount : 0;
         foreach (EnemyDefinition enemy in travel.ArrivalEnemies)
         {
             if (enemy != null && enemy.prefab != null)
-                rolled.Add(new EnemySpawnEntry { prefab = enemy.prefab, count = rolledEnemyCount });
+                rolled.Add(new EnemySpawnEntry { prefab = enemy.prefab, count = RollCount(CurrentRound, blockCount) });
             else if (enemy != null)
                 Debug.LogError($"Enemy definition '{enemy.name}' has no prefab.", enemy);
         }

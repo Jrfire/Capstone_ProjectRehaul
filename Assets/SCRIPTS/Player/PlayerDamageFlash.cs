@@ -42,11 +42,11 @@ public sealed class PlayerDamageFlash : MonoBehaviour
 
     private void LateUpdate()
     {
-        NetworkIdentity localPlayer = NetworkClient.isConnected ? NetworkClient.localPlayer : null;
+        NetworkIdentity localPlayer = PlayerDeathScreen.HudPlayer;
         PlayerHealth health = localPlayer != null ? localPlayer.GetComponent<PlayerHealth>() : null;
         if (health != observedHealth)
         {
-            // A new or replaced local player starts from its current value, so spawning never flashes.
+            // A new, replaced or newly spectated player starts from its current value, so binding never flashes.
             observedHealth = health;
             lastHealth = health != null ? health.CurrentHealth : 0;
             flashAge = float.PositiveInfinity;

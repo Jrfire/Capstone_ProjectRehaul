@@ -14,9 +14,16 @@ public class Nametag : MonoBehaviour
     [SerializeField, Min(0.1f), Tooltip("Maximum aim distance from the camera, in metres.")]
     private float maxDistance = 3.5f;
 
+    /// <summary>Optional runtime override (e.g. "Someone else is talking to the albularyo."); null or empty keeps the Display Name.</summary>
+    public System.Func<string> Override { get; set; }
+
     public virtual string DisplayName
     {
-        get => displayName;
+        get
+        {
+            string replaced = Override?.Invoke();
+            return string.IsNullOrEmpty(replaced) ? displayName : replaced;
+        }
         set => displayName = value;
     }
 

@@ -97,7 +97,7 @@ public sealed class MapScreen : MonoBehaviour
         if (configured == null || configured.type != InputActionType.Button)
             Debug.LogError("MapScreen requires a Button Player/Map action.", this);
         else
-            toggleAction = configured.Clone();
+            toggleAction = GameSettings.TrackBindings(configured.Clone());
     }
 
     private void OnEnable() => toggleAction?.Enable();

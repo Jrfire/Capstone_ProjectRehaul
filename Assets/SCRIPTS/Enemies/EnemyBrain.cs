@@ -10,7 +10,7 @@ using UnityEngine.AI;
 /// </summary>
 /// <remarks>Ground enemies need an <see cref="EnemyMotor"/>; flying ones an <see cref="EnemyFlightMotor"/>.</remarks>
 [RequireComponent(typeof(EnemySenses), typeof(EnemyPresentation))]
-public abstract class EnemyBrain : NetworkBehaviour
+public abstract class EnemyBrain : NetworkBehaviour, IWeaponTarget
 {
     private static readonly float[] bodyHeights = { 0.3f, 1.4f, 2.6f };
 
@@ -54,6 +54,15 @@ public abstract class EnemyBrain : NetworkBehaviour
 
     /// <summary>Enemies that roam the whole map (e.g. flyers) instead of guarding a home block.</summary>
     public virtual bool RoamsWholeMap => false;
+
+    /// <summary>The player this enemy is chasing (synced on every peer), or null. Drives chase music/SFX.</summary>
+    public virtual NetworkIdentity ChasedPlayer => null;
+
+    /// <summary>False while the enemy is despawned/hidden (e.g. a Manananggal between passes): it makes no sound.</summary>
+    public virtual bool IsPresent => true;
+
+    /// <summary>Server: a player's weapon hit this enemy (see PlayerItemUse). Default: no effect.</summary>
+    public virtual bool ServerTakeWeaponHit(ItemDefinition weapon, NetworkIdentity attacker) => false;
 
     /// <summary>Server: makes a placed street block this enemy's home. Call before <c>NetworkServer.Spawn</c>.</summary>
     public void AssignHomeBlock(MapManager map, int blockIndex)

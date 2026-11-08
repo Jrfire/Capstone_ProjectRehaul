@@ -39,7 +39,8 @@ public sealed class MapTerminal : Interactable
         RoundClock.Instance == null || !RoundClock.Instance.enabled || RoundClock.Instance.InBase;
 
     public override bool CanInteract(PlayerInteraction interactor) =>
-        mapScreenPrefab != null && TravelMapAvailable && (TravelDirector.Instance == null || !TravelDirector.Instance.IsTraveling);
+        mapScreenPrefab != null && TravelMapAvailable && !PlayerPersistence.LocalReadied &&
+        (TravelDirector.Instance == null || !TravelDirector.Instance.IsTraveling);
 
     public override void Interact(PlayerInteraction interactor)
     {

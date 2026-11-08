@@ -1,9 +1,10 @@
 using UnityEngine;
 
 /// <summary>
-/// Pre-placed interactable (the back of the jeepney). At base it starts travel to the destination confirmed on a
-/// <see cref="MapTerminal"/>. Away from base it always heads home: each player boards it individually, which starts
-/// the <see cref="RoundClock"/> return countdown.
+/// Pre-placed interactable (the back of the jeepney). At base every living player presses E to ready up (again to
+/// cancel); the trip to the destination confirmed on a <see cref="MapTerminal"/> starts once everyone is ready.
+/// Away from base it always heads home: each player boards it individually, which starts the
+/// <see cref="RoundClock"/> return countdown.
 /// </summary>
 [DisallowMultipleComponent]
 public sealed class TravelInteractable : Interactable
@@ -16,7 +17,10 @@ public sealed class TravelInteractable : Interactable
         {
             if (AwayFromBase)
                 return RoundClock.LocalPlayerAboard ? "Waiting for the others" : "Board the jeepney back to base";
-            return TravelDirector.Instance != null ? $"Travel to {TravelDirector.Instance.SelectedDestination}" : "Travel";
+            PlayerPersistence local = PlayerPersistence.Local;
+            if (local != null && local.IsReady)
+                return "Cancel ready";
+            return TravelDirector.Instance != null ? $"Ready to travel to {TravelDirector.Instance.SelectedDestination}" : "Ready";
         }
     }
 

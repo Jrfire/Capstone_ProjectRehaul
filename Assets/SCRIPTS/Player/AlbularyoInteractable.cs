@@ -10,16 +10,21 @@ public sealed class AlbularyoInteractable : Interactable
 {
     [SerializeField, Tooltip("Sacrifice UI prefab, instantiated once and shared by every Albularyo.")]
     private AlbularyoScreen screenPrefab;
+    [SerializeField, Tooltip("Nametag text shown to everyone else while one player has the Albularyo screen open.")]
+    private string busyNametag = "Someone else is talking to the albularyo.";
 
     private static readonly List<AlbularyoInteractable> active = new List<AlbularyoInteractable>();
 
     public AlbularyoScreen ScreenPrefab => screenPrefab;
     public static IReadOnlyList<AlbularyoInteractable> Active => active;
+    public string BusyNametag => busyNametag;
 
     public override string Prompt => "Talk";
 
+    private static bool SomeoneElseTalking => AgimatBank.Instance != null && AgimatBank.Instance.SomeoneElseTalking;
+
     public override bool CanInteract(PlayerInteraction interactor) =>
-        screenPrefab != null && AgimatBank.Instance != null &&
+        screenPrefab != null && AgimatBank.Instance != null && !SomeoneElseTalking && !PlayerPersistence.LocalReadied &&
         (TravelDirector.Instance == null || !TravelDirector.Instance.IsTraveling) &&
         (RoundClock.Instance == null || !RoundClock.Instance.enabled || RoundClock.Instance.Phase != RoundPhase.GameOver);
 
@@ -40,7 +45,13 @@ public sealed class AlbularyoInteractable : Interactable
         return false;
     }
 
-    private void OnEnable() => active.Add(this);
+    private void OnEnable()
+    {
+        active.Add(this);
+        Nametag nametag = GetComponentInChildren<Nametag>(true);
+        if (nametag != null)
+            nametag.Override = () => SomeoneElseTalking ? busyNametag : null;
+    }
 
     private void OnDisable() => active.Remove(this);
 }

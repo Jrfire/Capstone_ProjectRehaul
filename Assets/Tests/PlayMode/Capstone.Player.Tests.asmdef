@@ -4,6 +4,7 @@
         "Capstone.Player",
         "Capstone.Level",
         "Capstone.Enemies",
+        "Capstone.Audio",
         "Mirror",
         "Mirror.Components",
         "Mirror.Transports",
