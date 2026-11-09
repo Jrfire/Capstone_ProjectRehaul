@@ -112,8 +112,14 @@ public abstract class EnemyBrain : NetworkBehaviour, IWeaponTarget
             ResolveHome();
             ChangeState(CreateInitialState());
         }
+        ServerTick(Time.deltaTime);
         CurrentState?.Tick(Time.deltaTime);
         PublishMotion();
+    }
+
+    /// <summary>Server: runs every active (not frozen) frame before the current state ticks.</summary>
+    protected virtual void ServerTick(float deltaTime)
+    {
     }
 
     private void ResolveHome()

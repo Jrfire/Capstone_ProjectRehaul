@@ -18,6 +18,7 @@ public sealed class PlayerCorpse : NetworkBehaviour
 
     private PlayerHealth health;
     private PlayerVision vision;
+    private PlayerTrance trance;
     private GameObject corpse;
 
     public GameObject Corpse => corpse;
@@ -26,6 +27,7 @@ public sealed class PlayerCorpse : NetworkBehaviour
     {
         health = GetComponent<PlayerHealth>();
         vision = GetComponent<PlayerVision>();
+        trance = GetComponent<PlayerTrance>();
         if (worldSprites == null && vision != null)
             worldSprites = vision.WorldSprites;
     }
@@ -34,12 +36,16 @@ public sealed class PlayerCorpse : NetworkBehaviour
     {
         if (health != null)
             health.HealthChanged += OnHealthChanged;
+        if (trance != null)
+            trance.TranceChanged += OnTranceChanged;
     }
 
     private void OnDisable()
     {
         if (health != null)
             health.HealthChanged -= OnHealthChanged;
+        if (trance != null)
+            trance.TranceChanged -= OnTranceChanged;
     }
 
     public override void OnStopClient() => RemoveCorpse();
@@ -53,7 +59,19 @@ public sealed class PlayerCorpse : NetworkBehaviour
             if (corpse == null)
                 SpawnCorpse();
         }
-        else
+        else if (trance == null || !trance.InTrance)
+            RemoveCorpse();
+    }
+
+    // A tranced player's body lies where the Santelmo caught them; it stays if they die in the pocket.
+    private void OnTranceChanged(bool inTrance)
+    {
+        if (inTrance)
+        {
+            if (corpse == null)
+                SpawnCorpse();
+        }
+        else if (health == null || health.CurrentHealth > 0)
             RemoveCorpse();
     }
 

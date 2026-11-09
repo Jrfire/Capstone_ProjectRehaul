@@ -571,6 +571,7 @@ public sealed class NightVisionRenderTests
         fear.buildUpSpeed = 1000f;
         fear.recoverySpeed = 1000f;
         fear.verticalGrainStrength = 0f;
+        fear.staticStrength = 0f;
         GameObject quad = objects.OfType<GameObject>().Single(obj => obj.GetComponent<MeshFilter>() != null);
         quad.AddComponent<EnemyFearSource>();
         Physics.SyncTransforms();
@@ -681,6 +682,55 @@ public sealed class NightVisionRenderTests
     }
 
     [UnityTest]
+    public IEnumerator PanicStaticIsFaintNoiseAndTranceOverridesBlurTintAndFadeOnlyThisCamera()
+    {
+        effects.pixelation = false;
+        texture.SetPixels(Enumerable.Repeat(new Color(0.2f, 0.2f, 0.2f, 1f), 1024).ToArray());
+        texture.Apply();
+        yield return null;
+        yield return null;
+        Color32[] clear = ReadPixels();
+        PlayerFearEffects fear = camera.gameObject.AddComponent<PlayerFearEffects>();
+        fear.fovShudder = 0f;
+        fear.buildUpSpeed = 1000f;
+        fear.vignetteStrength = 0f;
+        fear.verticalGrainStrength = 0f;
+        fear.staticStrength = 0.35f;
+        objects.OfType<GameObject>().Single(obj => obj.GetComponent<MeshFilter>() != null)
+            .AddComponent<EnemyFearSource>();
+        Physics.SyncTransforms();
+        yield return new WaitForSeconds(0.02f);
+        yield return null;
+        yield return null;
+        Assert.That(fear.OverlayIntensity, Is.GreaterThan(0.8f));
+        Color32[] noisy = ReadPixels();
+        Assert.That(Variance(noisy), Is.GreaterThan(Variance(clear) + 0.00002f), "Panic must add static.");
+        float worst = 0f;
+        for (int index = 0; index < noisy.Length; index++)
+            worst = Mathf.Max(worst, Mathf.Abs(noisy[index].r - clear[index].r) / 255f);
+        Assert.That(worst, Is.LessThan(0.12f), "Static must stay faint enough to see the street.");
+        Assert.That(grain.intensity.value, Is.Zero, "Static must not mutate the shared Volume.");
+        fear.enabled = false;
+
+        effects.ScreenFade = Color.white;
+        yield return null;
+        yield return null;
+        Assert.That(ReadPixels().Min(pixel => pixel.r), Is.GreaterThan(250));
+        effects.ScreenFade = Color.clear;
+        effects.TranceTint = new Color(1f, 0.35f, 0.05f, 1f);
+        yield return null;
+        yield return null;
+        Color32 tinted = ReadPixels()[72 * 256 + 128];
+        Assert.That(tinted.r, Is.GreaterThan(tinted.g + 20));
+        Assert.That(tinted.g, Is.GreaterThan(tinted.b));
+        effects.ClearScreenOverrides();
+        yield return null;
+        yield return null;
+        Assert.That(Variance(ReadPixels()), Is.EqualTo(Variance(clear)).Within(0.00001f));
+        Assert.That(ReadPixels()[72 * 256 + 128].r, Is.EqualTo(clear[72 * 256 + 128].r).Within(2));
+    }
+
+    [UnityTest]
     public IEnumerator ScratchThicknessChangesRenderedWidthWithoutChangingLineCountOrPanic()
     {
         texture.SetPixels(Enumerable.Repeat(new Color(0.5f, 0.5f, 0.5f, 1f), 1024).ToArray());
@@ -689,6 +739,7 @@ public sealed class NightVisionRenderTests
         fear.fovShudder = 0f;
         fear.buildUpSpeed = 1000f;
         fear.vignetteStrength = 0f;
+        fear.staticStrength = 0f;
         fear.verticalGrainStrength = 1f;
         fear.verticalLineCount = 8f;
         fear.filmJitterSpeed = 0f;

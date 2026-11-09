@@ -478,6 +478,67 @@ public sealed class TikbalangTests : InputTestFixture
         yield return null;
     }
 
+    [UnityTest]
+    public IEnumerator MovesToAnotherReachableHomeBlockEveryHomeChangeInterval()
+    {
+        StreetBlock Load(string name) =>
+            AssetDatabase.LoadAssetAtPath<GameObject>($"Assets/PREFABS/StreetBlocks/{name}.prefab").GetComponent<StreetBlock>();
+        var root = new GameObject("Tikbalang Home Test Map");
+        created.Add(root);
+        root.SetActive(false);
+        var map = root.AddComponent<MapManager>();
+        var so = new SerializedObject(map);
+        void Fill(string property, StreetBlock block)
+        {
+            SerializedProperty list = so.FindProperty(property);
+            list.arraySize = 1;
+            list.GetArrayElementAtIndex(0).objectReferenceValue = block;
+        }
+        Fill("connectorBlocks", Load("StreetBlock_2Entrances_1"));
+        Fill("endCapBlocks", Load("EndBlockStreetBlock_1"));
+        Fill("spawnBlocks", Load("SpawnBlockStreetBlock_1"));
+        so.FindProperty("connectorBlockCount").intValue = 4;
+        so.FindProperty("loopChance").floatValue = 0f;
+        so.FindProperty("buildOnStart").boolValue = false;
+        so.ApplyModifiedPropertiesWithoutUndo();
+        root.SetActive(true);
+        Assert.That(map.Build(5), Is.True);
+        yield return null;
+
+        SpawnPlayers();
+        Place(localPlayer, new Vector3(0f, 0f, 400f));
+        Place(remotePlayer, new Vector3(20f, 0f, 400f));
+        List<int> candidates = EnemySpawner.FindCandidateBlocks(map, out _);
+        Assert.That(candidates.Count, Is.GreaterThanOrEqualTo(2), "The test map needs two candidate homes.");
+        profile.homeChangeSeconds = 0.4f;
+        profile.visionRange = 0.1f;
+        profile.hearingRadius = 0f;
+        Vector3 start = map.GetBlock(candidates[0]).transform.position;
+        Assert.That(NavMesh.SamplePosition(start, out NavMeshHit hit, 6f, NavMesh.AllAreas), Is.True);
+        TikbalangBrain brain = CreateTikbalang(hit.position, 0f, spawn: false);
+        brain.AssignHomeBlock(map, candidates[0]);
+        NetworkServer.Spawn(brain.gameObject);
+
+        int first = brain.HomeBlockIndex;
+        yield return WaitUntil(() => brain.HomeBlockIndex != first, 3f, "It moves house after the interval.");
+        Assert.That(candidates, Does.Contain(brain.HomeBlockIndex), "Only blocks it could spawn in become home.");
+        Assert.That(map.FindOpenlyReachable(first)[brain.HomeBlockIndex], Is.True, "The new home is openly reachable.");
+        Assert.That(brain.Home.Contains(map.GetBlock(brain.HomeBlockIndex).transform.position), Is.True);
+
+        brain.StartChase(localPlayer.GetComponent<PlayerPersistence>());
+        Assert.That(brain.CurrentState, Is.EqualTo(brain.Chase));
+        int during = brain.HomeBlockIndex;
+        brain.HomeChangeTimer = 0.01f;
+        yield return WaitUntil(() => brain.HomeBlockIndex != during, 1f, "The timer keeps running during a chase.");
+        Assert.That(brain.CurrentState, Is.EqualTo(brain.Chase), "The chase itself is not interrupted.");
+
+        brain.StartSearch(brain.transform.position);
+        Assert.That(brain.CurrentState, Is.EqualTo(brain.Searching));
+        int searching = brain.HomeBlockIndex;
+        brain.HomeChangeTimer = 0.01f;
+        yield return WaitUntil(() => brain.HomeBlockIndex != searching, 1f, "The timer keeps running during a search.");
+        Assert.That(brain.CurrentState, Is.EqualTo(brain.Idle), "A search is dropped to head for the new home.");
+    }
     private void SpawnArena()
     {
         SpawnPlayers();

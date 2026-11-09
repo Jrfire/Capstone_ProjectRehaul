@@ -99,7 +99,7 @@ public sealed class PlayerInteraction : NetworkBehaviour
             if (player == null || player.gameObject == gameObject)
                 continue;
             PlayerHealth health = player.GetComponent<PlayerHealth>();
-            if (health != null && health.IsDead)
+            if ((health != null && health.IsDead) || PlayerTrance.IsInTrance(player))
                 continue;
             if (player.TryAimDistance(ray, maxDistance, out float distance) && distance < bestDistance)
             {

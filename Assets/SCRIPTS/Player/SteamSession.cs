@@ -302,14 +302,28 @@ public sealed class SteamSession : MonoBehaviour
         string host = NetworkServer.active ? LocalSteamId : manager.networkAddress;
         int count = NetworkServer.active ? NetworkServer.connections.Count :
             SteamMatchmaking.GetNumLobbyMembers(new CSteamID(LobbyId));
-        if (!SteamFriends.SetRichPresence("connect", "+connect " + host) ||
+        // A locked session (left base) offers no Join Game and its lobby stops accepting members.
+        if (!SteamFriends.SetRichPresence("connect", JoinsLocked ? string.Empty : "+connect " + host) ||
             !SteamFriends.SetRichPresence("steam_player_group", LobbyId.ToString(CultureInfo.InvariantCulture)) ||
             !SteamFriends.SetRichPresence("steam_player_group_size", count.ToString(CultureInfo.InvariantCulture)))
             Debug.LogError("Steam could not publish joinable session presence.", this);
         if (NetworkServer.active &&
-            !SteamMatchmaking.SetLobbyJoinable(new CSteamID(LobbyId), count < manager.maxConnections))
+            !SteamMatchmaking.SetLobbyJoinable(new CSteamID(LobbyId), !JoinsLocked && count < manager.maxConnections))
             Debug.LogError("Steam could not update lobby joinability.", this);
         publishedPlayerCount = count;
+    }
+
+    /// <summary>True while the hosted session refuses new players (see SteamNetworkManager.JoinsLocked).</summary>
+    public bool JoinsLocked { get; private set; }
+
+    /// <summary>Host: locks or unlocks Steam joining (lobby joinability and the Join Game presence).</summary>
+    public void SetJoinsLocked(bool locked)
+    {
+        if (JoinsLocked == locked)
+            return;
+        JoinsLocked = locked;
+        if (Initialized)
+            PublishSessionPresence();
     }
 
     public void LeaveSessionLobby()

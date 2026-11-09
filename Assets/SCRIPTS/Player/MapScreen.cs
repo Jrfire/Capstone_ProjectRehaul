@@ -45,7 +45,7 @@ public sealed class MapScreen : MonoBehaviour
     public string JeepneyLabel => jeepneyLabel;
 
     private static bool CanShow =>
-        NetworkClient.active && NetworkClient.localPlayer != null && !PlayerControlLock.IsLocked && !HudVisibility.Hidden &&
+        NetworkClient.active && NetworkClient.localPlayer != null && !PlayerTrance.IsInTrance(NetworkClient.localPlayer) && !PlayerControlLock.IsLocked && !HudVisibility.Hidden &&
         (SteamSession.Instance == null || !SteamSession.Instance.OverlayActive);
 
     private static MapManager CurrentMap => MapManager.Active != null && MapManager.Active.IsBuilt && MapManager.Active.BlockCount > 0

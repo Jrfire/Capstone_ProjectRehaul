@@ -249,4 +249,58 @@ public sealed class EnemySetupTests
             EditorSceneManager.CloseScene(sample, true);
         }
     }
+
+    private const string SantelmoPath = "Assets/PREFABS/Enemies/Santelmo.prefab";
+
+    [Test]
+    public void SantelmoIsAGlowingNavMeshOrbWithItsOwnBrainAndRegistration()
+    {
+        GameObject prefab = AssetDatabase.LoadAssetAtPath<GameObject>(SantelmoPath);
+        Assert.That(prefab, Is.Not.Null);
+        var identity = prefab.GetComponent<NetworkIdentity>();
+        Assert.That(identity.assetId, Is.Not.EqualTo(0u));
+        Assert.That(identity.assetId, Is.Not.EqualTo(AssetDatabase.LoadAssetAtPath<GameObject>(TikbalangPath).GetComponent<NetworkIdentity>().assetId));
+        Assert.That(prefab.GetComponent<NavMeshAgent>(), Is.Not.Null, "It roams the map on the NavMesh.");
+        Assert.That(prefab.GetComponent<EnemyMotor>(), Is.Not.Null);
+        Assert.That(prefab.GetComponent<TikbalangBrain>(), Is.Null);
+        var brain = prefab.GetComponent<SantelmoBrain>();
+        Assert.That(brain, Is.Not.Null);
+        Assert.That(brain.Profile, Is.EqualTo(AssetDatabase.LoadAssetAtPath<SantelmoProfile>("Assets/PREFABS/Enemies/Profiles/Santelmo_Default.asset")));
+        Assert.That(brain.Profile.gazeSeconds, Is.EqualTo(10f));
+
+        var presentation = prefab.GetComponent<EnemyPresentation>();
+        EnemySpriteDefinition sprites = AssetDatabase.LoadAssetAtPath<EnemySpriteDefinition>("Assets/SPRITES/Enemies/Santelmo_Sprites.asset");
+        Assert.That(presentation.Sprites, Is.EqualTo(sprites));
+        Assert.That(sprites.GetAnimation(EnemyAnimationState.Idle).IsReady, Is.True);
+        Assert.That(sprites.GetAnimation(EnemyAnimationState.Moving).IsReady, Is.True);
+        Assert.That(presentation.WorldSprites.sharedMaterial.shader.name, Is.EqualTo("Capstone/Solid Sprite"));
+        Assert.That(presentation.WorldSprites.GetComponent<ReducedPixelation>(), Is.Not.Null);
+        Assert.That(prefab.GetComponent<EnemyFearSource>().visibilityRenderer, Is.EqualTo(presentation.WorldSprites));
+        Light glow = prefab.GetComponentInChildren<Light>(true);
+        Assert.That(glow.type, Is.EqualTo(LightType.Point));
+        Assert.That(glow.color.r, Is.GreaterThan(glow.color.b), "An orange glow.");
+        Assert.That(prefab.GetComponentInChildren<ParticleSystem>(true).main.simulationSpace, Is.EqualTo(ParticleSystemSimulationSpace.World), "The fire trails behind it.");
+        Assert.That(prefab.GetComponent<EnemyJumpscare>().FrontView, Is.Not.Null);
+        Assert.That(prefab.GetComponent<EnemyLoadingMiniature>().IsReady, Is.True);
+
+        var definition = AssetDatabase.LoadAssetAtPath<EnemyDefinition>("Assets/PREFABS/Enemies/Definitions/Santelmo.asset");
+        Assert.That(definition.DisplayName, Is.EqualTo("Santelmo"));
+        Assert.That(definition.prefab.gameObject, Is.EqualTo(prefab));
+        var trance = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/PREFABS/NetworkPlayer.prefab").GetComponent<PlayerTrance>();
+        Assert.That(trance, Is.Not.Null, "Players can be entranced.");
+        Assert.That(trance.SurviveSeconds, Is.EqualTo(60f));
+        Assert.That(new SerializedObject(trance).FindProperty("pocketChaserPrefab").objectReferenceValue, Is.Not.Null);
+
+        Scene sample = EditorSceneManager.OpenScene("Assets/Scenes/SampleScene.unity", OpenSceneMode.Additive);
+        try
+        {
+            NetworkManager manager = sample.GetRootGameObjects()
+                .SelectMany(root => root.GetComponentsInChildren<NetworkManager>(true)).Single();
+            Assert.That(manager.spawnPrefabs, Does.Contain(prefab));
+        }
+        finally
+        {
+            EditorSceneManager.CloseScene(sample, true);
+        }
+    }
 }

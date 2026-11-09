@@ -65,7 +65,7 @@ public sealed class NightVisionTests
                 "The streets are darker than the base so flashlights matter.");
             foreach (string path in new[] { "Assets/Scenes/SampleScene.unity", "Assets/Scenes/StreetsTest.unity" })
             {
-                string text = System.IO.File.ReadAllText(path);
+                string text = System.IO.File.ReadAllText(path).Replace("\r\n", "\n");
                 Assert.That(text, Does.Contain("m_DefaultReflectionMode: 1"), path);
                 Assert.That(text, Does.Contain("m_ReflectionIntensity: 0\n"), path + " has no grey default reflections.");
                 Assert.That(text, Does.Contain("m_SkyboxMaterial: {fileID: 2100000, guid: 5583f3ef29b348ca8a709629dfae1de2, type: 2}"),

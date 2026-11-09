@@ -49,6 +49,13 @@ public sealed class PlayerPersistence : NetworkBehaviour
         }
     }
 
+    private PlayerTrance trance;
+
+    /// <summary>True while this player is in a Santelmo trance: they look dead to others and enemies ignore them.</summary>
+    public bool IsInTrance => trance != null && trance.InTrance;
+
+    private void Awake() => trance = GetComponent<PlayerTrance>();
+
     [Server]
     public void ServerSetReady(bool value) => ready = value;
 

@@ -43,10 +43,10 @@ public sealed class NightVisionRendererFeature : ScriptableRendererFeature
             return;
         }
         NightFog fog = VolumeManager.instance.stack.GetComponent<NightFog>();
-        if (fog != null && fog.active && fog.enabled.value && fog.density.value > 0f)
+        if (fog != null && fog.active && fog.enabled.value && fog.density.value * effects.FogDensityMultiplier > 0f)
             renderer.EnqueuePass(fogPass);
         PlayerFearEffects fear = camera.GetComponent<PlayerFearEffects>();
-        if (effects.pixelation || (fear != null && fear.CanAffectCamera && fear.OverlayIntensity > 0f))
+        if (effects.pixelation || effects.HasScreenEffects || (fear != null && fear.CanAffectCamera && fear.OverlayIntensity > 0f))
             renderer.EnqueuePass(pixelPass);
     }
 
@@ -109,10 +109,19 @@ public sealed class NightVisionRendererFeature : ScriptableRendererFeature
             if (shaderPass == 0)
             {
                 NightFog fog = VolumeManager.instance.stack.GetComponent<NightFog>();
-                material.SetVector("_FogDensityHeight", new Vector4(fog.density.value,
+                PlayerCameraEffects fogEffects = cameraData.camera.GetComponent<PlayerCameraEffects>();
+                Color ambient = fog.ambientColor.value;
+                float density = fog.density.value;
+                if (fogEffects != null)
+                {
+                    // Per-camera override (e.g. the Santelmo trance's inferno), never written to the shared Volume.
+                    ambient = Color.Lerp(ambient, fogEffects.FogAmbientOverride, fogEffects.FogAmbientOverride.a);
+                    density *= fogEffects.FogDensityMultiplier;
+                }
+                material.SetVector("_FogDensityHeight", new Vector4(density,
                     fog.baseHeight.value, fog.heightFalloff.value,
                     Mathf.Min(fog.maxDistance.value, cameraData.camera.farClipPlane)));
-                material.SetColor("_FogAmbient", fog.ambientColor.value);
+                material.SetColor("_FogAmbient", ambient);
                 material.SetVector("_FogLighting", new Vector4(fog.lightScattering.value,
                     fog.anisotropy.value, fog.steps.value, fog.moonFog.value));
                 material.SetVector("_FogLocal", new Vector4(fog.localLightScattering.value,
@@ -135,6 +144,11 @@ public sealed class NightVisionRendererFeature : ScriptableRendererFeature
                     Mathf.Max(1f, fear.verticalLineCount)) : Vector4.zero);
                 material.SetFloat("_FilmTime", panic ? Time.time * Mathf.Max(0f, fear.filmJitterSpeed) : 0f);
                 material.SetFloat("_FilmLineThickness", panic ? Mathf.Clamp(fear.verticalLineThickness, 0.05f, 2f) : 1f);
+                material.SetVector("_PanicStatic", panic ? new Vector4(fear.OverlayIntensity * Mathf.Clamp01(fear.staticStrength),
+                    Mathf.Floor(Time.time * Mathf.Max(1f, fear.staticFramesPerSecond)) % 997f, 0f, 0f) : Vector4.zero);
+                material.SetVector("_Trance", new Vector4(Mathf.Clamp01(effects.TranceBlur) * 0.025f, 0f, 0f, 0f));
+                material.SetColor("_TranceTint", effects.TranceTint);
+                material.SetColor("_TranceFade", effects.ScreenFade);
                 float detail = Mathf.Clamp(effects.enemyPixelDetail, 1f, 4f);
                 if (effects.pixelation && detail > 1.001f)
                     mask = RecordMask(graph, resources, cameraData);

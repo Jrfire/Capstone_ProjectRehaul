@@ -102,7 +102,7 @@ public sealed class PlayerVision : NetworkBehaviour
             return;
 
         // Dead players vanish for everyone; the spectated player is hidden locally so it doesn't block their POV.
-        worldSprites.forceRenderingOff = (health != null && health.IsDead) || PlayerDeathScreen.SpectatedPlayer == gameObject;
+        worldSprites.forceRenderingOff = (health != null && health.IsDead) || PlayerTrance.IsInTrance(this) || PlayerDeathScreen.SpectatedPlayer == gameObject;
 
         NetworkIdentity localPlayer = NetworkClient.localPlayer;
         if (localPlayer == null || !localPlayer.TryGetComponent(out PlayerVision viewer) ||

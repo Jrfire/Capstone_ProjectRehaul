@@ -19,7 +19,7 @@ public sealed class PlayerNoise : NetworkBehaviour, INoiseSource
 
     public float RunNoiseRadius => runNoiseRadius;
     public bool IsRunning => running;
-    public bool IsMakingNoise => isActiveAndEnabled && running && (health == null || !health.IsDead);
+    public bool IsMakingNoise => isActiveAndEnabled && running && (health == null || !health.IsDead) && !PlayerTrance.IsInTrance(this);
     public Vector3 NoisePosition => transform.position;
     public float NoiseRadius => runNoiseRadius;
 

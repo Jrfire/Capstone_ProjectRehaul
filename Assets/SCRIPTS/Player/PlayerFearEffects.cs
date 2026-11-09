@@ -15,11 +15,16 @@ public sealed class PlayerFearEffects : MonoBehaviour
 
     [Header("Panic appearance")]
     [Range(0f, 1f)] public float vignetteStrength = 0.65f;
-    [Range(0f, 1f)] public float verticalGrainStrength = 0.45f;
-    [Min(1f)] public float verticalLineCount = 180f;
+    [Range(0f, 1f), Tooltip("Opacity of the vertical film scratches at full panic.")]
+    public float verticalGrainStrength = 0.2f;
+    [Min(1f)] public float verticalLineCount = 60f;
     [Range(0.05f, 2f), Tooltip("Relative scratch width: 1 matches the original thickness; 0.5 is half as thick. Very thin lines may disappear below screen resolution.")]
     public float verticalLineThickness = 0.5f;
     [Min(0f)] public float filmJitterSpeed = 12f;
+    [Range(0f, 1f), Tooltip("Extra static noise on top of the film grain at full panic (0 = off). Kept faint so the street stays readable while fleeing.")]
+    public float staticStrength = 0.35f;
+    [Min(1f), Tooltip("How many times per second the static pattern changes.")]
+    public float staticFramesPerSecond = 24f;
     [Range(0f, 5f), Tooltip("Maximum FOV oscillation in degrees. Set to zero to disable camera shudder.")]
     public float fovShudder = 1.25f;
     [Min(0f)] public float shudderFrequency = 9f;

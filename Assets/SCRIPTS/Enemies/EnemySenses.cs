@@ -62,7 +62,7 @@ public sealed class EnemySenses : MonoBehaviour
         float bestDistance = float.PositiveInfinity;
         foreach (PlayerPersistence player in PlayerPersistence.ActivePlayers)
         {
-            if (player.IsAboard || IsDead(player) || (filter != null && !filter(player)))
+            if (player.IsAboard || player.IsInTrance || IsDead(player) || (filter != null && !filter(player)))
                 continue;
             float distance = (player.transform.position - transform.position).sqrMagnitude;
             if (distance < bestDistance && CanSee(player))

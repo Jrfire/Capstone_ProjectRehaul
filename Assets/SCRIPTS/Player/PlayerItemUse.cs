@@ -97,7 +97,7 @@ public sealed class PlayerItemUse : NetworkBehaviour
         {
             ItemDefinition item = inventory != null ? inventory.SelectedItem : null;
             return item != null && item.UseKind != ItemUseKind.None && Alive && !PlayerControlLock.IsLocked &&
-                   (persistence == null || !persistence.IsAboard) && Time.time >= nextUseTime &&
+                   (persistence == null || (!persistence.IsAboard && !persistence.IsInTrance)) && Time.time >= nextUseTime &&
                    (SteamSession.Instance == null || !SteamSession.Instance.OverlayActive);
         }
     }
@@ -148,7 +148,7 @@ public sealed class PlayerItemUse : NetworkBehaviour
     {
         ItemDefinition item = inventory.GetItem(slot);
         if (item == null || (!string.IsNullOrEmpty(itemId) && item.Id != itemId) || !Alive ||
-            (persistence != null && persistence.IsAboard))
+            (persistence != null && (persistence.IsAboard || persistence.IsInTrance)))
             return false;
         switch (item.UseKind)
         {

@@ -1,0 +1,70 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: cbd51a40f9da4dfa8e191c9bdd94b8b9, type: 3}
+  m_Name: Santelmo_Sprites
+  m_EditorClassIdentifier: Capstone.Enemies::EnemySpriteDefinition
+  idle:
+    assignmentMode: 1
+    manualFramesPerDirection: 4
+    spriteSheet: {fileID: 0}
+    cellSize: {x: 64, y: 64}
+    framesPerSecond: 8
+    pixelsPerUnit: 100
+    directional: 1
+    frames:
+    - {fileID: 21300000, guid: cd2478d25fa57e34ab0c358b407008a7, type: 3}
+    - {fileID: 21300000, guid: 7eb26848fc05ab24584f2be9b8f0837d, type: 3}
+    - {fileID: 21300000, guid: eb2201bea13b95144af5d9c23de54711, type: 3}
+    - {fileID: 21300000, guid: 91522aa4f5fd56f468177f507970a3a4, type: 3}
+    - {fileID: 21300000, guid: c9009f4d702e85a4897c3161db775ffa, type: 3}
+    - {fileID: 21300000, guid: 0f0ee2f3735ec3b49a626211ead9e53e, type: 3}
+    - {fileID: 21300000, guid: 9677222a323a09c438ddcd07fd970ab6, type: 3}
+    - {fileID: 21300000, guid: e90a5ebe8470c7e4c864507de8723956, type: 3}
+    - {fileID: 21300000, guid: cd2478d25fa57e34ab0c358b407008a7, type: 3}
+    - {fileID: 21300000, guid: 7eb26848fc05ab24584f2be9b8f0837d, type: 3}
+    - {fileID: 21300000, guid: eb2201bea13b95144af5d9c23de54711, type: 3}
+    - {fileID: 21300000, guid: 91522aa4f5fd56f468177f507970a3a4, type: 3}
+    - {fileID: 21300000, guid: cd2478d25fa57e34ab0c358b407008a7, type: 3}
+    - {fileID: 21300000, guid: 7eb26848fc05ab24584f2be9b8f0837d, type: 3}
+    - {fileID: 21300000, guid: eb2201bea13b95144af5d9c23de54711, type: 3}
+    - {fileID: 21300000, guid: 91522aa4f5fd56f468177f507970a3a4, type: 3}
+    generatedSheet: {fileID: 0}
+    generatedCellSize: {x: 0, y: 0}
+    generatedPixelsPerUnit: 0
+  moving:
+    assignmentMode: 1
+    manualFramesPerDirection: 4
+    spriteSheet: {fileID: 0}
+    cellSize: {x: 64, y: 64}
+    framesPerSecond: 8
+    pixelsPerUnit: 100
+    directional: 1
+    frames:
+    - {fileID: 21300000, guid: cd2478d25fa57e34ab0c358b407008a7, type: 3}
+    - {fileID: 21300000, guid: 7eb26848fc05ab24584f2be9b8f0837d, type: 3}
+    - {fileID: 21300000, guid: eb2201bea13b95144af5d9c23de54711, type: 3}
+    - {fileID: 21300000, guid: 91522aa4f5fd56f468177f507970a3a4, type: 3}
+    - {fileID: 21300000, guid: c9009f4d702e85a4897c3161db775ffa, type: 3}
+    - {fileID: 21300000, guid: 0f0ee2f3735ec3b49a626211ead9e53e, type: 3}
+    - {fileID: 21300000, guid: 9677222a323a09c438ddcd07fd970ab6, type: 3}
+    - {fileID: 21300000, guid: e90a5ebe8470c7e4c864507de8723956, type: 3}
+    - {fileID: 21300000, guid: cd2478d25fa57e34ab0c358b407008a7, type: 3}
+    - {fileID: 21300000, guid: 7eb26848fc05ab24584f2be9b8f0837d, type: 3}
+    - {fileID: 21300000, guid: eb2201bea13b95144af5d9c23de54711, type: 3}
+    - {fileID: 21300000, guid: 91522aa4f5fd56f468177f507970a3a4, type: 3}
+    - {fileID: 21300000, guid: cd2478d25fa57e34ab0c358b407008a7, type: 3}
+    - {fileID: 21300000, guid: 7eb26848fc05ab24584f2be9b8f0837d, type: 3}
+    - {fileID: 21300000, guid: eb2201bea13b95144af5d9c23de54711, type: 3}
+    - {fileID: 21300000, guid: 91522aa4f5fd56f468177f507970a3a4, type: 3}
+    generatedSheet: {fileID: 0}
+    generatedCellSize: {x: 0, y: 0}
+    generatedPixelsPerUnit: 0

@@ -27,6 +27,8 @@ public sealed class TikbalangProfile : ScriptableObject
     public float idleWaitSeconds = 10f;
     [Min(0.5f), Tooltip("Half size of the guarded area when it spawns without a street map.")]
     public Vector2 fallbackHomeHalfSize = new Vector2(10f, 10f);
+    [Min(0f), Tooltip("Seconds between moves to a new home block (0 = never), in every state. A chase/stun finishes first, then it returns to the new home.")]
+    public float homeChangeSeconds = 60f;
 
     [Header("Searching")]
     [Min(0f), Tooltip("Total time spent looking around at the noise origin.")]

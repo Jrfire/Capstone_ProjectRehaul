@@ -137,8 +137,8 @@ public sealed class PlayerFlashlight : NetworkBehaviour
     {
         if (beam == null)
             return false;
-        // A dead player's flashlight goes dark for everyone.
-        bool lit = isOn && (health == null || !health.IsDead);
+        // A dead player's flashlight goes dark for everyone; a tranced body's goes dark for others (the owner keeps theirs in the pocket).
+        bool lit = isOn && (health == null || !health.IsDead) && (beam == ownerLight || !PlayerTrance.IsInTrance(this));
         beam.enabled = lit;
         if (!lit || !beam.gameObject.activeInHierarchy)
             return false;

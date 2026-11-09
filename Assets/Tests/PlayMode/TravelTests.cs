@@ -321,8 +321,14 @@ public sealed class TravelTests : InputTestFixture
 
         PlayerStamina stamina = player.GetComponent<PlayerStamina>();
         Assert.That(stamina.TryUseStamina(40f), Is.True);
+        Assert.That(manager.JoinsLocked, Is.False, "Guests may join while at base.");
         travel.Interact(null);
         yield return WaitUntil(() => director.IsTraveling, 2f, "Travel did not begin.");
+        yield return WaitUntil(() => manager.JoinsLocked && SteamNetworkManager.SessionLocked, 10f, "Leaving base locks the session.");
+        var latecomer = new NetworkConnectionToClient(9876);
+        manager.OnServerConnect(latecomer);
+        manager.OnServerAddPlayer(latecomer);
+        Assert.That(latecomer.identity, Is.Null, "Late joiners are refused once the group has left base.");
         Assert.That(PlayerControlLock.IsLocked, Is.True);
         Assert.That(PlayerStamina.TravelPaused, Is.True);
         Assert.That(director.SelectedDestination, Is.Null);

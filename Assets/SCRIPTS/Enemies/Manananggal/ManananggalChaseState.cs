@@ -34,7 +34,7 @@ public sealed class ManananggalChaseState : EnemyState
     public override void Tick(float deltaTime)
     {
         PlayerPersistence target = brain.ChasedPersistence;
-        if (target == null || target.IsAboard || (target.TryGetComponent(out PlayerHealth health) && health.CurrentHealth <= 0))
+        if (target == null || target.IsAboard || target.IsInTrance || (target.TryGetComponent(out PlayerHealth health) && health.CurrentHealth <= 0))
         {
             brain.EndChase();
             return;

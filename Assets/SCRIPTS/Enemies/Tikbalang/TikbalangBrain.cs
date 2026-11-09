@@ -46,6 +46,45 @@ public sealed class TikbalangBrain : EnemyBrain
 
     protected override EnemyState CreateInitialState() => Idle;
 
+    /// <summary>Server: seconds until the Tikbalang moves to another home block (counts down in every state).</summary>
+    public float HomeChangeTimer { get; set; } = -1f;
+
+    protected override void ServerTick(float deltaTime)
+    {
+        if (profile.homeChangeSeconds <= 0f)
+            return;
+        if (HomeChangeTimer < 0f)
+            HomeChangeTimer = profile.homeChangeSeconds;
+        HomeChangeTimer -= deltaTime;
+        if (HomeChangeTimer <= 0f)
+        {
+            HomeChangeTimer = profile.homeChangeSeconds;
+            TryChangeHomeBlock();
+        }
+    }
+
+    /// <summary>
+    /// Server: picks another block that could host it at spawn (not a spawn block or its neighbour, reachable from
+    /// spawn) and is openly reachable from its current block and makes it home. Idle/Searching/Returning head there
+    /// at once (Idle wanders into it); a Chase or Stun keeps going and Returning then walks to the new home.
+    /// </summary>
+    [Server]
+    public bool TryChangeHomeBlock()
+    {
+        MapManager map = MapManager.Active;
+        if (map == null || !map.IsBuilt || HomeBlockIndex < 0)
+            return false;
+        List<int> candidates = EnemySpawner.FindCandidateBlocks(map, out _);
+        bool[] open = map.FindOpenlyReachable(HomeBlockIndex);
+        candidates.RemoveAll(block => block == HomeBlockIndex || !open[block]);
+        if (candidates.Count == 0)
+            return false;
+        AssignHomeBlock(map, candidates[Random.Range(0, candidates.Count)]);
+        if (CurrentState != Chase && CurrentState != Stunned)
+            ChangeState(Idle);
+        return true;
+    }
+
     public void ApplyNormalVision()
     {
         Senses.EyeHeight = profile.eyeHeight;

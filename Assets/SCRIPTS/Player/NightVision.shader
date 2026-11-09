@@ -16,6 +16,10 @@ Shader "Hidden/Capstone/NightVision"
         float4 _Panic;
         float _FilmTime;
         float _FilmLineThickness;
+        float4 _PanicStatic;
+        float4 _Trance;
+        float4 _TranceTint;
+        float4 _TranceFade;
         float4 _EnemyDetail;
         float4 _EnemyMaskSize;
         TEXTURE2D(_EnemyMask);
@@ -190,6 +194,27 @@ Shader "Hidden/Capstone/NightVision"
                                 saturate(moonMask * 4.0));
                     }
                 }
+                if (_Trance.x > 0.0)
+                {
+                    // Trance blur: a two-ring disc average around the (pixelated) sample.
+                    float2 radius = float2(_Trance.x * _ScreenParams.y / max(_ScreenParams.x, 1.0), _Trance.x);
+                    half3 sum = scene.rgb;
+                    [unroll] for (int tap = 0; tap < 12; tap++)
+                    {
+                        float angle = tap * 0.5235988;
+                        float ring = (tap & 1) == 0 ? 1.0 : 0.5;
+                        sum += SAMPLE_TEXTURE2D_X(_BlitTexture, sampler_LinearClamp,
+                            uv + float2(cos(angle), sin(angle)) * radius * ring).rgb;
+                    }
+                    scene.rgb = sum / 13.0;
+                }
+                if (_TranceTint.a > 0.0)
+                {
+                    // Inferno grade: brightness re-mapped onto the tint colour with a faint ember lift.
+                    half luma = dot(scene.rgb, half3(0.299, 0.587, 0.114));
+                    half3 fire = _TranceTint.rgb * (0.06 + luma * 2.2) + half3(0.9, 0.85, 0.6) * luma * luma;
+                    scene.rgb = lerp(scene.rgb, fire, _TranceTint.a);
+                }
                 float2 centered = (input.texcoord - 0.5) * 2.0;
                 // Starts close to the centre so the darkening still reads on an already dark night image.
                 float vignette = smoothstep(0.1, 1.05, length(centered));
@@ -211,6 +236,17 @@ Shader "Hidden/Capstone/NightVision"
                 // Mostly pale scratches (dark ones disappear on a night image), with a few dark ones.
                 float tone = lerp(0.75, 0.05, step(0.85, lineSeed));
                 scene.rgb = lerp(scene.rgb, tone.xxx, amount);
+
+                // Panic static: per-frame noise on the world pixel grid, like a stronger film grain.
+                if (_PanicStatic.x > 0.0)
+                {
+                    float2 grid = _PixelGrid.z > 0.5 ? _PixelGrid.xy : _ScreenParams.xy;
+                    float2 cell = floor(input.texcoord * grid);
+                    float noise = FilmHash(cell + float2(_PanicStatic.y * 17.13, _PanicStatic.y * 41.71)) - 0.5;
+                    scene.rgb = max(scene.rgb + noise * _PanicStatic.x * (0.35 + scene.rgb), 0.0);
+                }
+                if (_TranceFade.a > 0.0)
+                    scene.rgb = lerp(scene.rgb, _TranceFade.rgb, saturate(_TranceFade.a));
                 return scene;
             }
             ENDHLSL

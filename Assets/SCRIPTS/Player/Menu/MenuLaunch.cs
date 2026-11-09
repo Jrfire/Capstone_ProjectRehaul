@@ -36,6 +36,7 @@ public static class MenuLaunch
     public const string HostDisconnectedNotice = "Host disconnected the server";
     public const string KickedNotice = "You have been kicked from the game.";
     public const string ConnectFailedNotice = "Could not connect to the host.";
+    public const string JoinLockedNotice = "That game has already left the base. The host must rehost before anyone can join.";
 
     /// <summary>Message the main menu shows on arrival (why the game ended); taken once.</summary>
     public static string PendingNotice { get; private set; }

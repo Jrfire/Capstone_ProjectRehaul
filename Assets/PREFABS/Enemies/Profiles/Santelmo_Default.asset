@@ -1,0 +1,25 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3c2e1bf46faf9f945ab8ce38db9a64d6, type: 3}
+  m_Name: Santelmo_Default
+  m_EditorClassIdentifier: Capstone.Enemies::SantelmoProfile
+  wanderSpeed: 2
+  wanderPauseSeconds: 3
+  fallbackHomeHalfSize: {x: 12, y: 12}
+  eyeHeight: 1.4
+  visionRange: 16
+  visionAngle: 70
+  gazeSeconds: 10
+  lostSightGraceSeconds: 0.75
+  escapeCooldownSeconds: 8
+  tranceCooldownSeconds: 90
+  defaultStunSeconds: 3
