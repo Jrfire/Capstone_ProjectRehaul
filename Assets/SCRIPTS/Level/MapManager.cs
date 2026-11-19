@@ -126,6 +126,7 @@ public sealed class MapManager : MonoBehaviour
     private readonly List<List<int>> neighbours = new List<List<int>>();
     private readonly List<MapJoint> joints = new List<MapJoint>();
     private readonly List<EntranceObstacle> jointBarricades = new List<EntranceObstacle>();
+    private readonly List<EntranceObstacle> keyGates = new List<EntranceObstacle>();
     private readonly List<Vector3[]> openSeams = new List<Vector3[]>();
     private List<Vector3>[] reachableFloor;
     private NavMeshDataInstance navMeshInstance;
@@ -245,6 +246,12 @@ public sealed class MapManager : MonoBehaviour
 
     /// <summary>Every pair of joined entrances, and whether a barricade stands in it.</summary>
     public IReadOnlyList<MapJoint> Joints => joints;
+
+    /// <summary>Key gates kept on joints, named G1, G2... in this order (see <see cref="EntranceObstacle.GateId"/>).</summary>
+    public IReadOnlyList<EntranceObstacle> KeyGates => keyGates;
+
+    /// <summary>Index of the joint barricaded by <paramref name="obstacle"/>, or -1.</summary>
+    public int JointOf(EntranceObstacle obstacle) => obstacle != null ? jointBarricades.IndexOf(obstacle) : -1;
 
     /// <summary>True unless joint <paramref name="joint"/> holds a barricade that has not been cleared yet.</summary>
     public bool IsJointOpen(int joint)
@@ -544,6 +551,23 @@ public sealed class MapManager : MonoBehaviour
                     RemoveObstacle(obstacles[k]);
             }
             joints[j] = new MapJoint(joints[j].BlockA, joints[j].EntranceA, joints[j].BlockB, joints[j].EntranceB, blocked[j]);
+        }
+        AssignGateIds();
+    }
+
+    /// <summary>
+    /// Names every kept key gate G1, G2... in joint order (identical on every peer, since the layout is seeded); each
+    /// opens only with the matching key (<see cref="EntranceObstacle.RequiredKeyId"/>).
+    /// </summary>
+    private void AssignGateIds()
+    {
+        keyGates.Clear();
+        foreach (EntranceObstacle obstacle in jointBarricades)
+        {
+            if (obstacle == null || obstacle.IsCleared || !obstacle.RequiresKey || keyGates.Contains(obstacle))
+                continue;
+            keyGates.Add(obstacle);
+            obstacle.SetGateIdentity($"G{keyGates.Count}");
         }
     }
 
@@ -1933,6 +1957,7 @@ public sealed class MapManager : MonoBehaviour
         placedFillers.Clear();
         pluggedCells.Clear();
         PluggedCellCount = 0;
+        keyGates.Clear();
         jointBarricades.Clear();
         openSeams.Clear();
         reachableFloor = null;

@@ -12,9 +12,9 @@ using UnityEngine.SceneManagement;
 public sealed class SteamSceneTests
 {
     [Test]
-    public void SampleSceneHasSteamTransportSixSpawnsAndAnInviteTerminal()
+    public void BaseHasSteamTransportSixSpawnsAndAnInviteTerminal()
     {
-        Scene scene = EditorSceneManager.OpenScene("Assets/Scenes/SampleScene.unity", OpenSceneMode.Additive);
+        Scene scene = EditorSceneManager.OpenScene("Assets/Scenes/Base.unity", OpenSceneMode.Additive);
         try
         {
             GameObject[] roots = scene.GetRootGameObjects();

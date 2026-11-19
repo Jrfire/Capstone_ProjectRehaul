@@ -106,7 +106,8 @@ public sealed class RoundClockHud : MonoBehaviour
         bool countdown = clock.Phase == RoundPhase.ReturnCountdown && !clock.InBase;
         countdownPanel.SetActive(countdown);
         if (countdown)
-            countdownLabel.text = CountdownText(clock.IsMidnight, clock.CountdownRemaining, RoundClock.LocalPlayerAboard);
+            countdownLabel.text = CountdownText(clock.IsMidnight, clock.CountdownRemaining, RoundClock.LocalPlayerAboard,
+                PlayerInteraction.LocalInteractKey);
         gameOverPanel.SetActive(clock.Phase == RoundPhase.GameOver);
     }
 
@@ -120,10 +121,10 @@ public sealed class RoundClockHud : MonoBehaviour
         return $"{(hour == 0 ? 12 : hour)}:{totalMinutes % 60:00}";
     }
 
-    public static string CountdownText(bool midnight, float seconds, bool aboard)
+    public static string CountdownText(bool midnight, float seconds, bool aboard, string interactKey = "E")
     {
         string header = midnight ? "Midnight! Get back to the jeepney" : "The jeepney is leaving for base";
-        string footer = aboard ? "Waiting for the others..." : "Press E on the back of the jeepney";
+        string footer = aboard ? "Waiting for the others..." : $"Press {interactKey} on the back of the jeepney";
         return $"{header}: {Mathf.CeilToInt(Mathf.Max(0f, seconds))}\n{footer}";
     }
 

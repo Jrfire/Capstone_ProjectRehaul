@@ -1,0 +1,50 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 20d50f26110b972429bbf8de05bd91e6, type: 3}
+  m_Name: Tiktik_Default
+  m_EditorClassIdentifier: Capstone.Enemies::TiktikProfile
+  firstPerchDelayMin: 5
+  firstPerchDelayMax: 15
+  attackAfterSeconds: 40
+  perchVisibleMin: 3
+  perchVisibleMax: 6
+  perchGapMin: 2
+  perchGapMax: 5
+  perchFadeSeconds: 0.6
+  revealDelay: 0.5
+  perchSearchRadius: 30
+  perchMinDistance: 8
+  perchMinHeight: 2.5
+  perchMinWidth: 1.5
+  perchEdgeInset: 0.6
+  cornerInset: 1.5
+  attackSpawnMinDistance: 6
+  attackSpawnMaxDistance: 12
+  attackFadeInSeconds: 2
+  rushSpeed: 7
+  repathInterval: 0.2
+  attackRange: 1.4
+  contactDamage: 2
+  attackIntervalSeconds: 3
+  attackDurationSeconds: 60
+  attackFadeOutSeconds: 1.5
+  litHalfAngle: 25
+  litRange: 25
+  flickerMinAlpha: 0.35
+  flickerSpeed: 2.5
+  flickerDropoutsPerSecond: 0.3
+  flickerDropoutSeconds: 0.08
+  bloodMoonCloneIntervalSeconds: {x: 6, y: 12}
+  cloneSpawnDistance: 14
+  cloneRushSpeed: 9
+  defaultStunSeconds: 3
+  fallbackHomeHalfSize: {x: 12, y: 12}

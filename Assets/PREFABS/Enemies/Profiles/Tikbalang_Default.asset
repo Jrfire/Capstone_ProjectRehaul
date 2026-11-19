@@ -38,3 +38,11 @@ MonoBehaviour:
   teleportMinPlayerDistance: 10
   teleportCooldownSeconds: 5
   defaultStunSeconds: 4
+  unvisitedRespawnSeconds: 30
+  bloodMoonHuntSpeed: 3.5
+  bloodMoonHuntWaitSeconds: 1.5
+  scareMinSeconds: 20
+  scareMaxSeconds: 60
+  scareFlashSeconds: 0.2
+  scrambleSeconds: 8
+  scrambledSpeedMultiplier: 0.5

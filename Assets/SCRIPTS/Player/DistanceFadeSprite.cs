@@ -49,6 +49,8 @@ public sealed class DistanceFadeSprite : MonoBehaviour
     public float DarkenStartDistance => darkenStartDistance;
     public float DarkestDistance => darkestDistance;
     public float MinimumBrightness => minimumBrightness;
+    /// <summary>The renderers this component fades (collected in Awake).</summary>
+    public IReadOnlyList<SpriteRenderer> Renderers => targets;
     /// <summary>The opacity applied on the last refresh (1 when no viewer exists).</summary>
     public float Opacity { get; private set; } = 1f;
     /// <summary>The colour multiplier applied on the last refresh (1 when no viewer exists).</summary>

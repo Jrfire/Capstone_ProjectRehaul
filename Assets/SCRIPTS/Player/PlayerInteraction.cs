@@ -11,6 +11,8 @@ public sealed class PlayerInteraction : NetworkBehaviour
     [SerializeField, Min(0.1f)] private float useDistance = 3.5f;
     [SerializeField, Min(0.1f), Tooltip("Maximum aim distance for nametags. Other players' names use all of it; objects are also limited by their Nametag's Max Distance.")]
     private float nametagDistance = 12f;
+    [SerializeField, Min(0.1f), Tooltip("Entrance obstacles (gates/barricades) show \"Locked. Requires Key G1\" or \"Blocked\" within this distance.")]
+    private float obstacleNametagDistance = 5f;
     [SerializeField] private LayerMask interactionLayers = Physics.DefaultRaycastLayers;
 
     private InputAction useAction;
@@ -19,6 +21,19 @@ public sealed class PlayerInteraction : NetworkBehaviour
     public string AimedName { get; private set; }
     /// <summary>The aimed other player, if any.</summary>
     public PlayerName AimedPlayer { get; private set; }
+
+    /// <summary>Display text of the local player's primary Interact binding (follows rebinds), e.g. "E".</summary>
+    public string InteractKey => GameSettings.PrimaryBindingDisplay(useAction);
+
+    /// <summary><see cref="InteractKey"/> of <c>NetworkClient.localPlayer</c>, else "E".</summary>
+    public static string LocalInteractKey
+    {
+        get
+        {
+            NetworkIdentity local = NetworkClient.active ? NetworkClient.localPlayer : null;
+            return local != null && local.TryGetComponent(out PlayerInteraction interaction) ? interaction.InteractKey : "E";
+        }
+    }
 
     public override void OnStartLocalPlayer()
     {
@@ -80,6 +95,13 @@ public sealed class PlayerInteraction : NetworkBehaviour
             if (nametag != null && nametag.isActiveAndEnabled && hit.distance <= Mathf.Min(nametag.MaxDistance, nametagDistance) &&
                 !string.IsNullOrWhiteSpace(nametag.DisplayName))
                 AimedName = nametag.DisplayName;
+            else if (nametag == null && hit.distance <= Mathf.Min(obstacleNametagDistance, nametagDistance))
+            {
+                // Entrance obstacles have no Nametag: "Blocked" barricades, "Locked. Requires Key G1" gates.
+                EntranceObstacle obstacle = hit.collider.GetComponentInParent<EntranceObstacle>();
+                if (obstacle != null && !string.IsNullOrEmpty(obstacle.Label))
+                    AimedName = obstacle.Label;
+            }
 
             Interactable target = hit.distance <= useDistance ? hit.collider.GetComponentInParent<Interactable>() : null;
             if (target != null && target.isActiveAndEnabled && target.CanInteract(this))

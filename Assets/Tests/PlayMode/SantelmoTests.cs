@@ -120,9 +120,53 @@ public sealed class SantelmoTests : InputTestFixture
     }
 
     [UnityTest]
-    public IEnumerator EscapingTheGazeEarlyLetsThePlayerGoAndItIgnoresThemForAWhile()
+    public IEnumerator MolotovFiresDrawItInAndTheirCoreEmpowersIt()
+    {
+        SpawnArena();
+        Place(localPlayer, new Vector3(40f, 0f, 40f));
+        Place(remotePlayer, new Vector3(-40f, 0f, -40f));
+        SantelmoBrain brain = CreateSantelmo(Vector3.zero);
+        yield return null;
+        float normalGaze = brain.GazeSeconds;
+        float normalSpeed = brain.WanderSpeed;
+
+        FireZone far = TestFires.Spawn(new Vector3(6f, 0f, 0f), created);
+        yield return WaitUntil(() => brain.AttractingFire == far, 1f, "A nearby fire attracts it.");
+        float start = Vector3.Distance(brain.transform.position, far.transform.position);
+        yield return WaitUntil(() => Vector3.Distance(brain.transform.position, far.transform.position) < start - 1f, 4f,
+            "It does not head for the fire.");
+
+        yield return WaitUntil(() => brain.IsEmpowered, 6f, "Reaching the fire's core never empowered it.");
+        Assert.That(brain.GazeSeconds, Is.Not.EqualTo(normalGaze), "The core changes its gaze time.");
+        Assert.That(brain.WanderSpeed, Is.GreaterThan(normalSpeed), "The core speeds it up.");
+    }
+
+    [UnityTest]
+    public IEnumerator GazeBlurClearsWhenItsSantelmoVanishesMidGaze()
+    {
+        SpawnArena();
+        ConfigureTrance(localPlayer, chaserSpeed: 0f);
+        Place(localPlayer, new Vector3(0f, 0f, 6f), 180f);
+        Place(remotePlayer, new Vector3(-40f, 0f, -40f));
+        SantelmoBrain brain = CreateSantelmo(Vector3.zero);
+        var trance = localPlayer.GetComponent<PlayerTrance>();
+        var effects = localPlayer.GetComponentInChildren<PlayerCameraEffects>(true);
+        yield return WaitUntil(() => trance.Gaze > 0.2f && effects.TranceBlur > 0f, 3f, "The gaze builds and blurs the view.");
+
+        // Travel destroys the scene's Santelmo without its gazing state exiting.
+        Object.DestroyImmediate(brain.gameObject);
+        yield return WaitUntil(() => trance.Gaze <= 0f, 2f, "An abandoned gaze clears itself.");
+        yield return WaitUntil(() => effects.TranceBlur <= 0f && effects.ScreenFade.a <= 0f, 2f, "... and so does the blur.");
+        Assert.That(trance.InTrance, Is.False);
+    }
+
+    [UnityTest]
+    public IEnumerator EscapingTheGazeSendsItToTheLastKnownSpotThenItIgnoresThemForAWhile()
     {
         profile.gazeSeconds = 5f;
+        profile.investigateSpeed = 8f;
+        profile.investigateLookSeconds = 0.4f;
+        profile.investigateTimeoutSeconds = 5f;
         SpawnArena();
         Place(localPlayer, new Vector3(0f, 0f, 6f), 180f);
         Place(remotePlayer, new Vector3(-40f, 0f, -40f));
@@ -132,9 +176,13 @@ public sealed class SantelmoTests : InputTestFixture
 
         yield return WaitUntil(() => brain.CurrentState == brain.Gazing && trance.Gaze > 0.05f, 3f, "The gaze starts.");
         Place(localPlayer, new Vector3(40f, 0f, 40f));
-        yield return WaitUntil(() => brain.CurrentState == brain.Wandering, 2f, "Leaving its sight breaks the gaze.");
+        yield return WaitUntil(() => brain.CurrentState == brain.Investigating, 2f, "Leaving its sight sends it to the last known spot.");
         Assert.That(trance.InTrance, Is.False);
         Assert.That(trance.Gaze, Is.EqualTo(0f), "The blur clears.");
+        Vector3 lastKnown = brain.Investigating.LastKnownPosition;
+        Assert.That(Vector3.Distance(new Vector3(lastKnown.x, 0f, lastKnown.z), new Vector3(0f, 0f, 6f)), Is.LessThan(2.5f), "It heads where the player was last seen.");
+        yield return WaitUntil(() => brain.Investigating.HasArrived, 3f, "It reaches the last known spot.");
+        yield return WaitUntil(() => brain.CurrentState == brain.Wandering, 3f, "Finding nobody, it wanders on.");
         Assert.That(brain.IsIgnoring(persistence), Is.True, "It looks for its next victim instead.");
 
         brain.enabled = false;
@@ -189,6 +237,10 @@ public sealed class SantelmoTests : InputTestFixture
 
         Assert.That(trance.ServerStartTrance(brain.netIdentity), Is.True);
         yield return WaitUntil(() => trance.PocketActive, 1f, "The owner enters the pocket.");
+        GameObject corpse = localPlayer.GetComponent<PlayerCorpse>().Corpse;
+        Assert.That(corpse, Is.Not.Null);
+        Assert.That(HorizontalDistance(corpse.transform.position, body), Is.LessThan(0.5f), "The body lies on the street, not in the pocket.");
+        Assert.That(corpse.GetComponentInChildren<BillboardSprite>(), Is.Not.Null, "The body is an upright billboard.");
         yield return WaitUntil(() => health.IsDead, 3f, "The pocket Santelmo catches and kills them.");
         Assert.That(health.KillerAssetId, Is.EqualTo(brain.netIdentity.assetId), "The death screen shows the Santelmo.");
         Assert.That(trance.InTrance, Is.False);
@@ -196,7 +248,40 @@ public sealed class SantelmoTests : InputTestFixture
         Assert.That(trance.PocketRoot == null, Is.True, "The pocket is torn down.");
         Assert.That(Vector3.Distance(localPlayer.transform.position, body), Is.LessThan(0.5f), "The body stays where it fell.");
         Assert.That(localPlayer.GetComponent<PlayerCorpse>().Corpse, Is.Not.Null, "The dead body remains.");
+        Assert.That(HorizontalDistance(localPlayer.GetComponent<PlayerCorpse>().Corpse.transform.position, body), Is.LessThan(0.5f));
     }
+
+    [UnityTest]
+    public IEnumerator ItsChaseThemePlaysInThePocketInsteadOfTheStreet()
+    {
+        SpawnArena();
+        ConfigureTrance(localPlayer, chaserSpeed: 0f);
+        Place(localPlayer, new Vector3(5f, 0f, 5f));
+        Place(remotePlayer, new Vector3(-40f, 0f, -40f));
+        SantelmoBrain brain = CreateSantelmo(new Vector3(30f, 0f, -30f), enableBrain: false);
+        AudioClip theme = AudioClip.Create("Santelmo Test Theme", 4410, 1, 44100, false);
+        try
+        {
+            var audio = new SerializedObject(brain.GetComponent<EnemyAudio>());
+            audio.FindProperty("chaseTheme").objectReferenceValue = theme;
+            audio.ApplyModifiedPropertiesWithoutUndo();
+            Assert.That(brain.PlaysChaseTheme, Is.False, "No street chase music for the gaze.");
+            Assert.That(brain.PlaysChaseSound, Is.False, "No street chase sound for the gaze either.");
+            var trance = localPlayer.GetComponent<PlayerTrance>();
+            Assert.That(trance.ServerStartTrance(brain.netIdentity), Is.True);
+            yield return WaitUntil(() => trance.PocketActive, 1f, "The owner enters the pocket.");
+            Assert.That(trance.TranceSource, Is.EqualTo(brain.netIdentity));
+            Assert.That(trance.PocketMusic, Is.EqualTo(theme), "The Santelmo's chase theme plays in the pocket.");
+            trance.ServerEndTrance(false);
+            yield return null;
+        }
+        finally
+        {
+            Object.DestroyImmediate(theme);
+        }
+    }
+
+    private static float HorizontalDistance(Vector3 a, Vector3 b) => Vector2.Distance(new Vector2(a.x, a.z), new Vector2(b.x, b.z));
 
     [UnityTest]
     public IEnumerator SurvivingThePocketReturnsThePlayerToTheirBodyThroughWhite()

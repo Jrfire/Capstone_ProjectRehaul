@@ -38,6 +38,10 @@ public sealed class GameSaveData
     public int turnedIn;
     public int money;
     public int roundReward;
+    /// <summary>Round the saved shop stock was rolled for (0 = no shop saved, e.g. older saves).</summary>
+    public int shopRound;
+    public List<string> shopItems = new List<string>();
+    public List<bool> shopSold = new List<bool>();
     public List<PlayerSaveData> players = new List<PlayerSaveData>();
     public List<FloorItemSaveData> baseItems = new List<FloorItemSaveData>();
 

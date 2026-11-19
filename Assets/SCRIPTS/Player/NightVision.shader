@@ -242,8 +242,15 @@ Shader "Hidden/Capstone/NightVision"
                 {
                     float2 grid = _PixelGrid.z > 0.5 ? _PixelGrid.xy : _ScreenParams.xy;
                     float2 cell = floor(input.texcoord * grid);
-                    float noise = FilmHash(cell + float2(_PanicStatic.y * 17.13, _PanicStatic.y * 41.71)) - 0.5;
-                    scene.rgb = max(scene.rgb + noise * _PanicStatic.x * (0.35 + scene.rgb), 0.0);
+                    float seed = _PanicStatic.y;
+                    float noise = FilmHash(cell + float2(seed * 17.13, seed * 41.71)) - 0.5;
+                    // Gathers toward the edges so the path ahead stays readable while fleeing.
+                    float edge = lerp(_PanicStatic.z, 1.0, smoothstep(0.25, 1.1, length(centered)));
+                    float strength = _PanicStatic.x * edge;
+                    // Brightness-relative flicker: dark areas stay dark instead of turning grey.
+                    scene.rgb *= 1.0 + noise * strength * 1.2;
+                    float speck = step(0.985, FilmHash(cell * 1.37 + float2(seed * 3.1, seed * 5.7)));
+                    scene.rgb += speck * strength * 0.15;
                 }
                 if (_TranceFade.a > 0.0)
                     scene.rgb = lerp(scene.rgb, _TranceFade.rgb, saturate(_TranceFade.a));

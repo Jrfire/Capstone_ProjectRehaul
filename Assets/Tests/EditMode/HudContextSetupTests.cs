@@ -31,13 +31,13 @@ public sealed class HudContextSetupTests
     }
 
     [Test]
-    public void PlayersHaveASyncedNameAndSampleSceneInteractablesHaveNametags()
+    public void PlayersHaveASyncedNameAndBaseInteractablesHaveNametags()
     {
         GameObject player = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/PREFABS/NetworkPlayer.prefab");
         Assert.That(player.GetComponent<PlayerName>(), Is.Not.Null);
         Assert.That(player.GetComponent<Mirror.NetworkIdentity>().assetId, Is.EqualTo(1952560444u));
 
-        Scene scene = EditorSceneManager.OpenScene("Assets/Scenes/SampleScene.unity", OpenSceneMode.Additive);
+        Scene scene = EditorSceneManager.OpenScene("Assets/Scenes/Base.unity", OpenSceneMode.Additive);
         try
         {
             Interactable[] interactables = scene.GetRootGameObjects()
@@ -98,8 +98,8 @@ public sealed class HudContextSetupTests
         Assert.That(prefab.GetComponentsInChildren<Text>(true).All(text => text.font == BloodCrow), Is.True);
     }
 
-    [TestCase("Assets/Scenes/SampleScene.unity")]
-    [TestCase("Assets/Scenes/StreetsTest.unity")]
+    [TestCase("Assets/Scenes/Base.unity")]
+    [TestCase("Assets/Scenes/Streets.unity")]
     public void TheMoonLightShinesFromTheSkyMoon(string path)
     {
         Material sky = AssetDatabase.LoadAssetAtPath<Material>("Assets/Settings/NightSky.mat");

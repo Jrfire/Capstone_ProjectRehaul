@@ -104,20 +104,24 @@ public sealed class EnemyAudio : MonoBehaviour
         chasingLocal = chasing;
         if (chasing)
         {
-            ChaseSoundsPlayed++;
-            if (loopChaseSound && chaseSound.HasClips)
+            if (brain == null || brain.PlaysChaseSound)
             {
-                if (chaseLoop == null)
-                    chaseLoop = gameObject.AddComponent<AudioSource>();
-                AudioManager.Configure(chaseLoop, AudioChannel.Sfx, 0f);
-                chaseLoop.clip = chaseSound.Pick();
-                chaseLoop.volume = chaseSound.volume;
-                chaseLoop.loop = true;
-                chaseLoop.Play();
+                ChaseSoundsPlayed++;
+                if (loopChaseSound && chaseSound.HasClips)
+                {
+                    if (chaseLoop == null)
+                        chaseLoop = gameObject.AddComponent<AudioSource>();
+                    AudioManager.Configure(chaseLoop, AudioChannel.Sfx, 0f);
+                    chaseLoop.clip = chaseSound.Pick();
+                    chaseLoop.volume = chaseSound.volume;
+                    chaseLoop.loop = true;
+                    chaseLoop.Play();
+                }
+                else
+                    AudioManager.Play2D(chaseSound, AudioChannel.Sfx);
             }
-            else
-                AudioManager.Play2D(chaseSound, AudioChannel.Sfx);
-            AudioManager.RequestMusic(this, chaseTheme, ChaseMusicPriority, chaseThemeVolume);
+            if (brain == null || brain.PlaysChaseTheme)
+                AudioManager.RequestMusic(this, chaseTheme, ChaseMusicPriority, chaseThemeVolume);
         }
         else
         {

@@ -21,62 +21,107 @@ MonoBehaviour:
     pixelsPerUnit: 100
     directional: 1
     frames:
-    - {fileID: 21300000, guid: cb79aee9c41442345a70570b6b187ee2, type: 3}
-    - {fileID: 21300000, guid: 14e1ed8c727f30241998129cc771ef2c, type: 3}
-    - {fileID: 21300000, guid: 43872cab75a23ac4ca0ca3cd281779f1, type: 3}
-    - {fileID: 21300000, guid: 5dfe515f05c881a40944581f4547285b, type: 3}
+    - {fileID: 21300000, guid: 4e3110867f2183c4fba8175b5798b7d9, type: 3}
+    - {fileID: 21300000, guid: c1b94dfc2ef90854eab56a831380781b, type: 3}
+    - {fileID: 21300000, guid: 2fa00ebe98b7e7841837bc3fc7a663d4, type: 3}
+    - {fileID: 21300000, guid: 803eb8c46e75da24ba77c9586050fc6c, type: 3}
     generatedSheet: {fileID: 0}
     generatedCellSize: {x: 0, y: 0}
     generatedPixelsPerUnit: 0
   walk:
     assignmentMode: 1
-    manualFramesPerDirection: 1
+    manualFramesPerDirection: 4
+    spriteSheet: {fileID: 0}
+    cellSize: {x: 64, y: 64}
+    framesPerSecond: 4
+    pixelsPerUnit: 100
+    directional: 1
+    frames:
+    - {fileID: 21300000, guid: 726b0179cd7a08f43835d9431d08fc85, type: 3}
+    - {fileID: 21300000, guid: cb6eecafc975b2741a66f25262cc9921, type: 3}
+    - {fileID: 21300000, guid: f4534d17461650a4199f515352936875, type: 3}
+    - {fileID: 21300000, guid: e8076b1f141eeb24db494e725a079a77, type: 3}
+    - {fileID: 21300000, guid: 52851ce7ba646824e9feb12d42422b84, type: 3}
+    - {fileID: 21300000, guid: 21a9ea917dac9d3478754aed949cc06e, type: 3}
+    - {fileID: 21300000, guid: b4a0eeed9bfa1d14a80cdab81e5efffe, type: 3}
+    - {fileID: 21300000, guid: f241b57a7f8599343b17fd89dbabb417, type: 3}
+    - {fileID: 21300000, guid: 350a61631a3cf534288a82f61192c06c, type: 3}
+    - {fileID: 21300000, guid: 81c897093750b5a4ea13d93391871fe4, type: 3}
+    - {fileID: 21300000, guid: 7d6522253800a89478ca65ddfbe399b6, type: 3}
+    - {fileID: 21300000, guid: 645784c5a958d134f93976356c70e2d4, type: 3}
+    - {fileID: 21300000, guid: 8ae98a3bce203bf4ebd83a5fb9a54715, type: 3}
+    - {fileID: 21300000, guid: 73389883cf0a695488bc0abde19010ba, type: 3}
+    - {fileID: 21300000, guid: 0151ac16ce28dd0428cdaeb98b4eb61e, type: 3}
+    - {fileID: 21300000, guid: 7a5fbcb12da13ca4b89b00e5f147694a, type: 3}
+    generatedSheet: {fileID: 0}
+    generatedCellSize: {x: 0, y: 0}
+    generatedPixelsPerUnit: 0
+  run:
+    assignmentMode: 1
+    manualFramesPerDirection: 4
+    spriteSheet: {fileID: 0}
+    cellSize: {x: 64, y: 64}
+    framesPerSecond: 2
+    pixelsPerUnit: 100
+    directional: 1
+    frames:
+    - {fileID: 21300000, guid: 2f88b16528f90c0409c05cefd28671de, type: 3}
+    - {fileID: 21300000, guid: eb386e513cc1ad246b47a0997387a74d, type: 3}
+    - {fileID: 21300000, guid: fb0cc93dc37c4b0468c94792e636d0db, type: 3}
+    - {fileID: 21300000, guid: 35fdbadda5f99f943a85b8278fb4d314, type: 3}
+    - {fileID: 21300000, guid: eefd3a15413777c418b3fe3986dd4d06, type: 3}
+    - {fileID: 21300000, guid: 657d023b68116e843b5685c28659238d, type: 3}
+    - {fileID: 21300000, guid: ce71b80376e448d4292a4050ea812d6a, type: 3}
+    - {fileID: 21300000, guid: 0d50e313392b52d40b3e1bc842724d7f, type: 3}
+    - {fileID: 21300000, guid: 956e3f012991e6a46a63bc9ca6e62608, type: 3}
+    - {fileID: 21300000, guid: f3ba0f440ada38d459334d8a5a6b4f15, type: 3}
+    - {fileID: 21300000, guid: e62efd605701762459683caabc0abc4d, type: 3}
+    - {fileID: 21300000, guid: 350717858e0f32a4f98f88e6069776e6, type: 3}
+    - {fileID: 21300000, guid: 8d446263d40defa43bc9c1023eaf7ce2, type: 3}
+    - {fileID: 21300000, guid: 2f0878cfd8cd33b4abe4119c65efc6d8, type: 3}
+    - {fileID: 21300000, guid: 65faa92fe6ea9954fb60f6f52f47d636, type: 3}
+    - {fileID: 21300000, guid: 72cf080df5ad89a48a72ab29d046de76, type: 3}
+    generatedSheet: {fileID: 0}
+    generatedCellSize: {x: 0, y: 0}
+    generatedPixelsPerUnit: 0
+  attack:
+    assignmentMode: 1
+    manualFramesPerDirection: 4
     spriteSheet: {fileID: 0}
     cellSize: {x: 64, y: 64}
     framesPerSecond: 8
     pixelsPerUnit: 100
     directional: 1
     frames:
-    - {fileID: 21300000, guid: cb79aee9c41442345a70570b6b187ee2, type: 3}
-    - {fileID: 21300000, guid: 14e1ed8c727f30241998129cc771ef2c, type: 3}
-    - {fileID: 21300000, guid: 43872cab75a23ac4ca0ca3cd281779f1, type: 3}
-    - {fileID: 21300000, guid: 5dfe515f05c881a40944581f4547285b, type: 3}
-    generatedSheet: {fileID: 0}
-    generatedCellSize: {x: 0, y: 0}
-    generatedPixelsPerUnit: 0
-  run:
-    assignmentMode: 0
-    manualFramesPerDirection: 1
-    spriteSheet: {fileID: 0}
-    cellSize: {x: 64, y: 64}
-    framesPerSecond: 8
-    pixelsPerUnit: 100
-    directional: 1
-    frames: []
-    generatedSheet: {fileID: 0}
-    generatedCellSize: {x: 0, y: 0}
-    generatedPixelsPerUnit: 0
-  attack:
-    assignmentMode: 0
-    manualFramesPerDirection: 1
-    spriteSheet: {fileID: 0}
-    cellSize: {x: 64, y: 64}
-    framesPerSecond: 8
-    pixelsPerUnit: 100
-    directional: 1
-    frames: []
+    - {fileID: 21300000, guid: c5bbed30c1b922e40bc0d7861889f6f1, type: 3}
+    - {fileID: 21300000, guid: 4fd50a1917cecb34aacb0fa811230dfc, type: 3}
+    - {fileID: 21300000, guid: 7a43edc39d4c4254fbb4140e18d954c0, type: 3}
+    - {fileID: 21300000, guid: 70aa6419e7475454b9393542b450ff89, type: 3}
+    - {fileID: 21300000, guid: 93f87c5cdae34ce418181bccc1ceab6d, type: 3}
+    - {fileID: 21300000, guid: 1233abd3a2dadf24ebcdfce7780706d0, type: 3}
+    - {fileID: 21300000, guid: 461def6f2ddd6694c8b71bec3038f70e, type: 3}
+    - {fileID: 21300000, guid: a113cd84077314e4c92da64094a9b7de, type: 3}
+    - {fileID: 21300000, guid: a39f5ac10cf42c54da1eecbb92bd6925, type: 3}
+    - {fileID: 21300000, guid: febcbcbc6c6abbe41b922e2483ea1319, type: 3}
+    - {fileID: 21300000, guid: 7c0d864f1f0dac64993da5c285475e6e, type: 3}
+    - {fileID: 21300000, guid: 91ad10a751f74ac46a71d50579414ce2, type: 3}
+    - {fileID: 21300000, guid: 6ef75aab6877edf4699adb54fd59e794, type: 3}
+    - {fileID: 21300000, guid: a1cce2ada2bdf7a4c93213effdea1f99, type: 3}
+    - {fileID: 21300000, guid: f8025c66054996a4e9d4e82705a7dd0a, type: 3}
+    - {fileID: 21300000, guid: 54acc1f61f623054481fa5d0caef70e7, type: 3}
     generatedSheet: {fileID: 0}
     generatedCellSize: {x: 0, y: 0}
     generatedPixelsPerUnit: 0
   dead:
-    assignmentMode: 0
+    assignmentMode: 1
     manualFramesPerDirection: 1
     spriteSheet: {fileID: 0}
     cellSize: {x: 64, y: 64}
     framesPerSecond: 8
     pixelsPerUnit: 100
     directional: 0
-    frames: []
+    frames:
+    - {fileID: 21300000, guid: a31e6a49aee4dd9429e17d7045c55de0, type: 3}
     generatedSheet: {fileID: 0}
     generatedCellSize: {x: 0, y: 0}
     generatedPixelsPerUnit: 0

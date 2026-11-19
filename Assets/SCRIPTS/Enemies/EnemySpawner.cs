@@ -24,19 +24,17 @@ public sealed class EnemySpawner : MonoBehaviour
     private MapManager map;
     [SerializeField, Tooltip("Fallback enemies, used when this scene was not reached through a travel roll (e.g. opened directly in the Editor).")]
     private List<EnemySpawnEntry> enemies = new List<EnemySpawnEntry>();
-    [SerializeField, Min(0), Tooltip("Base number of each rolled enemy type (before the per-quota extras below).")]
-    private int rolledEnemyCount = 1;
+    [SerializeField, Min(0), Tooltip("Number of each rolled enemy type, regardless of the map's size.")]
+    private int rolledEnemyCount = 2;
     [Header("More enemies per quota")]
-    [SerializeField, Min(1), Tooltip("Quotas met per extra possible enemy of each rolled type (2 = +1 every 2 quotas).")]
+    [SerializeField, Min(1), Tooltip("Quotas completed per step of extra enemies (2 = every 2 quotas).")]
     private int quotasPerExtraEnemy = 2;
-    [SerializeField, Min(1), Tooltip("Most enemies of one rolled type.")]
-    private int maxEnemiesPerType = 4;
-    [SerializeField, Range(0f, 1f), Tooltip("Chance of each possible extra enemy on a small map (Small Map Blocks or fewer).")]
-    private float smallMapExtraChance = 0.3f;
-    [SerializeField, Range(0f, 1f), Tooltip("Chance of each possible extra enemy on a large map (Large Map Blocks or more).")]
-    private float largeMapExtraChance = 0.8f;
-    [SerializeField, Min(1)] private int smallMapBlocks = 5;
-    [SerializeField, Min(1)] private int largeMapBlocks = 15;
+    [SerializeField, Min(0), Tooltip("Extra enemies added per step, each given to a random rolled type (same or different).")]
+    private int extraEnemiesPerStep = 2;
+    [SerializeField, Min(0), Tooltip("Optional safety limit on enemies of one rolled type. 0 = no limit (extras keep growing every step).")]
+    private int maxEnemiesPerType;
+    [SerializeField, Min(0), Tooltip("Most rolled enemies on a map in total. 0 = no limit.")]
+    private int maxTotalEnemies = 14;
     [SerializeField, Min(0), Tooltip("Frames to wait after the map is built so NavMesh carving is applied.")]
     private int settleFrames = 3;
 
@@ -51,47 +49,64 @@ public sealed class EnemySpawner : MonoBehaviour
 
     private static int CurrentRound => RoundClock.Instance != null && RoundClock.Instance.enabled ? RoundClock.Instance.Round : 1;
 
-    /// <summary>Most enemies of one rolled type in <paramref name="round"/>: base, +1 every Quotas Per Extra Enemy quotas met, capped.</summary>
-    public int MaxCountForRound(int round) =>
-        Mathf.Clamp(rolledEnemyCount + Mathf.Max(0, round - 1) / Mathf.Max(1, quotasPerExtraEnemy), Mathf.Min(rolledEnemyCount, maxEnemiesPerType), maxEnemiesPerType);
-
-    /// <summary>Chance of each possible extra enemy; grows from the small-map to the large-map chance with the block count.</summary>
-    public float ExtraChanceForBlocks(int blockCount) =>
-        Mathf.Lerp(smallMapExtraChance, largeMapExtraChance, Mathf.InverseLerp(smallMapBlocks, largeMapBlocks, blockCount));
+    /// <summary>Extra enemies in <paramref name="round"/>: Extra Enemies Per Step for every Quotas Per Extra Enemy quotas completed.</summary>
+    public int ExtrasForRound(int round) => extraEnemiesPerStep * (Mathf.Max(0, round - 1) / Mathf.Max(1, quotasPerExtraEnemy));
 
     /// <summary>
-    /// Rolls how many of one rolled type spawn: the base count, plus each possible extra (up to
-    /// <see cref="MaxCountForRound"/>) with <see cref="ExtraChanceForBlocks"/>.
+    /// How many of each rolled type spawn: Rolled Enemy Count each, then <see cref="ExtrasForRound"/> extras handed to
+    /// random types. Max Enemies Per Type / Max Total Enemies only apply when set above 0 (default: no limit).
     /// </summary>
-    public int RollCount(int round, int blockCount, Func<float> random01 = null)
+    public int[] DistributeCounts(int typeCount, int round, Func<float> random01 = null)
     {
+        var counts = new int[Mathf.Max(0, typeCount)];
+        if (counts.Length == 0)
+            return counts;
         Func<float> random = random01 ?? (() => UnityEngine.Random.value);
-        int max = MaxCountForRound(round);
-        int count = Mathf.Min(rolledEnemyCount, max);
-        float chance = ExtraChanceForBlocks(blockCount);
-        for (int extra = count; extra < max; extra++)
+        int perType = maxEnemiesPerType > 0 ? maxEnemiesPerType : int.MaxValue;
+        int maxTotal = maxTotalEnemies > 0 ? maxTotalEnemies : int.MaxValue;
+        int total = 0;
+        for (int i = 0; i < counts.Length && total < maxTotal; i++)
         {
-            if (random() < chance)
-                count++;
+            counts[i] = Mathf.Min(rolledEnemyCount, perType, maxTotal - total);
+            total += counts[i];
         }
-        return count;
+        int extras = ExtrasForRound(round);
+        var open = new List<int>();
+        for (int extra = 0; extra < extras && total < maxTotal; extra++)
+        {
+            open.Clear();
+            for (int i = 0; i < counts.Length; i++)
+            {
+                if (counts[i] < perType)
+                    open.Add(i);
+            }
+            if (open.Count == 0)
+                break;
+            int pick = open[Mathf.Clamp((int)(random() * open.Count), 0, open.Count - 1)];
+            counts[pick]++;
+            total++;
+        }
+        return counts;
     }
 
-    /// <summary>The rolled enemy types from the trip into this scene (Rolled Enemy Count of each), otherwise the fallback list.</summary>
+    /// <summary>The rolled enemy types from the trip into this scene (see <see cref="DistributeCounts"/>), otherwise the fallback list.</summary>
     public List<EnemySpawnEntry> ResolveEntries()
     {
         TravelDirector travel = TravelDirector.Instance;
         if (travel == null || !travel.HasArrivalRoll)
             return enemies;
-        var rolled = new List<EnemySpawnEntry>();
-        int blockCount = map != null ? map.BlockCount : 0;
+        var valid = new List<EnemyDefinition>();
         foreach (EnemyDefinition enemy in travel.ArrivalEnemies)
         {
             if (enemy != null && enemy.prefab != null)
-                rolled.Add(new EnemySpawnEntry { prefab = enemy.prefab, count = RollCount(CurrentRound, blockCount) });
+                valid.Add(enemy);
             else if (enemy != null)
                 Debug.LogError($"Enemy definition '{enemy.name}' has no prefab.", enemy);
         }
+        int[] counts = DistributeCounts(valid.Count, CurrentRound);
+        var rolled = new List<EnemySpawnEntry>();
+        for (int i = 0; i < valid.Count; i++)
+            rolled.Add(new EnemySpawnEntry { prefab = valid[i].prefab, count = counts[i] });
         return rolled;
     }
 

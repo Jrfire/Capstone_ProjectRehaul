@@ -25,6 +25,8 @@ public sealed class PlayerFearEffects : MonoBehaviour
     public float staticStrength = 0.35f;
     [Min(1f), Tooltip("How many times per second the static pattern changes.")]
     public float staticFramesPerSecond = 24f;
+    [Range(0f, 1f), Tooltip("Static strength at the screen centre relative to the edges (0 = clear centre, 1 = even).")]
+    public float staticCenterAmount = 0.2f;
     [Range(0f, 5f), Tooltip("Maximum FOV oscillation in degrees. Set to zero to disable camera shudder.")]
     public float fovShudder = 1.25f;
     [Min(0f)] public float shudderFrequency = 9f;

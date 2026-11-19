@@ -15,7 +15,7 @@ public sealed class TravelDestination
 {
     [Tooltip("Scene name; it must be in the Build Profile's scene list.")]
     public string sceneName;
-    [Tooltip("Enemy types this destination can roll. One is rolled per trip (more different types from round 3 on); an empty pool rolls no enemies.")]
+    [Tooltip("Enemy types this destination can roll. One is rolled per trip in round 1; from round 2 on (after the first quota) more different types; an empty pool rolls no enemies.")]
     public List<EnemyRollEntry> enemyPool = new List<EnemyRollEntry>();
 
     public string Name => sceneName != null ? sceneName.Trim() : string.Empty;
@@ -49,9 +49,9 @@ public sealed class TravelDestination
     /// <summary>
     /// Rolls up to <paramref name="maxTypes"/> different enemy types: the first is always rolled (when the pool has
     /// valid entries); each further slot is added with <paramref name="extraChance"/>, stopping at the first failed
-    /// chance. Types are weighted and never repeated.
+    /// chance. The first <paramref name="guaranteedTypes"/> slots skip the chance. Types are weighted and never repeated.
     /// </summary>
-    public List<EnemyDefinition> RollMany(int maxTypes, float extraChance, Func<float> random01 = null)
+    public List<EnemyDefinition> RollMany(int maxTypes, float extraChance, Func<float> random01 = null, int guaranteedTypes = 1)
     {
         var result = new List<EnemyDefinition>();
         if (maxTypes <= 0)
@@ -66,7 +66,7 @@ public sealed class TravelDestination
 
         while (remaining.Count > 0 && result.Count < maxTypes)
         {
-            if (result.Count > 0 && random() >= extraChance)
+            if (result.Count >= Mathf.Max(1, guaranteedTypes) && random() >= extraChance)
                 break;
             float total = 0f;
             foreach (EnemyRollEntry entry in remaining)
@@ -89,8 +89,11 @@ public sealed class TravelDestination
     }
 
     /// <summary>
-    /// Most different enemy types a destination may roll in a round: 1, then one more every third round (round 3 = up
-    /// to 2, round 6 = up to 3, round 9 onwards = up to 4).
+    /// Most different enemy types a destination may roll in a round: 1 in round 1, then 2 after the first quota, one
+    /// more every 2 quotas after that (round 4 = 3, round 6 onwards = 4).
     /// </summary>
-    public static int MaxEnemyTypesForRound(int round) => Mathf.Clamp(1 + Mathf.Max(0, round) / 3, 1, 4);
+    public static int MaxEnemyTypesForRound(int round) => round <= 1 ? 1 : Mathf.Clamp(2 + (round - 2) / 2, 2, 4);
+
+    /// <summary>Different types always rolled in a round (when the pool has them): 1 in round 1, 2 once a quota is completed.</summary>
+    public static int GuaranteedEnemyTypesForRound(int round) => round <= 1 ? 1 : 2;
 }

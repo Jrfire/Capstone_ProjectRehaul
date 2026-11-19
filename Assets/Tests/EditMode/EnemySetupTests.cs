@@ -126,8 +126,8 @@ public sealed class EnemySetupTests
     public void TikbalangIsRegisteredAndSpawnedInTheStreetScene()
     {
         GameObject prefab = AssetDatabase.LoadAssetAtPath<GameObject>(TikbalangPath);
-        Scene sample = EditorSceneManager.OpenScene("Assets/Scenes/SampleScene.unity", OpenSceneMode.Additive);
-        Scene streets = EditorSceneManager.OpenScene("Assets/Scenes/StreetsTest.unity", OpenSceneMode.Additive);
+        Scene sample = EditorSceneManager.OpenScene("Assets/Scenes/Base.unity", OpenSceneMode.Additive);
+        Scene streets = EditorSceneManager.OpenScene("Assets/Scenes/Streets.unity", OpenSceneMode.Additive);
         try
         {
             NetworkManager manager = sample.GetRootGameObjects()
@@ -237,7 +237,7 @@ public sealed class EnemySetupTests
         Assert.That(definition.DisplayName, Is.EqualTo("Manananggal"));
         Assert.That(definition.prefab.gameObject, Is.EqualTo(prefab));
 
-        Scene sample = EditorSceneManager.OpenScene("Assets/Scenes/SampleScene.unity", OpenSceneMode.Additive);
+        Scene sample = EditorSceneManager.OpenScene("Assets/Scenes/Base.unity", OpenSceneMode.Additive);
         try
         {
             NetworkManager manager = sample.GetRootGameObjects()
@@ -266,7 +266,8 @@ public sealed class EnemySetupTests
         var brain = prefab.GetComponent<SantelmoBrain>();
         Assert.That(brain, Is.Not.Null);
         Assert.That(brain.Profile, Is.EqualTo(AssetDatabase.LoadAssetAtPath<SantelmoProfile>("Assets/PREFABS/Enemies/Profiles/Santelmo_Default.asset")));
-        Assert.That(brain.Profile.gazeSeconds, Is.EqualTo(10f));
+        Assert.That(brain.Profile.gazeSeconds, Is.EqualTo(7f));
+        Assert.That(brain.Profile.bloodMoonGazeSeconds, Is.LessThan(brain.Profile.gazeSeconds), "Blood moon stares are shorter.");
 
         var presentation = prefab.GetComponent<EnemyPresentation>();
         EnemySpriteDefinition sprites = AssetDatabase.LoadAssetAtPath<EnemySpriteDefinition>("Assets/SPRITES/Enemies/Santelmo_Sprites.asset");
@@ -291,7 +292,7 @@ public sealed class EnemySetupTests
         Assert.That(trance.SurviveSeconds, Is.EqualTo(60f));
         Assert.That(new SerializedObject(trance).FindProperty("pocketChaserPrefab").objectReferenceValue, Is.Not.Null);
 
-        Scene sample = EditorSceneManager.OpenScene("Assets/Scenes/SampleScene.unity", OpenSceneMode.Additive);
+        Scene sample = EditorSceneManager.OpenScene("Assets/Scenes/Base.unity", OpenSceneMode.Additive);
         try
         {
             NetworkManager manager = sample.GetRootGameObjects()
@@ -303,4 +304,76 @@ public sealed class EnemySetupTests
             EditorSceneManager.CloseScene(sample, true);
         }
     }
-}
+
+    [Test]
+    public void TiktikIsARegisteredNavMeshStalkerWithIdleAndWalkFrames()
+    {
+        GameObject prefab = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/PREFABS/Enemies/Tiktik.prefab");
+        Assert.That(prefab, Is.Not.Null);
+        Assert.That(prefab.GetComponent<NetworkIdentity>().assetId, Is.Not.EqualTo(0u));
+        Assert.That(prefab.GetComponent<NavMeshAgent>(), Is.Not.Null);
+        Assert.That(prefab.GetComponent<EnemyMotor>(), Is.Not.Null);
+        Assert.That(prefab.GetComponent<TikbalangBrain>(), Is.Null);
+        var brain = prefab.GetComponent<TiktikBrain>();
+        Assert.That(brain, Is.Not.Null);
+        Assert.That(brain.Profile, Is.EqualTo(AssetDatabase.LoadAssetAtPath<TiktikProfile>("Assets/PREFABS/Enemies/Profiles/Tiktik_Default.asset")));
+        Assert.That(brain.Profile.attackAfterSeconds, Is.EqualTo(40f));
+        Assert.That(brain.Profile.contactDamage, Is.EqualTo(2), "One heart per attack.");
+        Assert.That(brain.Profile.attackIntervalSeconds, Is.EqualTo(3f));
+        Assert.That(brain.Profile.attackDurationSeconds, Is.EqualTo(60f));
+        Assert.That(prefab.GetComponent<DistanceFadeSprite>(), Is.Not.Null);
+        Assert.That(prefab.GetComponent<EnemyAudio>(), Is.Not.Null);
+        Assert.That(prefab.GetComponent<EnemyJumpscare>().FrontView, Is.Not.Null);
+        Assert.That(prefab.GetComponent<EnemyLoadingMiniature>().IsReady, Is.True);
+        SpriteRenderer worldSprites = prefab.GetComponent<EnemyPresentation>().WorldSprites;
+        Assert.That(worldSprites.GetComponent<ReducedPixelation>(), Is.Not.Null);
+
+        var definition = AssetDatabase.LoadAssetAtPath<EnemyDefinition>("Assets/PREFABS/Enemies/Definitions/Tiktik.asset");
+        Assert.That(definition.DisplayName, Is.EqualTo("Tiktik"));
+        Assert.That(definition.prefab.gameObject, Is.EqualTo(prefab));
+        Assert.That(AssetDatabase.LoadAssetAtPath<GameObject>("Assets/PREFABS/Enemies/SantelmoPocketChaser.prefab")
+            .GetComponent<Capstone.Audio.FireSound>(), Is.Not.Null, "The pocket Santelmo crackles like the real one.");
+
+        Scene sample = EditorSceneManager.OpenScene("Assets/Scenes/Base.unity", OpenSceneMode.Additive);
+        try
+        {
+            NetworkManager manager = sample.GetRootGameObjects()
+                .SelectMany(root => root.GetComponentsInChildren<NetworkManager>(true)).Single();
+            Assert.That(manager.spawnPrefabs, Does.Contain(prefab));
+        }
+        finally
+        {
+            EditorSceneManager.CloseScene(sample, true);
+        }
+    }
+
+    [Test]
+    public void BloodMoonAgimatsAreAbundantGoldOrSilverOnly()
+    {
+        var host = new GameObject("Agimat Roll Test");
+        try
+        {
+            AgimatSpawner spawner = host.AddComponent<AgimatSpawner>();
+            Assert.That(spawner.CountFor(4, false), Is.EqualTo(4));
+            Assert.That(spawner.CountFor(4, true), Is.GreaterThan(4), "Blood moons scatter more agimats.");
+            for (float r = 0f; r < 1f; r += 0.05f)
+                Assert.That(spawner.RollType(true, r), Is.Not.EqualTo(AgimatType.Bronze), "Blood moon agimats are gold or silver.");
+            Assert.That(spawner.RollType(false, 0.99f), Is.EqualTo(AgimatType.Bronze), "Normal nights still roll bronze.");
+        }
+        finally
+        {
+            Object.DestroyImmediate(host);
+        }
+    }
+
+    [Test]
+    public void ControlInversionLastsForItsDurationAndClears()
+    {
+        ControlInversion.Clear();
+        Assert.That(ControlInversion.Active, Is.False);
+        ControlInversion.Begin(5f);
+        Assert.That(ControlInversion.Active, Is.True);
+        Assert.That(ControlInversion.RemainingSeconds, Is.EqualTo(5f).Within(0.1f));
+        ControlInversion.Clear();
+        Assert.That(ControlInversion.Active, Is.False);
+    }}

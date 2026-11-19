@@ -817,7 +817,7 @@ public sealed class MapTravelTests
                 EntranceObstacle gate = manager.GetBlock(gated.BlockA).Entrances[gated.EntranceA].Obstacle ??
                                         manager.GetBlock(gated.BlockB).Entrances[gated.EntranceB].Obstacle;
                 if (gate.RequiresKey)
-                    gate.TryUseKey();
+                    gate.TryUseKey(gate.RequiredKeyId);
                 if (gate.RequiresDestruction)
                     gate.TryDestroy();
                 Assert.That(gate.IsCleared, Is.True);
@@ -1172,7 +1172,7 @@ public sealed class MapTravelTests
         var second = ScriptableObject.CreateInstance<EnemyDefinition>();
         try
         {
-            var destination = new TravelDestination { sceneName = "StreetsTest" };
+            var destination = new TravelDestination { sceneName = "Streets" };
             Assert.That(destination.Roll(() => 0.5f), Is.Null);
             destination.enemyPool.Add(new EnemyRollEntry { enemy = first, weight = 1f });
             destination.enemyPool.Add(new EnemyRollEntry { enemy = second, weight = 3f });
@@ -1195,13 +1195,15 @@ public sealed class MapTravelTests
     public void LaterRoundsMayRollSeveralDistinctEnemyTypes()
     {
         Assert.That(Enumerable.Range(1, 12).Select(TravelDestination.MaxEnemyTypesForRound),
-            Is.EqualTo(new[] { 1, 1, 2, 2, 2, 3, 3, 3, 4, 4, 4, 4 }), "Round 3 = up to 2, round 6 = up to 3, round 9+ = up to 4.");
+            Is.EqualTo(new[] { 1, 2, 2, 3, 3, 4, 4, 4, 4, 4, 4, 4 }), "Round 1 = one type; after the first quota 2, growing every 2 quotas up to 4.");
+        Assert.That(TravelDestination.GuaranteedEnemyTypesForRound(1), Is.EqualTo(1));
+        Assert.That(TravelDestination.GuaranteedEnemyTypesForRound(2), Is.EqualTo(2), "Different types after the first quota.");
         var first = ScriptableObject.CreateInstance<EnemyDefinition>();
         var second = ScriptableObject.CreateInstance<EnemyDefinition>();
         var third = ScriptableObject.CreateInstance<EnemyDefinition>();
         try
         {
-            var destination = new TravelDestination { sceneName = "StreetsTest" };
+            var destination = new TravelDestination { sceneName = "Streets" };
             Assert.That(destination.RollMany(4, 1f, () => 0f), Is.Empty);
             destination.enemyPool.Add(new EnemyRollEntry { enemy = first, weight = 1f });
             destination.enemyPool.Add(new EnemyRollEntry { enemy = second, weight = 1f });
@@ -1211,6 +1213,7 @@ public sealed class MapTravelTests
             Assert.That(destination.RollMany(4, 1f, () => 0f), Is.EqualTo(new[] { first, second, third }), "Types are never repeated.");
             Assert.That(destination.RollMany(2, 1f, () => 0f), Has.Count.EqualTo(2), "Capped at the round's maximum.");
             Assert.That(destination.RollMany(4, 0.5f, () => 0.9f), Has.Count.EqualTo(1), "A failed chance stops further types.");
+            Assert.That(destination.RollMany(4, 0f, () => 0.9f, 2), Has.Count.EqualTo(2), "Guaranteed types ignore the extra chance.");
         }
         finally
         {
@@ -1259,10 +1262,10 @@ public sealed class MapTravelTests
     public void ScenesAreWiredForTravel()
     {
         string[] buildScenes = EditorBuildSettings.scenes.Where(s => s.enabled).Select(s => s.path).ToArray();
-        Assert.That(buildScenes, Does.Contain("Assets/Scenes/SampleScene.unity"));
-        Assert.That(buildScenes, Does.Contain("Assets/Scenes/StreetsTest.unity"));
+        Assert.That(buildScenes, Does.Contain("Assets/Scenes/Base.unity"));
+        Assert.That(buildScenes, Does.Contain("Assets/Scenes/Streets.unity"));
 
-        Scene hub = EditorSceneManager.OpenScene("Assets/Scenes/SampleScene.unity", OpenSceneMode.Additive);
+        Scene hub = EditorSceneManager.OpenScene("Assets/Scenes/Base.unity", OpenSceneMode.Additive);
         try
         {
             NetworkManager manager = InScene<NetworkManager>(hub).Single();
@@ -1270,10 +1273,10 @@ public sealed class MapTravelTests
             Assert.That(director, Is.Not.Null);
             Assert.That(new SerializedObject(director).FindProperty("loadingScreenPrefab").objectReferenceValue, Is.Not.Null);
             MapTerminal terminal = InScene<MapTerminal>(hub).Single();
-            Assert.That(terminal.Lists("StreetsTest"), Is.True);
-            TravelDestination streetsEntry = terminal.Find("StreetsTest");
+            Assert.That(terminal.Lists("Streets"), Is.True);
+            TravelDestination streetsEntry = terminal.Find("Streets");
             Assert.That(streetsEntry.enemyPool.Select(entry => entry.enemy != null ? entry.enemy.DisplayName : null), Does.Contain("Tikbalang"),
-                "The StreetsTest destination rolls from an enemy pool.");
+                "The Streets destination rolls from an enemy pool.");
             Assert.That(terminal.MapScreenPrefab, Is.Not.Null);
             TravelInteractable travel = InScene<TravelInteractable>(hub).Single();
             Assert.That(travel.GetComponent<Collider>(), Is.Not.Null);
@@ -1283,7 +1286,7 @@ public sealed class MapTravelTests
             EditorSceneManager.CloseScene(hub, true);
         }
 
-        Scene streets = EditorSceneManager.OpenScene("Assets/Scenes/StreetsTest.unity", OpenSceneMode.Additive);
+        Scene streets = EditorSceneManager.OpenScene("Assets/Scenes/Streets.unity", OpenSceneMode.Additive);
         try
         {
             MapManager mapManager = InScene<MapManager>(streets).Single();

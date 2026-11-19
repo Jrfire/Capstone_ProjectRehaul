@@ -108,7 +108,7 @@ public sealed class AgimatSetupTests
     [Test]
     public void BaseSceneHasTheBankAndTheAlbularyo()
     {
-        Scene hub = EditorSceneManager.OpenScene("Assets/Scenes/SampleScene.unity", OpenSceneMode.Additive);
+        Scene hub = EditorSceneManager.OpenScene("Assets/Scenes/Base.unity", OpenSceneMode.Additive);
         try
         {
             NetworkManager manager = InScene<NetworkManager>(hub).Single();
@@ -122,8 +122,7 @@ public sealed class AgimatSetupTests
             Assert.That(body != null && !body.isTrigger, Is.True, "The placeholder needs a solid collider to be aimed at.");
             Assert.That(albularyo.GetComponentsInChildren<MeshRenderer>(true), Is.Empty, "The capsule mesh is replaced by a sprite.");
             SpriteRenderer sprite = albularyo.GetComponentsInChildren<SpriteRenderer>(true).Single();
-            Assert.That(sprite.sprite, Is.Not.Null);
-            Assert.That(sprite.sprite.texture.name, Is.EqualTo("MaleFront"), "Placeholder art is the player's PNG.");
+            Assert.That(sprite.sprite, Is.Not.Null, "Albularyo art is assigned (user-replaceable).");
             Assert.That(sprite.GetComponent<BillboardSprite>(), Is.Not.Null);
             Assert.That(sprite.GetComponent<BillboardSprite>().Pitch, Is.False, "Upright like players.");
             Assert.That(albularyo.GetComponent<DistanceFadeSprite>(), Is.Not.Null);
@@ -181,6 +180,16 @@ public sealed class AgimatSetupTests
         DistanceFadeSprite fade = pickup.GetComponent<DistanceFadeSprite>();
         Assert.That(fade, Is.Not.Null);
         Assert.That(new SerializedObject(fade).FindProperty("fadedDistance").floatValue, Is.LessThan(30f), "Fades out sooner than enemies (user-tuned).");
+        foreach (string path in new[] { "Assets/PREFABS/AgimatPickup.prefab", "Assets/PREFABS/ItemPickup.prefab" })
+        {
+            PickupGlint glint = AssetDatabase.LoadAssetAtPath<GameObject>(path).GetComponent<PickupGlint>();
+            Assert.That(glint, Is.Not.Null, path + " sparkles so it can be found.");
+            Material glintMaterial = new SerializedObject(glint).FindProperty("material").objectReferenceValue as Material;
+            Assert.That(glintMaterial != null && glintMaterial.name == "Sprite-Unlit-Default", Is.True, "Transparent unlit star.");
+        }
+        Assert.That(PickupGlint.FlashAt(0.3f, 2f, 0.6f), Is.EqualTo(1f).Within(0.001f), "Peaks mid-flash.");
+        Assert.That(PickupGlint.FlashAt(1.5f, 2f, 0.6f), Is.Zero, "Dark between flashes.");
+        Assert.That(PickupGlint.FlashAt(2.3f, 2f, 0.6f), Is.EqualTo(1f).Within(0.001f), "Repeats every interval.");
 
         GameObject lady = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/PREFABS/Enemies/WhiteLady.prefab");
         Assert.That(lady.GetComponent<WhiteLady>().WorldSprite.sprite, Is.Not.Null);
@@ -189,7 +198,7 @@ public sealed class AgimatSetupTests
         Assert.That(lady.GetComponent<NetworkIdentity>(), Is.Null, "Local to one player.");
         Assert.That(lady.GetComponent<EnemyFearSource>(), Is.Null, "Not an enemy.");
 
-        Scene hub = EditorSceneManager.OpenScene("Assets/Scenes/SampleScene.unity", OpenSceneMode.Additive);
+        Scene hub = EditorSceneManager.OpenScene("Assets/Scenes/Base.unity", OpenSceneMode.Additive);
         try
         {
             NetworkManager manager = InScene<NetworkManager>(hub).Single();
@@ -201,14 +210,14 @@ public sealed class AgimatSetupTests
         {
             EditorSceneManager.CloseScene(hub, true);
         }
-        Scene streets = EditorSceneManager.OpenScene("Assets/Scenes/StreetsTest.unity", OpenSceneMode.Additive);
+        Scene streets = EditorSceneManager.OpenScene("Assets/Scenes/Streets.unity", OpenSceneMode.Additive);
         try
         {
             AgimatSpawner spawner = InScene<AgimatSpawner>(streets).Single();
             Assert.That(spawner.PickupPrefab, Is.SameAs(agimat));
-            Assert.That(spawner.MinCount, Is.EqualTo(3));
-            Assert.That(spawner.MaxCount, Is.EqualTo(5));
-            Assert.That(spawner.MinReachableCount, Is.EqualTo(2), "Some agimats can be found without opening barricades.");
+            Assert.That(spawner.MinCount, Is.GreaterThan(0), "Counts are user-tuned; only their relationship is checked.");
+            Assert.That(spawner.MaxCount, Is.GreaterThanOrEqualTo(spawner.MinCount));
+            Assert.That(spawner.MinReachableCount, Is.InRange(1, spawner.MinCount), "Some agimats can be found without opening barricades.");
             MapManager map = InScene<MapManager>(streets).Single();
             Assert.That(map.JeepneyPrefab, Is.SameAs(AssetDatabase.LoadAssetAtPath<GameObject>("Assets/PREFABS/Jeepney.prefab")),
                 "The street's spawn block gets a jeepney home.");

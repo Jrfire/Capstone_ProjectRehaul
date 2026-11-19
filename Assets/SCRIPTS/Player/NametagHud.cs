@@ -21,8 +21,8 @@ public sealed class NametagHud : MonoBehaviour
 
     [Tooltip("Show the interaction prompt line for usable objects.")]
     public bool showPrompt = true;
-    [Tooltip("Prompt line format; {0} is the object's prompt (e.g. \"Invite Steam friends\").")]
-    public string promptFormat = "[E] {0}";
+    [Tooltip("Prompt line format; {0} is the object's prompt (e.g. \"Invite Steam friends\"), {1} the local player's primary Interact key (follows rebinds).")]
+    public string promptFormat = "[{1}] {0}";
 
     public Font Font
     {
@@ -68,9 +68,25 @@ public sealed class NametagHud : MonoBehaviour
         }
         Interactable target = interaction.CurrentTarget;
         string prompt = showPrompt && target != null && !string.IsNullOrWhiteSpace(target.Prompt)
-            ? string.Format(string.IsNullOrEmpty(promptFormat) ? "{0}" : promptFormat, target.Prompt)
+            ? FormatPrompt(promptFormat, target.Prompt, interaction.InteractKey)
             : null;
         Show(interaction.AimedName, prompt);
+    }
+
+    /// <summary>Formats the prompt line ({0} = prompt, {1} = key); an old literal "[E]" is replaced by the key.</summary>
+    public static string FormatPrompt(string format, string prompt, string key)
+    {
+        if (string.IsNullOrEmpty(format))
+            format = "{0}";
+        format = format.Replace("[E]", "[{1}]");
+        try
+        {
+            return string.Format(format, prompt, key);
+        }
+        catch (System.FormatException)
+        {
+            return prompt;
+        }
     }
 
     private void Show(string shownName, string prompt)

@@ -15,8 +15,13 @@ public sealed class EnemyMotor : EnemyLocomotion
 
     private NavMeshAgent agent;
     private NavMeshPath scratchPath;
+    private bool suspended;
 
     public NavMeshAgent Agent => agent;
+    /// <summary>
+    /// True while the agent is switched off so the server can place the enemy freely (e.g. a Tiktik perched on a roof).
+    /// </summary>
+    public bool Suspended => suspended;
     public bool IsActive => agent != null && agent.enabled && agent.isOnNavMesh;
     public override Vector3 Velocity => IsActive ? agent.velocity : Vector3.zero;
     public override bool IsMoving => IsActive && !agent.isStopped && agent.velocity.sqrMagnitude > 0.01f;
@@ -32,9 +37,14 @@ public sealed class EnemyMotor : EnemyLocomotion
         scratchPath = new NavMeshPath();
     }
 
-    /// <summary>Enables the agent on the nearest NavMesh point. Returns false while no NavMesh exists nearby.</summary>
+    /// <summary>
+    /// Enables the agent on the nearest NavMesh point. Returns false while no NavMesh exists nearby. While
+    /// <see cref="Suspended"/> it returns true without touching the agent.
+    /// </summary>
     public override bool Activate()
     {
+        if (suspended)
+            return true;
         if (IsActive)
             return true;
         if (!NavMesh.SamplePosition(transform.position, out NavMeshHit hit, activationSearchRadius, AreaMask))
@@ -65,6 +75,23 @@ public sealed class EnemyMotor : EnemyLocomotion
 
     public bool HasArrived =>
         !IsActive || (!agent.pathPending && (!agent.hasPath || agent.remainingDistance <= Mathf.Max(agent.stoppingDistance, arriveDistance)));
+
+    /// <summary>Server: turns the agent off so the transform can be moved anywhere (off the NavMesh).</summary>
+    public void Suspend()
+    {
+        Stop();
+        suspended = true;
+        if (agent != null && agent.enabled)
+            agent.enabled = false;
+    }
+
+    /// <summary>Server: places the enemy at <paramref name="position"/> and re-enables the agent on the NavMesh there.</summary>
+    public bool Resume(Vector3 position)
+    {
+        suspended = false;
+        transform.position = position;
+        return Activate();
+    }
 
     public override void Warp(Vector3 position)
     {

@@ -6,7 +6,7 @@ using UnityEngine;
 [CustomEditor(typeof(StreetBlockGenerator))]
 public sealed class StreetBlockGeneratorEditor : Editor
 {
-    private const string DefaultFloorPath = "Assets/Prefab/Streets Object/Path_Road.prefab";
+    private const string DefaultFloorPath = "Assets/Prefab/_Prefab Street Building/Path_Road.prefab";
 
     public override void OnInspectorGUI()
     {

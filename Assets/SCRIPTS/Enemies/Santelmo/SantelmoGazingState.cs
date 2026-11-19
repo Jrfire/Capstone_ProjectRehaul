@@ -10,12 +10,15 @@ public sealed class SantelmoGazingState : EnemyState
     private float progress;
     private float lostFor;
     private PlayerTrance trance;
+    private Vector3 lastSeen;
 
     public SantelmoGazingState(SantelmoBrain brain) => this.brain = brain;
 
     public override string Name => "Gazing";
     public PlayerPersistence Target { get; set; }
     public float Progress => progress;
+    /// <summary>Where the target was last seen.</summary>
+    public Vector3 LastSeenPosition => lastSeen;
 
     public override void Enter()
     {
@@ -23,6 +26,7 @@ public sealed class SantelmoGazingState : EnemyState
         progress = 0f;
         lostFor = 0f;
         trance = Target != null ? Target.GetComponent<PlayerTrance>() : null;
+        lastSeen = Target != null ? Target.transform.position : brain.transform.position;
         brain.SetGaze(Target != null ? Target.netIdentity : null, 0f);
     }
 
@@ -38,20 +42,25 @@ public sealed class SantelmoGazingState : EnemyState
         brain.Motor.Stop();
         brain.LookTarget = Target.transform.position;
         if (brain.Senses.CanSee(Target))
+        {
             lostFor = 0f;
+            lastSeen = Target.transform.position;
+        }
         else
         {
             lostFor += deltaTime;
             if (lostFor > brain.Profile.lostSightGraceSeconds)
             {
-                // Escaped before the trance: leave them be for a while and drift on.
-                brain.Ignore(Target, brain.Profile.escapeCooldownSeconds);
-                brain.ChangeState(brain.Wandering);
+                // Escaped before the trance: drift to where they were last seen, watching for anyone.
+                brain.Investigate(Target, lastSeen);
+                return;
             }
+            // Keep the (paused) gaze alive during the grace so it is not cleared as stale.
+            trance.ServerSetGaze(progress);
             return;
         }
 
-        progress += deltaTime / brain.Profile.gazeSeconds;
+        progress += deltaTime / brain.GazeSeconds;
         if (progress >= 1f)
         {
             PlayerPersistence victim = Target;

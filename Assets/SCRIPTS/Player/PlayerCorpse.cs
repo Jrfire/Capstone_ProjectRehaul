@@ -2,9 +2,10 @@ using Mirror;
 using UnityEngine;
 
 /// <summary>
-/// Leaves a dead body where this player died (NetworkPlayer, local on every peer). When the synced health reaches 0 a
-/// runtime "Corpse" object is placed at the player's feet in the active scene: the chosen character's last Dead frame,
-/// billboarded toward the local camera, or, while no Dead frames exist, the front Idle frame laid flat on the ground.
+/// Leaves a dead body where this player died (NetworkPlayer, local on every peer). When the synced health reaches 0 (or
+/// the player enters a Santelmo trance) a runtime "Corpse" object is placed at the player's feet in the active scene:
+/// the chosen character's last Dead frame, else the front Idle frame, standing upright and billboarded toward the local
+/// camera (one direction, yaw only). A tranced owner's body stays on the street, never in the pocket dimension.
 /// It is removed on respawn/revival, when the player despawns or with the scene.
 /// </summary>
 [DisallowMultipleComponent]
@@ -75,13 +76,15 @@ public sealed class PlayerCorpse : NetworkBehaviour
             RemoveCorpse();
     }
 
-    /// <summary>Places the body at the player's current position (replacing any previous one).</summary>
+    /// <summary>Where the body lies: the player's position, or the street spot a tranced owner left behind.</summary>
+    public Vector3 BodyPosition => trance != null && trance.PocketActive ? trance.BodyPosition : transform.position;
+
+    /// <summary>Places the body at <see cref="BodyPosition"/> (replacing any previous one).</summary>
     public void SpawnCorpse()
     {
         RemoveCorpse();
         CharacterDefinition definition = vision != null ? vision.ActiveDefinition : null;
         Sprite sprite = null;
-        bool flat = false;
         if (definition != null)
         {
             CharacterAnimation dead = definition.GetAnimation(CharacterAnimationState.Dead);
@@ -91,14 +94,11 @@ public sealed class PlayerCorpse : NetworkBehaviour
             {
                 CharacterAnimation idle = definition.GetAnimation(CharacterAnimationState.Idle);
                 if (idle.IsReady)
-                {
                     sprite = idle.GetFrame(CharacterDirection.South, 0d, true);
-                    flat = true;
-                }
             }
         }
 
-        Vector3 feet = transform.position;
+        Vector3 feet = BodyPosition;
         if (Physics.Raycast(feet + Vector3.up * 0.5f, Vector3.down, out RaycastHit hit, maxGroundDistance + 0.5f, ~0,
                 QueryTriggerInteraction.Ignore) && hit.collider.transform.root != transform.root)
             feet = hit.point;
@@ -116,18 +116,10 @@ public sealed class PlayerCorpse : NetworkBehaviour
             renderer.sortingOrder = worldSprites.sortingOrder;
             body.transform.localScale = worldSprites.transform.lossyScale;
         }
-        if (flat)
-        {
-            body.transform.localPosition = Vector3.up * 0.02f;
-            body.transform.localRotation = Quaternion.Euler(90f, transform.eulerAngles.y, 0f);
-        }
-        else
-        {
-            if (sprite != null)
-                body.transform.localPosition = Vector3.up * Mathf.Max(0f, (sprite.pivot.y / sprite.pixelsPerUnit) *
-                    body.transform.localScale.y);
-            body.AddComponent<BillboardSprite>();
-        }
+        if (sprite != null)
+            body.transform.localPosition = Vector3.up * Mathf.Max(0f, (sprite.pivot.y / sprite.pixelsPerUnit) *
+                body.transform.localScale.y);
+        body.AddComponent<BillboardSprite>();
     }
 
     private void RemoveCorpse()

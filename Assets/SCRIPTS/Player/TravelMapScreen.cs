@@ -26,6 +26,8 @@ public sealed class TravelMapScreen : MonoBehaviour
     [SerializeField] private Text confirmLabel;
     [SerializeField, Tooltip("Confirmation line showing the destination's rolled enemy (\"Enemies: Tikbalang\").")]
     private Text enemiesLabel;
+    [SerializeField, Tooltip("Confirmation line showing the total enemies expected there (\"Population: 4\"), between Enemies and Travel Time.")]
+    private Text populationLabel;
     [SerializeField, Tooltip("Confirmation line showing the round-trip time cost (\"Travel Time: 1 hour\").")]
     private Text travelTimeLabel;
     [SerializeField] private Button yesButton;
@@ -45,6 +47,7 @@ public sealed class TravelMapScreen : MonoBehaviour
     public Image MapBackground => mapBackground;
     public Text EnemiesLabel => enemiesLabel;
     public Text TravelTimeLabel => travelTimeLabel;
+    public Text PopulationLabel => populationLabel;
     public Button YesButton => yesButton;
 
     public static TravelMapScreen Open(TravelMapScreen prefab, MapTerminal terminal)
@@ -118,6 +121,33 @@ public sealed class TravelMapScreen : MonoBehaviour
         }
         else if (ConfirmationOpen)
             RefreshEnemies();
+        RefreshButtonLabels();
+    }
+
+    /// <summary>Crimson rich-text marker appended to blood-moon destinations.</summary>
+    public const string BloodMoonTag = "<color=#C8102E>Blood Moon</color>";
+
+    /// <summary>Button label for a destination: the scene name, plus " - Blood Moon" when one was rolled there.</summary>
+    public static string DestinationLabel(string sceneName) =>
+        TravelDirector.Instance != null && TravelDirector.Instance.IsBloodMoonRolled(sceneName)
+            ? $"{sceneName} - {BloodMoonTag}"
+            : sceneName;
+
+    private void RefreshButtonLabels()
+    {
+        foreach (Button button in destinationButtons)
+        {
+            if (button == null)
+                continue;
+            Text label = button.GetComponentInChildren<Text>(true);
+            if (label != null)
+            {
+                label.supportRichText = true;
+                string text = DestinationLabel(button.name);
+                if (label.text != text)
+                    label.text = text;
+            }
+        }
     }
 
     public void Show(IEnumerable<string> destinations)
@@ -167,13 +197,25 @@ public sealed class TravelMapScreen : MonoBehaviour
         string rolled = TravelDirector.Instance != null ? TravelDirector.Instance.RolledEnemyName(sceneName) : null;
         if (rolled == null)
             return "Enemies: Unknown";
-        return $"Enemies: {(rolled.Length == 0 ? "None" : rolled)}";
+        string text = $"Enemies: {(rolled.Length == 0 ? "None" : rolled)}";
+        return TravelDirector.Instance.IsBloodMoonRolled(sceneName) ? $"{text} - {BloodMoonTag}!" : text;
+    }
+
+    /// <summary>"Population: N" (total enemies expected there), or "Population: Unknown" before the roll arrives.</summary>
+    public static string PopulationText(string sceneName)
+    {
+        int population = TravelDirector.Instance != null ? TravelDirector.Instance.RolledPopulation(sceneName) : -1;
+        return population < 0 ? "Population: Unknown" : $"Population: {population}";
     }
 
     private void RefreshEnemies()
     {
         if (enemiesLabel != null)
+            enemiesLabel.supportRichText = true;
+        if (enemiesLabel != null)
             enemiesLabel.text = string.IsNullOrEmpty(pendingDestination) ? string.Empty : EnemiesText(pendingDestination);
+        if (populationLabel != null)
+            populationLabel.text = string.IsNullOrEmpty(pendingDestination) ? string.Empty : PopulationText(pendingDestination);
 
         bool affordable = string.IsNullOrEmpty(pendingDestination) || RoundClock.Instance == null ||
             !RoundClock.Instance.enabled || RoundClock.Instance.CanAfford(pendingDestination);
@@ -220,7 +262,8 @@ public sealed class TravelMapScreen : MonoBehaviour
         Text label = button.GetComponentInChildren<Text>(true);
         if (label != null)
         {
-            label.text = sceneName;
+            label.supportRichText = true;
+            label.text = DestinationLabel(sceneName);
             if (!available)
                 label.color = unavailableTextColor;
         }

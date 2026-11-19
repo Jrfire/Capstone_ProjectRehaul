@@ -39,21 +39,25 @@ public sealed class PlayerTrance : NetworkBehaviour
     [SerializeField, Min(0f), Tooltip("Head start in metres behind the player.")]
     private float chaserStartDistance = 16f;
     [SerializeField, Min(0.1f)] private float catchDistance = 1.2f;
+    [SerializeField, Tooltip("Blood moon: random time (min, max) in seconds between split-second jumpscare flashes of the trance source while in the pocket.")]
+    private Vector2 bloodMoonFlashInterval = new Vector2(6f, 12f);
+    [SerializeField, Min(0.02f)] private float bloodMoonFlashSeconds = 0.18f;
     [SerializeField, Min(0f)] private float chaserHeight = 1.3f;
     [SerializeField, Min(0f)] private float fadeInSeconds = 1.5f;
     [SerializeField, Min(0f)] private float returnFadeSeconds = 1.5f;
 
     [Header("Inferno look")]
-    [SerializeField] private Color infernoTint = new Color(1f, 0.38f, 0.08f, 0.55f);
-    [SerializeField] private Color infernoFog = new Color(0.22f, 0.05f, 0.01f, 1f);
+    [SerializeField] private Color infernoTint = new Color(0.75f, 0.3f, 0.15f, 0.28f);
+    [SerializeField] private Color infernoFog = new Color(0.12f, 0.045f, 0.03f, 1f);
     [SerializeField, Min(0f)] private float infernoFogDensity = 1.4f;
-    [SerializeField] private Color infernoAmbient = new Color(0.12f, 0.035f, 0.01f, 1f);
-    [SerializeField] private Color infernoLightColor = new Color(1f, 0.4f, 0.1f, 1f);
+    [SerializeField] private Color infernoAmbient = new Color(0.07f, 0.035f, 0.025f, 1f);
+    [SerializeField] private Color infernoLightColor = new Color(1f, 0.55f, 0.32f, 1f);
     [SerializeField, Min(0f)] private float infernoLightIntensity = 4f;
     [SerializeField, Min(0f)] private float infernoLightRange = 22f;
 
     [Header("Audio")]
-    [SerializeField, Tooltip("Optional music while in the pocket (Music channel, priority 20).")]
+    [SerializeField, Tooltip("Optional music override while in the pocket (Music channel, priority 20). Empty = the " +
+        "trance source's ITranceSource.PocketTheme (the Santelmo's chase theme).")]
     private AudioClip pocketTheme;
 
     [Header("Server")]
@@ -62,6 +66,8 @@ public sealed class PlayerTrance : NetworkBehaviour
     [SerializeField, Min(10f), Tooltip("The server ends a trance that lasts longer than this (lost messages).")]
     private float serverTimeoutSeconds = 80f;
 
+    // Declared before inTrance so it is already set when the inTrance hook begins the pocket.
+    [SyncVar] private NetworkIdentity tranceSource;
     [SyncVar(hook = nameof(OnTranceChanged))] private bool inTrance;
     [SyncVar] private float gaze;
 
@@ -96,6 +102,10 @@ public sealed class PlayerTrance : NetworkBehaviour
     public float Gaze => gaze;
     public float SurviveSeconds => surviveSeconds;
     public bool PocketActive => pocketActive;
+    /// <summary>Owner: where the body was left when the pocket began (valid while <see cref="PocketActive"/>).</summary>
+    public Vector3 BodyPosition => bodyPosition;
+    /// <summary>The enemy that started the current trance (synced; null when not in a trance).</summary>
+    public NetworkIdentity TranceSource => tranceSource;
     public float PocketTime => pocketTime;
     public Transform PocketChaser => chaser;
     public GameObject PocketRoot => pocketRoot;
@@ -116,8 +126,18 @@ public sealed class PlayerTrance : NetworkBehaviour
     // ---------------------------------------------------------------- server
 
     /// <summary>Server: sets the gaze progress shown on the owner's screen (0 clears it).</summary>
+    /// <remarks>Must be refreshed while the gaze lasts: a gaze not refreshed for <see cref="GazeStaleSeconds"/>
+    /// (its Santelmo was destroyed by travel, frozen for loading, ...) clears itself.</remarks>
     [Server]
-    public void ServerSetGaze(float progress) => gaze = inTrance ? 0f : Mathf.Clamp01(progress);
+    public void ServerSetGaze(float progress)
+    {
+        gaze = inTrance ? 0f : Mathf.Clamp01(progress);
+        gazeRefreshedAt = Time.time;
+    }
+
+    /// <summary>Seconds without <see cref="ServerSetGaze"/> after which a lingering gaze is cleared.</summary>
+    public const float GazeStaleSeconds = 0.5f;
+    private float gazeRefreshedAt;
 
     /// <summary>Server: puts this living player into the trance; <paramref name="source"/> becomes the killer if caught.</summary>
     [Server]
@@ -126,6 +146,7 @@ public sealed class PlayerTrance : NetworkBehaviour
         if (inTrance || health.IsDead || (TryGetComponent(out PlayerPersistence persistence) && persistence.IsAboard))
             return false;
         serverSource = source;
+        tranceSource = source;
         serverStartTime = NetworkTime.time;
         gaze = 0f;
         inTrance = true;
@@ -142,6 +163,7 @@ public sealed class PlayerTrance : NetworkBehaviour
         serverSource = null;
         gaze = 0f;
         inTrance = false;
+        tranceSource = null;
         if (caught && !health.IsDead)
             health.TakeDamage(health.CurrentHealth, source);
     }
@@ -164,9 +186,11 @@ public sealed class PlayerTrance : NetworkBehaviour
 
     private void ServerUpdate()
     {
+        bool loading = TravelDirector.Instance != null && TravelDirector.Instance.ServerLoadingActive;
+        if (gaze > 0f && (inTrance || loading || health.IsDead || Time.time - gazeRefreshedAt > GazeStaleSeconds))
+            gaze = 0f;
         if (!inTrance)
             return;
-        bool loading = TravelDirector.Instance != null && TravelDirector.Instance.ServerLoadingActive;
         if (health.IsDead || loading || ServerElapsed > serverTimeoutSeconds)
             ServerEndTrance(false);
     }
@@ -281,6 +305,8 @@ public sealed class PlayerTrance : NetworkBehaviour
             return;
         pocketActive = true;
         pocketTime = 0f;
+        nextBloodMoonFlash = -1f;
+        PocketFlashCount = 0;
         resultSent = false;
         localCaught = false;
         returnFade = 0f;
@@ -295,8 +321,20 @@ public sealed class PlayerTrance : NetworkBehaviour
         SpawnChaser(start - pocketAxis * chaserStartDistance);
         savedAmbient = RenderSettings.ambientLight;
         RenderSettings.ambientLight = infernoAmbient;
-        if (pocketTheme != null)
-            AudioManager.RequestMusic(this, pocketTheme, 20);
+        AudioClip theme = PocketMusic;
+        if (theme != null)
+            AudioManager.RequestMusic(this, theme, 20);
+    }
+
+    /// <summary>The music played in the pocket: the override, else the trance source's pocket theme.</summary>
+    public AudioClip PocketMusic
+    {
+        get
+        {
+            if (pocketTheme != null)
+                return pocketTheme;
+            return tranceSource != null && tranceSource.TryGetComponent(out ITranceSource source) ? source.PocketTheme : null;
+        }
     }
 
     private void EndPocket()
@@ -342,6 +380,7 @@ public sealed class PlayerTrance : NetworkBehaviour
         }
         pocketTime += deltaTime;
         WrapPlayer();
+        TickBloodMoonFlash();
         if (chaser != null)
         {
             Vector3 target = transform.position + Vector3.up * chaserHeight;
@@ -371,6 +410,26 @@ public sealed class PlayerTrance : NetworkBehaviour
             if (NetworkClient.active)
                 CmdSurvived();
         }
+    }
+
+    private float nextBloodMoonFlash = -1f;
+    /// <summary>Local: number of blood-moon jumpscare flashes shown in this trance.</summary>
+    public int PocketFlashCount { get; private set; }
+
+    private void TickBloodMoonFlash()
+    {
+        if (!MoonSky.BloodMoon || resultSent || pocketTime >= surviveSeconds - finalPhaseSeconds)
+            return;
+        float min = Mathf.Max(0.5f, Mathf.Min(bloodMoonFlashInterval.x, bloodMoonFlashInterval.y));
+        float max = Mathf.Max(min, bloodMoonFlashInterval.x, bloodMoonFlashInterval.y);
+        if (nextBloodMoonFlash < 0f)
+            nextBloodMoonFlash = pocketTime + UnityEngine.Random.Range(min, max);
+        if (pocketTime < nextBloodMoonFlash)
+            return;
+        nextBloodMoonFlash = pocketTime + UnityEngine.Random.Range(min, max);
+        PocketFlashCount++;
+        if (tranceSource != null)
+            JumpscareFlash.Show(tranceSource.assetId, bloodMoonFlashSeconds);
     }
 
     /// <summary>Keeps the player in the middle segment by shifting player and chaser by whole segments (identical geometry).</summary>
@@ -480,7 +539,7 @@ public sealed class PlayerTrance : NetworkBehaviour
         return true;
     }
 
-    private static bool IsStraight(StreetBlock block, BlockSide a, BlockSide b, bool alongX)
+    internal static bool IsStraight(StreetBlock block, BlockSide a, BlockSide b, bool alongX)
     {
         StreetBlockEntrance first = block.GetEntrance(a);
         StreetBlockEntrance second = block.GetEntrance(b);
@@ -492,7 +551,7 @@ public sealed class PlayerTrance : NetworkBehaviour
     }
 
     /// <summary>Removes gates/barricades and networked bits, and walls off any side entrance so the line has no exits.</summary>
-    private static void StripCopy(StreetBlock copy, bool alongX)
+    internal static void StripCopy(StreetBlock copy, bool alongX)
     {
         foreach (EntranceObstacle obstacle in copy.GetComponentsInChildren<EntranceObstacle>(true))
             Destroy(obstacle.gameObject);

@@ -10,7 +10,7 @@ using UnityEngine.AI;
 /// </summary>
 /// <remarks>Ground enemies need an <see cref="EnemyMotor"/>; flying ones an <see cref="EnemyFlightMotor"/>.</remarks>
 [RequireComponent(typeof(EnemySenses), typeof(EnemyPresentation))]
-public abstract class EnemyBrain : NetworkBehaviour, IWeaponTarget
+public abstract class EnemyBrain : NetworkBehaviour, IWeaponTarget, IGarlicTarget
 {
     private static readonly float[] bodyHeights = { 0.3f, 1.4f, 2.6f };
 
@@ -58,11 +58,34 @@ public abstract class EnemyBrain : NetworkBehaviour, IWeaponTarget
     /// <summary>The player this enemy is chasing (synced on every peer), or null. Drives chase music/SFX.</summary>
     public virtual NetworkIdentity ChasedPlayer => null;
 
+    /// <summary>False if <see cref="ChasedPlayer"/> hears only the chase SFX, not the chase theme (e.g. the Santelmo,
+    /// whose theme plays in the trance pocket instead).</summary>
+    public virtual bool PlaysChaseTheme => true;
+
+    /// <summary>False if <see cref="ChasedPlayer"/> hears no chase SFX either (e.g. the Santelmo while only staring).</summary>
+    public virtual bool PlaysChaseSound => true;
+
     /// <summary>False while the enemy is despawned/hidden (e.g. a Manananggal between passes): it makes no sound.</summary>
     public virtual bool IsPresent => true;
 
     /// <summary>Server: a player's weapon hit this enemy (see PlayerItemUse). Default: no effect.</summary>
     public virtual bool ServerTakeWeaponHit(ItemDefinition weapon, NetworkIdentity attacker) => false;
+
+    /// <summary>Server: a thrown bawang hit this enemy (see ThrowableProjectile). Default: no effect.</summary>
+    public virtual bool ServerTakeGarlic(NetworkIdentity thrower, float seconds) => false;
+
+    /// <summary>Server: the burning molotov fire whose vicinity this enemy is in (null when none), updated every active frame.</summary>
+    public FireZone NearbyFire { get; private set; }
+    /// <summary>Server: true while inside <see cref="NearbyFire"/>'s core.</summary>
+    public bool InFireCore { get; private set; }
+
+    /// <summary>
+    /// Server: called every active frame while the enemy is within a molotov fire's vicinity (before the state ticks).
+    /// Default: no reaction. The Tikbalang drops its chase and walks home, the Manananggal and Tiktik react as to a bawang hit, and the fire-made Santelmo is drawn in.
+    /// </summary>
+    protected virtual void ServerReactToFire(FireZone fire, bool inCore)
+    {
+    }
 
     /// <summary>Server: makes a placed street block this enemy's home. Call before <c>NetworkServer.Spawn</c>.</summary>
     public void AssignHomeBlock(MapManager map, int blockIndex)
@@ -112,6 +135,10 @@ public abstract class EnemyBrain : NetworkBehaviour, IWeaponTarget
             ResolveHome();
             ChangeState(CreateInitialState());
         }
+        NearbyFire = FireZone.FindAt(transform.position, out bool inCore);
+        InFireCore = inCore;
+        if (NearbyFire != null)
+            ServerReactToFire(NearbyFire, inCore);
         ServerTick(Time.deltaTime);
         CurrentState?.Tick(Time.deltaTime);
         PublishMotion();

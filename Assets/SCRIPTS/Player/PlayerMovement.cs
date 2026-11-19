@@ -10,6 +10,8 @@ public sealed class PlayerMovement : NetworkBehaviour
     [SerializeField, Min(0f)] private float movementSpeed = 5f;
     [SerializeField, Min(1f)] private float sprintMultiplier = 1.5f;
     [SerializeField, Min(0f)] private float gravity = 20f;
+    [SerializeField, Tooltip("Falling below this height teleports the owner back to a spawn point (ignored inside the Santelmo pocket dimension).")]
+    private float fallRespawnHeight = -100f;
 
     private CharacterController characterController;
     private PlayerStamina stamina;
@@ -96,13 +98,45 @@ public sealed class PlayerMovement : NetworkBehaviour
             networkTransform.CmdTeleport(position, rotation);
     }
 
+    public float FallRespawnHeight => fallRespawnHeight;
+
+    /// <summary>Owner-only: puts a player who fell off the map back on one of the scene's spawn points.</summary>
+    public void RespawnFromFall()
+    {
+        Transform point = null;
+        var starts = NetworkManager.startPositions;
+        for (int i = 0; i < starts.Count && point == null; i++)
+            if (starts[i] != null && starts[i].gameObject.activeInHierarchy)
+                point = starts[Random.Range(i, starts.Count)];
+        if (point == null || !point.gameObject.activeInHierarchy)
+        {
+            PlayerSpawnPoints spawnPoints = FindFirstObjectByType<PlayerSpawnPoints>();
+            if (spawnPoints != null)
+            {
+                point = spawnPoints.transform;
+                foreach (Transform child in spawnPoints.transform)
+                    if (child.gameObject.activeInHierarchy) { point = child; break; }
+            }
+        }
+        if (point != null)
+            TeleportTo(point.position, point.rotation);
+        else
+            TeleportTo(Vector3.up, Quaternion.identity);
+    }
+
     private void Update()
     {
         if (!isLocalPlayer || movementAction == null || !movementAction.enabled)
             return;
+        if (transform.position.y < fallRespawnHeight && !PlayerTrance.IsInTrance(this))
+        {
+            RespawnFromFall();
+            return;
+        }
 
         if (PlayerControlLock.IsLocked || (AlbularyoScreen.Current != null && AlbularyoScreen.Current.IsOpen) ||
-            (SteamSession.Instance != null && SteamSession.Instance.OverlayActive))
+                    (ShopScreen.Current != null && ShopScreen.Current.IsOpen) ||
+                    (SteamSession.Instance != null && SteamSession.Instance.OverlayActive))
         {
             IsMoving = false;
             IsSprinting = false;
@@ -110,6 +144,9 @@ public sealed class PlayerMovement : NetworkBehaviour
         }
 
         Vector2 input = Vector2.ClampMagnitude(movementAction.ReadValue<Vector2>(), 1f);
+        // The blood-moon Tikbalang's scramble swaps A and D.
+        if (ControlInversion.Active)
+            input.x = -input.x;
         Vector3 direction = transform.TransformDirection(new Vector3(input.x, 0f, input.y));
         bool sprintRequested = sprintAction != null && stamina != null && sprintAction.IsPressed() &&
             input.sqrMagnitude > 0.0001f && stamina.CanUseStamina;

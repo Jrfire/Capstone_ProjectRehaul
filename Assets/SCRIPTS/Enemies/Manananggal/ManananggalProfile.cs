@@ -27,7 +27,7 @@ public sealed class ManananggalProfile : ScriptableObject
     [Tooltip("Random delay (min, max) in seconds before the very first pass after it spawns.")]
     public Vector2 firstPassDelaySeconds = new Vector2(5f, 15f);
     [Tooltip("Random delay (min, max) in seconds after it despawns before the next pass.")]
-    public Vector2 respawnDelaySeconds = new Vector2(15f, 40f);
+    public Vector2 respawnDelaySeconds = new Vector2(4f, 8f);
     [Min(0f), Tooltip("Passes start and end this far outside the street blocks' outer edges.")]
     public float edgeMargin = 12f;
     [Range(0f, 90f), Tooltip("Pass directions are rounded to this many degrees (0 = any direction, 45 = edges and diagonals, 90 = map axes only).")]
@@ -57,6 +57,14 @@ public sealed class ManananggalProfile : ScriptableObject
     [Header("Leaving")]
     [Min(1f), Tooltip("Gives up flying away after this long and despawns anyway.")]
     public float leaveTimeoutSeconds = 15f;
+
+    [Header("Blood moon (circles the map, never despawns)")]
+    [Tooltip("Random time (min, max) in seconds between hovers while circling.")]
+    public Vector2 bloodMoonHoverIntervalSeconds = new Vector2(6f, 12f);
+    [Tooltip("Random time (min, max) in seconds it hovers in place, looking around.")]
+    public Vector2 bloodMoonHoverSeconds = new Vector2(3f, 5f);
+    [Min(0.1f), Tooltip("Seconds between its snapped look-around turns while hovering.")]
+    public float bloodMoonLookTurnSeconds = 1f;
 
     public static float RandomIn(Vector2 range) => Random.Range(Mathf.Max(0f, Mathf.Min(range.x, range.y)), Mathf.Max(0f, range.x, range.y));
 }

@@ -16,6 +16,23 @@ public enum ItemUseKind
     Consumable = 1,
     /// <summary>Left mouse swings it: stuns the enemy in front (and breaks barricades if it Breaks Obstacles).</summary>
     Weapon = 2,
+    /// <summary>Consumes a key by using it on a matching gate.</summary>
+    Key = 3,
+    /// <summary>Thrown forward; its prefab and particle effect are configured on the item.</summary>
+    Throwable = 4,
+}
+
+public enum KeyCategory
+{
+    Gate = 0,
+    Chest = 1,
+}
+
+public enum ThrowableKind
+{
+    None = 0,
+    Molotov = 1,
+    Garlic = 2,
 }
 
 /// <summary>
@@ -35,6 +52,14 @@ public sealed class ItemDefinition : ScriptableObject
     [SerializeField, Range(0, PlayerInventory.MaxSlots - PlayerInventory.BaseSlots),
      Tooltip("Passive items only: extra inventory slots while equipped (a backpack adds 2).")]
     private int extraSlots;
+    [SerializeField, Min(0f), Tooltip("Relative chance of this item when map loot is rolled (AgimatSpawner items). 0 = never rolled.")]
+    private float lootWeight = 1f;
+
+    [Header("Shop")]
+    [SerializeField, Min(0), Tooltip("Price in pesos at the shopkeeper. 0 = never sold.")]
+    private int shopPrice;
+    [SerializeField, Min(0f), Tooltip("Relative chance of the shopkeeper stocking this item each quota.")]
+    private float shopWeight = 1f;
 
     [Header("Use (left mouse, active items)")]
     [SerializeField, Tooltip("What left mouse does while this item is in the selected slot.")]
@@ -53,12 +78,32 @@ public sealed class ItemDefinition : ScriptableObject
     private float stunSeconds = 3f;
     [SerializeField, Tooltip("Hitting a Destruction entrance obstacle (barricade) breaks it, like an itak/axe.")]
     private bool breaksObstacles;
+    [Header("Key")]
+    [SerializeField, Tooltip("Gate or chest key identity family.")]
+    private KeyCategory keyCategory = KeyCategory.Gate;
+    [SerializeField, Tooltip("Key code, e.g. G1: opens only Gate G1 (shown as \"Key G1\"). Empty = the item id.")]
+    private string keyId;
+    [Header("Durability")]
+    [SerializeField, Tooltip("When enabled, successful weapon hits consume one use.")]
+    private bool durabilityEnabled;
+    [SerializeField, Min(1), Tooltip("Uses before this weapon disappears.")]
+    private int durability = 3;
+    [Header("Throwable")]
+    [SerializeField, Tooltip("Molotov, garlic (bawang), or no throwable effect.")]
+    private ThrowableKind throwableKind = ThrowableKind.None;
+    [SerializeField, Tooltip("Networked projectile prefab for this throwable.")]
+    private GameObject throwablePrefab;
+    [SerializeField, Min(0f), Tooltip("Forward throw speed.")]
+    private float throwSpeed = 12f;
 
     public string Id => string.IsNullOrEmpty(itemId) ? name : itemId;
     public string DisplayName => string.IsNullOrEmpty(displayName) ? name : displayName;
     public Sprite Icon => icon;
     public ItemSlotKind Kind => kind;
     public int ExtraSlots => kind == ItemSlotKind.Passive ? extraSlots : 0;
+    public float LootWeight => Mathf.Max(0f, lootWeight);
+    public int ShopPrice => Mathf.Max(0, shopPrice);
+    public float ShopWeight => Mathf.Max(0f, shopWeight);
     public ItemUseKind UseKind => kind == ItemSlotKind.Active ? useKind : ItemUseKind.None;
     public int HealAmount => healAmount;
     public bool ConsumeOnUse => consumeOnUse;
@@ -66,6 +111,13 @@ public sealed class ItemDefinition : ScriptableObject
     public float AttackRadius => attackRadius;
     public float StunSeconds => stunSeconds;
     public bool BreaksObstacles => breaksObstacles;
+    public KeyCategory KeyCategory => keyCategory;
+    public string KeyId => string.IsNullOrEmpty(keyId) ? Id : keyId;
+    public bool DurabilityEnabled => durabilityEnabled;
+    public int Durability => durabilityEnabled ? Mathf.Max(1, durability) : 0;
+    public ThrowableKind ThrowableKind => throwableKind;
+    public GameObject ThrowablePrefab => throwablePrefab;
+    public float ThrowSpeed => Mathf.Max(0f, throwSpeed);
 
     /// <summary>Runtime setup of a weapon for tests and code-created items.</summary>
     public void ConfigureWeapon(float range, float stun, bool breaks, float radius = 0.35f)
@@ -75,6 +127,35 @@ public sealed class ItemDefinition : ScriptableObject
         stunSeconds = Mathf.Max(0f, stun);
         breaksObstacles = breaks;
         attackRadius = Mathf.Max(0f, radius);
+    }
+
+    public void ConfigureKey(KeyCategory category, string id)
+    {
+        useKind = ItemUseKind.Key;
+        keyCategory = category;
+        keyId = id;
+    }
+
+    public void ConfigureLoot(float weight) => lootWeight = Mathf.Max(0f, weight);
+
+    public void ConfigureShop(int price, float weight = 1f)
+    {
+        shopPrice = Mathf.Max(0, price);
+        shopWeight = Mathf.Max(0f, weight);
+    }
+
+    public void ConfigureDurability(bool enabled, int uses)
+    {
+        durabilityEnabled = enabled;
+        durability = Mathf.Max(1, uses);
+    }
+
+    public void ConfigureThrowable(ThrowableKind kind, GameObject prefab, float speed = 12f)
+    {
+        useKind = ItemUseKind.Throwable;
+        throwableKind = kind;
+        throwablePrefab = prefab;
+        throwSpeed = Mathf.Max(0f, speed);
     }
 
     /// <summary>Runtime setup of the left mouse behaviour for tests and code-created items.</summary>

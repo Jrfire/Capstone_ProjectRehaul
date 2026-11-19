@@ -1,4 +1,8 @@
-/// <summary>Guards the home block: walks to random points in it and stands at each for the profile's wait time.</summary>
+/// <summary>
+/// Guards the home block: walks to random points in it and stands at each for the profile's wait time. During a blood
+/// moon it hunts instead: any visible player or heard noise anywhere counts, and it walks to points in the nearest
+/// player's block, pausing only briefly.
+/// </summary>
 public sealed class TikbalangIdleState : EnemyState
 {
     private readonly TikbalangBrain brain;
@@ -20,12 +24,13 @@ public sealed class TikbalangIdleState : EnemyState
 
     public override void Tick(float deltaTime)
     {
-        if (brain.TrySpotPlayerInHome(out PlayerPersistence player))
+        bool hunting = brain.IsBloodMoon;
+        if (hunting ? brain.TrySpotAnyPlayer(out PlayerPersistence player) : brain.TrySpotPlayerInHome(out player))
         {
             brain.StartChase(player);
             return;
         }
-        if (brain.TryHearInHome(out UnityEngine.Vector3 origin))
+        if (hunting ? brain.TryHearAny(out UnityEngine.Vector3 origin) : brain.TryHearInHome(out origin))
         {
             brain.StartSearch(origin);
             return;
@@ -41,13 +46,17 @@ public sealed class TikbalangIdleState : EnemyState
         {
             brain.Motor.Stop();
             waiting = true;
-            waitLeft = brain.Profile.idleWaitSeconds;
+            waitLeft = hunting ? brain.Profile.bloodMoonHuntWaitSeconds : brain.Profile.idleWaitSeconds;
         }
     }
 
     private void PickNextPoint()
     {
-        if (brain.TryGetHomePoint(out UnityEngine.Vector3 point) && brain.Motor.MoveTo(point, brain.Profile.walkSpeed))
+        bool hunting = brain.IsBloodMoon;
+        UnityEngine.Vector3 point;
+        bool found = hunting ? brain.TryGetHuntPoint(out point) : brain.TryGetHomePoint(out point);
+        float speed = brain.SpeedFor(hunting ? brain.Profile.bloodMoonHuntSpeed : brain.Profile.walkSpeed);
+        if (found && brain.Motor.MoveTo(point, speed))
         {
             waiting = false;
             return;

@@ -241,6 +241,48 @@ public sealed class AgimatTests
     }
 
     [UnityTest]
+    public IEnumerator PickupsGlintBeyondTheirFadeDistance()
+    {
+        Track(GroundAt(Vector3.zero));
+        GameObject prefab = AssetDatabase.LoadAssetAtPath<GameObject>(PickupPath);
+        StartHost(prefab);
+        yield return WaitUntil(() => NetworkClient.localPlayer != null, 5f, "The host player did not spawn.");
+        Camera camera = NetworkClient.localPlayer.GetComponentInChildren<Camera>(true);
+        Vector3 eye = camera.transform.position;
+
+        AgimatPickup agimat = Track(Object.Instantiate(prefab, eye + new Vector3(0f, -1f, 16f), Quaternion.identity)).GetComponent<AgimatPickup>();
+        agimat.ServerSetType(AgimatType.Bronze);
+        NetworkServer.Spawn(agimat.gameObject);
+        PickupGlint glint = agimat.GetComponent<PickupGlint>();
+        glint.Interval = 0.6f;
+        glint.FlashSeconds = 0.3f;
+        yield return null;
+        yield return null;
+        Assert.That(glint.GlintRenderer, Is.Not.Null);
+        Assert.That(agimat.GetComponent<DistanceFadeSprite>().Renderers, Has.No.Member(glint.GlintRenderer), "The item's fade never hides the glint.");
+
+        float peak = 0f;
+        bool sawDark = false;
+        float until = Time.realtimeSinceStartup + 1.5f;
+        while (Time.realtimeSinceStartup < until)
+        {
+            yield return null;
+            peak = Mathf.Max(peak, glint.CurrentAlpha);
+            sawDark |= glint.Flash == 0f;
+        }
+        Assert.That(peak, Is.GreaterThan(0.8f), "It flashes brightly at 16 m, past the agimat's own fade.");
+        Assert.That(sawDark, Is.True, "Flashes come and go.");
+        Assert.That(glint.GlintRenderer.sprite, Is.Not.Null);
+        Assert.That(Vector3.Distance(glint.GlintRenderer.transform.position, agimat.transform.position), Is.LessThan(1f), "It sits on the item.");
+
+        agimat.transform.position = eye + new Vector3(0f, -1f, glint.MaxDistance + 5f);
+        yield return null;
+        yield return null;
+        Assert.That(glint.CurrentAlpha, Is.Zero, "Hidden beyond Max Distance.");
+        Assert.That(glint.GlintRenderer.enabled, Is.False);
+    }
+
+    [UnityTest]
     public IEnumerator WhiteLadyVanishesUpCloseThenReturnsAndLungesWhenLookedAt()
     {
         Track(GroundAt(Vector3.zero));
@@ -374,6 +416,28 @@ public sealed class AgimatTests
         Assert.That(lady.Current, Is.EqualTo(WhiteLady.Phase.Lingering), "She comes back to linger near that player.");
         Assert.That(Vector3.Distance(new Vector3(lady.transform.position.x, 0f, lady.transform.position.z), player.transform.position),
             Is.InRange(7f, 19f));
+
+        // Lingering unseen (the camera looks straight up) for too long, she moves somewhere else near the player.
+        settings = new SerializedObject(lady);
+        settings.FindProperty("unseenRelocateSeconds").floatValue = 0.5f;
+        settings.ApplyModifiedPropertiesWithoutUndo();
+        Assert.That(lady.IsOnScreen(camera), Is.False);
+        Vector3 before = lady.transform.position;
+        yield return WaitUntil(() => lady.Relocations > 0, 3f, "Unseen, she never changed location.");
+        Assert.That(lady.Current, Is.EqualTo(WhiteLady.Phase.Lingering));
+        Assert.That(Vector3.Distance(lady.transform.position, before), Is.GreaterThan(2f));
+        Assert.That(Vector3.Distance(new Vector3(lady.transform.position.x, 0f, lady.transform.position.z), player.transform.position),
+            Is.InRange(7f, 19f), "She stays near the player.");
+
+        // Visible on screen she never jumps away, even when not spotted.
+        int relocations = lady.Relocations;
+        camera.transform.rotation = Quaternion.LookRotation(lady.FacePosition + Vector3.right * 2.5f - camera.transform.position);
+        yield return null;
+        if (lady.IsOnScreen(camera) && !lady.Spotted)
+        {
+            yield return new WaitForSeconds(1f);
+            Assert.That(lady.Relocations, Is.EqualTo(relocations), "She must not teleport while on screen.");
+        }
     }
 
     [UnityTest]

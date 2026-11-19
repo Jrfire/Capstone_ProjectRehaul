@@ -709,6 +709,18 @@ public sealed class NightVisionRenderTests
         for (int index = 0; index < noisy.Length; index++)
             worst = Mathf.Max(worst, Mathf.Abs(noisy[index].r - clear[index].r) / 255f);
         Assert.That(worst, Is.LessThan(0.12f), "Static must stay faint enough to see the street.");
+        float centreChange = 0f, edgeChange = 0f;
+        int centreCount = 0, edgeCount = 0;
+        for (int y = 0; y < 144; y++)
+            for (int x = 0; x < 256; x++)
+            {
+                int index = y * 256 + x;
+                float change = Mathf.Abs(noisy[index].r - clear[index].r);
+                if (Mathf.Abs(x - 128) < 32 && Mathf.Abs(y - 72) < 18) { centreChange += change; centreCount++; }
+                else if (x < 24 || x >= 232) { edgeChange += change; edgeCount++; }
+            }
+        Assert.That(centreChange / centreCount, Is.LessThan(edgeChange / edgeCount * 0.6f),
+            "Static gathers at the edges so the centre stays readable.");
         Assert.That(grain.intensity.value, Is.Zero, "Static must not mutate the shared Volume.");
         fear.enabled = false;
 

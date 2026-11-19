@@ -49,6 +49,10 @@ public sealed class MainMenuScreen : MonoBehaviour
     [SerializeField] private Text noticeText;
     [SerializeField] private Button noticeOkButton;
 
+    [Header("Loading")]
+    [SerializeField, Min(0.05f), Tooltip("Seconds to fade to black before the game loads (and to fade back in).")]
+    private float loadFadeSeconds = 0.8f;
+
     private int selectedSlot = -1;
     private bool deleteArmed;
 
@@ -199,9 +203,10 @@ public sealed class MainMenuScreen : MonoBehaviour
 
     public void PlaySelectedSlot()
     {
-        if (!SaveSystem.IsValidSlot(selectedSlot))
+        if (!SaveSystem.IsValidSlot(selectedSlot) || LoadFade.Active != null)
             return;
-        MenuLaunch.Host(selectedSlot);
+        int slot = selectedSlot;
+        LoadFade.Run(() => MenuLaunch.Host(slot), loadFadeSeconds, loadFadeSeconds);
     }
 
     /// <summary>First press arms the button ("Confirm Delete"), the second deletes the file.</summary>

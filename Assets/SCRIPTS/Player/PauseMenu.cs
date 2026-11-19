@@ -4,7 +4,7 @@ using UnityEngine;
 using UnityEngine.UI;
 
 /// <summary>
-/// In-game pause menu (<c>Assets/PREFABS/PauseMenu.prefab</c>, a persistent root in SampleScene). Escape opens it
+/// In-game pause menu (<c>Assets/PREFABS/PauseMenu.prefab</c>, a persistent root in Base). Escape opens it
 /// whenever a session runs and no other menu used that Escape press: a dark overlay with Resume, Options (the shared
 /// <see cref="SettingsPanel"/>) and Quit, plus the connected players on the right. The host sees an X beside every
 /// guest that kicks them. The game keeps running (multiplayer); while open the local player's controls are locked.

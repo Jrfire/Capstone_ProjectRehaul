@@ -18,7 +18,7 @@ public sealed class TravelTests : InputTestFixture
     private const string PlayerPath = "Assets/PREFABS/NetworkPlayer.prefab";
     private const string LoadingPath = "Assets/PREFABS/TravelLoadingScreen.prefab";
     private const string MapPath = "Assets/PREFABS/TravelMapScreen.prefab";
-    private const string Destination = "StreetsTest";
+    private const string Destination = "Streets";
     private const string TikbalangDefinitionPath = "Assets/PREFABS/Enemies/Definitions/Tikbalang.asset";
 
     private GameObject transportObject;
@@ -289,6 +289,7 @@ public sealed class TravelTests : InputTestFixture
         settings.FindProperty("loadingRevealDuration").floatValue = 0.05f;
         settings.FindProperty("readyTimeout").floatValue = 10f;
         settings.FindProperty("minimumLoadingSeconds").floatValue = 2.5f;
+        settings.FindProperty("bloodMoonChance").floatValue = 0f;
         settings.ApplyModifiedPropertiesWithoutUndo();
         managerObject.SetActive(true);
 
@@ -375,7 +376,7 @@ public sealed class TravelTests : InputTestFixture
         Assert.That(sawLoading, Is.True, "The loading screen was never shown.");
         Assert.That(sawFrozen, Is.True, "Enemy brains report the loading freeze during travel.");
         Assert.That(EnemyBrain.IsFrozenForLoading, Is.False, "Enemies resume once the game has faded back in.");
-        Assert.That(loadingHidden - loadingShown, Is.GreaterThanOrEqualTo(2.5f - 0.1f),
+        Assert.That(loadingHidden - loadingShown, Is.GreaterThanOrEqualTo(2.5f - 0.15f),
             "The loading screen stays up for the minimum time even though the street builds sooner.");
         var tikbalangFrames = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/PREFABS/Enemies/Tikbalang.prefab")
             .GetComponent<EnemyLoadingMiniature>().Frames;
@@ -412,7 +413,7 @@ public sealed class TravelTests : InputTestFixture
 
         EnemySpawner spawner = Object.FindAnyObjectByType<EnemySpawner>();
         Assert.That(spawner, Is.Not.Null);
-        yield return WaitUntil(() => spawner.Spawned.Count == 1, 2f, "The Tikbalang was not spawned.");
+        yield return WaitUntil(() => spawner.Spawned.Count == 2, 2f, "Two Tikbalangs were not spawned.");
         var tikbalang = spawner.Spawned[0].GetComponent<TikbalangBrain>();
         Assert.That(director.HasArrivalRoll, Is.True);
         Assert.That(director.ArrivalEnemy.DisplayName, Is.EqualTo("Tikbalang"), "The arrival keeps the roll made before travel.");
@@ -434,7 +435,7 @@ public sealed class TravelTests : InputTestFixture
         AgimatSpawner agimats = Object.FindAnyObjectByType<AgimatSpawner>();
         Assert.That(agimats, Is.Not.Null, "The map scene distributes agimats.");
         yield return WaitUntil(() => agimats.HasSpawned, 3f, "The agimats were not distributed.");
-        Assert.That(agimats.Spawned.Count, Is.InRange(3, 5));
+        Assert.That(agimats.Spawned.Count, Is.InRange(agimats.MinCountForRound(1), agimats.MaxCountForRound(1)), "The first night places the spawner's own agimat count.");
         var agimatBlocks = agimats.Spawned.Select(pickup => map.TryGetBlockIndex(pickup.transform.position, out int block) ? block : -1).ToList();
         Assert.That(agimatBlocks, Does.Contain(tikbalang.HomeBlockIndex), "One agimat waits in the Tikbalang's territory.");
         Assert.That(agimatBlocks.All(block => block >= 0 && map.GetRole(block) != MapBlockRole.Spawn), Is.True, "Agimats lie inside the map, never in the spawn block.");

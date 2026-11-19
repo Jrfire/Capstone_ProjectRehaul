@@ -15,7 +15,7 @@ public sealed class PlayerHudSceneTests
         Assert.That(player.GetComponent<PlayerStamina>().CurrentStamina, Is.EqualTo(PlayerStamina.MaxStamina));
         Assert.That(PlayerStamina.MaxStamina, Is.EqualTo(100f));
         Assert.That(player.GetComponentInChildren<PlayerHud>(true), Is.Null);
-        var scene = EditorSceneManager.OpenScene("Assets/Scenes/SampleScene.unity", OpenSceneMode.Additive);
+        var scene = EditorSceneManager.OpenScene("Assets/Scenes/Base.unity", OpenSceneMode.Additive);
         try
         {
             PlayerHud hud = scene.GetRootGameObjects()

@@ -14,7 +14,7 @@ public sealed class RoundClockTests
     private const string LoadingPath = "Assets/PREFABS/TravelLoadingScreen.prefab";
     private const string HudPath = "Assets/PREFABS/PlayerHud.prefab";
     private const string MapPath = "Assets/PREFABS/TravelMapScreen.prefab";
-    private const string Streets = "StreetsTest";
+    private const string Streets = "Streets";
 
     private readonly List<Object> created = new List<Object>();
     private GameObject managerObject;

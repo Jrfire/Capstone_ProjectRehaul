@@ -16,6 +16,8 @@ public sealed class FireLightFlicker : MonoBehaviour
     private float seed;
 
     public float BaseIntensity => baseIntensity;
+    /// <summary>Scales the flickering light (e.g. a fading fire); 1 = full.</summary>
+    public float Multiplier { get; set; } = 1f;
 
     private void Awake()
     {
@@ -39,7 +41,7 @@ public sealed class FireLightFlicker : MonoBehaviour
         float t = Time.time * speed;
         // Two octaves: slow breathing plus quick crackle.
         float noise = Mathf.PerlinNoise(t, seed) * 0.7f + Mathf.PerlinNoise(t * 2.7f, seed + 31f) * 0.3f;
-        fireLight.intensity = baseIntensity * (1f - intensityVariation + intensityVariation * 2f * noise);
+        fireLight.intensity = baseIntensity * Multiplier * (1f - intensityVariation + intensityVariation * 2f * noise);
         fireLight.range = baseRange * (1f - rangeVariation + rangeVariation * 2f * noise);
     }
 }

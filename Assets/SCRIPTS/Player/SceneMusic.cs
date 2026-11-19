@@ -2,7 +2,7 @@ using Capstone.Audio;
 using UnityEngine;
 
 /// <summary>
-/// A map scene's arrival music. Put it on any object in a location scene (e.g. StreetsTest's MapManager object) and drag
+/// A map scene's arrival music. Put it on any object in a location scene (e.g. Streets's MapManager object) and drag
 /// in the OST: it starts when players land after the loading screen (<see cref="TravelDirector.ClientArrived"/>), or on
 /// Start when the scene was opened without travelling. Chase themes outrank it; it stops with the scene.
 /// </summary>

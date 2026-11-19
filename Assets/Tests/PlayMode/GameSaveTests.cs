@@ -153,6 +153,60 @@ public sealed class GameSaveTests
     }
 
     [UnityTest]
+    public IEnumerator TheShopStockAndPurchasesAreSavedSoReloadingNeverRefreshesTheQuota()
+    {
+        Track(GroundAt(Vector3.zero));
+        ItemCatalog catalog = AssetDatabase.LoadAssetAtPath<GameObject>(PlayerPath).GetComponent<PlayerInventory>().Catalog;
+        ItemDefinition[] forSale = catalog.Items.Where(item => item != null && item.ShopPrice > 0).Take(2).ToArray();
+        Assert.That(forSale.Length, Is.EqualTo(2), "The catalog needs two items with a shop price.");
+
+        var data = new GameSaveData { round = 2, money = 100, shopRound = 2 };
+        data.shopItems.AddRange(forSale.Select(item => item.Id));
+        data.shopSold.AddRange(new[] { true, false });
+        Assert.That(SaveSystem.Write(0, data), Is.True);
+        MenuLaunch.SetActiveSaveSlot(0);
+
+        (RoundClock clock, _, GameSaveManager saves) = StartHost(withShop: true);
+        yield return WaitUntil(() => NetworkClient.localPlayer != null, 5f, "The host player did not spawn.");
+        yield return null;
+        ShopStock shop = managerObject.GetComponent<ShopStock>();
+
+        Assert.That(clock.Round, Is.EqualTo(2));
+        Assert.That(shop.StockRound, Is.EqualTo(2));
+        Assert.That(Enumerable.Range(0, shop.Count).Select(shop.GetItem), Is.EqualTo(forSale), "The saved stock comes back, not a reroll.");
+        Assert.That(shop.IsSold(0), Is.True, "Items already bought this quota stay sold after loading.");
+        Assert.That(shop.IsSold(1), Is.False);
+
+        Assert.That(shop.ServerBuy(NetworkClient.localPlayer.GetComponent<PlayerInventory>(), 1), Is.EqualTo(ShopBuyResult.Bought));
+        Assert.That(saves.SaveNow(), Is.True);
+        GameSaveData written = SaveSystem.Load(0);
+        Assert.That(written.shopRound, Is.EqualTo(2));
+        Assert.That(written.shopItems, Is.EqualTo(forSale.Select(item => item.Id).ToArray()));
+        Assert.That(written.shopSold, Is.EqualTo(new[] { true, true }), "Purchases are written to the save.");
+    }
+
+    [UnityTest]
+    public IEnumerator AShopSavedForAnotherRoundIsRerolled()
+    {
+        Track(GroundAt(Vector3.zero));
+        ItemCatalog catalog = AssetDatabase.LoadAssetAtPath<GameObject>(PlayerPath).GetComponent<PlayerInventory>().Catalog;
+        ItemDefinition item = catalog.Items.First(entry => entry != null && entry.ShopPrice > 0);
+        var data = new GameSaveData { round = 3, shopRound = 2 };
+        data.shopItems.Add(item.Id);
+        data.shopSold.Add(true);
+        Assert.That(SaveSystem.Write(0, data), Is.True);
+        MenuLaunch.SetActiveSaveSlot(0);
+
+        StartHost(withShop: true);
+        yield return WaitUntil(() => NetworkClient.localPlayer != null, 5f, "The host player did not spawn.");
+        yield return null;
+        ShopStock shop = managerObject.GetComponent<ShopStock>();
+        Assert.That(shop.StockRound, Is.EqualTo(3), "A stale stock is not restored.");
+        Assert.That(shop.Count, Is.EqualTo(2));
+        Assert.That(Enumerable.Range(0, shop.Count).Any(shop.IsSold), Is.False, "The new quota's stock is fresh.");
+    }
+
+    [UnityTest]
     public IEnumerator SessionsWithoutASlotNeverSave()
     {
         Track(GroundAt(Vector3.zero));
@@ -269,7 +323,7 @@ public sealed class GameSaveTests
         return item;
     }
 
-    private (RoundClock, AgimatBank, GameSaveManager) StartHost(string baseScene = null)
+    private (RoundClock, AgimatBank, GameSaveManager) StartHost(string baseScene = null, bool withShop = false)
     {
         managerObject = new GameObject("Save Test NetworkManager");
         managerObject.SetActive(false);
@@ -292,6 +346,14 @@ public sealed class GameSaveTests
         clockSettings.FindProperty("baseSceneName").stringValue = baseScene ?? SceneManager.GetActiveScene().name;
         clockSettings.ApplyModifiedPropertiesWithoutUndo();
         var bank = managerObject.AddComponent<AgimatBank>();
+        if (withShop)
+        {
+            var shop = managerObject.AddComponent<ShopStock>();
+            var shopSettings = new SerializedObject(shop);
+            shopSettings.FindProperty("catalog").objectReferenceValue =
+                AssetDatabase.LoadAssetAtPath<GameObject>(PlayerPath).GetComponent<PlayerInventory>().Catalog;
+            shopSettings.ApplyModifiedPropertiesWithoutUndo();
+        }
         var saves = managerObject.AddComponent<GameSaveManager>();
         var saveSettings = new SerializedObject(saves);
         saveSettings.FindProperty("itemPickupPrefab").objectReferenceValue =

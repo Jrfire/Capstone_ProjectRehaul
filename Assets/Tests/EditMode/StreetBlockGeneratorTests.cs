@@ -249,10 +249,10 @@ public sealed class StreetBlockGeneratorTests
     public void ProjectStreetAssetsBuildAValidBlockAndTheWorkshopIsReady()
     {
         StreetBlockGenerator generator = NewGenerator();
-        generator.floorTile = Asset("Assets/Prefab/Streets Object/Path_Road.prefab");
+        generator.floorTile = Asset("Assets/Prefab/_Prefab Street Building/Path_Road.prefab");
         generator.sizeInTiles = new Vector2Int(4, 4);
         generator.tilesPerCell = 2;
-        generator.buildingPrefabs = Enumerable.Range(1, 8).Select(index => Asset($"Assets/Prefab/Houses/House {index}.prefab")).ToArray();
+        generator.buildingPrefabs = Enumerable.Range(1, 8).Select(index => Asset($"Assets/Prefab/_Prefab Street Building/House {index}.prefab")).ToArray();
         generator.decorationPrefabs = new[] { "Crate Box", "Street Light 1", "Vase_Pot" }
             .Select(name => Asset($"Assets/Prefab/Streets Object/{name}.prefab")).ToArray();
         generator.obstaclePrefabs = new[] { Asset("Assets/Prefab/_Prefab Walls & Gate/Gates/Gate 1 (Closed).prefab") };

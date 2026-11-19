@@ -69,7 +69,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Capstone.Player::MapTerminal
   destinations:
-  - sceneName: StreetsTest
+  - sceneName: Streets
     enemyPool:
     - enemy: {fileID: 11400000, guid: dd36cdc1a5e149b6946458eb43855e8a, type: 2}
       weight: 1

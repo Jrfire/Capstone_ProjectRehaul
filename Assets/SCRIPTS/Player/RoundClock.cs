@@ -43,7 +43,7 @@ public sealed class RoundClock : MonoBehaviour
     [SerializeField, Min(0), Tooltip("The HUD clock warns (blinks and pulses) once this many hours or fewer remain.")]
     private int lowTimeHours = 3;
     [SerializeField, Tooltip("The base scene, where the clock is paused and the quota is checked.")]
-    private string baseSceneName = "SampleScene";
+    private string baseSceneName = "Base";
     [SerializeField, Min(1f), Tooltip("Seconds everyone has to board the jeepney home.")]
     private float returnCountdownSeconds = 30f;
     [SerializeField, Range(0, PlayerHealth.MaxHealth), Tooltip("Health that dead players (left behind or killed) respawn with at base (2 = one heart).")]

@@ -215,7 +215,37 @@ public static class GameSettings
     private static readonly List<WeakReference<InputActionAsset>> trackedAssets = new List<WeakReference<InputActionAsset>>();
 
     /// <summary>
-    /// Applies saved rebinds to a gameplay action clone and keeps it updated when bindings change later (e.g. from
+    /// Display text of an action's primary keyboard/mouse binding (its first one, including saved rebinds), e.g. "E";
+    /// <paramref name="fallback"/> when it has none.
+    /// </summary>
+    public static string PrimaryBindingDisplay(InputAction action, string fallback = "E")
+    {
+        if (action == null)
+            return fallback;
+        for (int index = 0; index < action.bindings.Count; index++)
+        {
+            InputBinding binding = action.bindings[index];
+            if (binding.isComposite || binding.isPartOfComposite || !IsKeyboardMouse(binding))
+                continue;
+            if (string.IsNullOrEmpty(binding.effectivePath))
+                return fallback;
+            string display = action.GetBindingDisplayString(index);
+            return string.IsNullOrWhiteSpace(display) ? fallback : display;
+        }
+        return fallback;
+    }
+
+    /// <summary>True for bindings in the Keyboard&amp;Mouse group or on a keyboard/mouse path.</summary>
+    public static bool IsKeyboardMouse(InputBinding binding)
+    {
+        if (!string.IsNullOrEmpty(binding.groups) && binding.groups.Contains("Keyboard&Mouse"))
+            return true;
+        string path = binding.effectivePath ?? binding.path ?? string.Empty;
+        return path.StartsWith("<Keyboard>") || path.StartsWith("<Mouse>");
+    }
+
+    /// <summary>
+    /// Applies saved rebinds to a gameplay action clone and keeps it updated when bindings change later (e.g. from</summary>
     /// the pause menu). Call right after cloning an action.
     /// </summary>
     public static InputAction TrackBindings(InputAction action)

@@ -84,6 +84,10 @@ public sealed class WhiteLady : MonoBehaviour
     [SerializeField, Range(1f, 45f), Tooltip("She counts as spotted when the camera points within this angle of her face (with a clear line of sight).")]
     private float spotAngle = 15f;
 
+    [Header("Moving when unseen")]
+    [SerializeField, Min(0f), Tooltip("Lingering or peeking this long without being spotted, she moves somewhere else near the player (once she is off-screen). 0 = never.")]
+    private float unseenRelocateSeconds = 40f;
+
     [Header("Corner peeking")]
     [SerializeField, Range(0f, 1f), Tooltip("Chance that she peeks around a corner instead of standing in the open (first appearance and every comeback).")]
     private float peekChance = 0.4f;
@@ -145,6 +149,9 @@ public sealed class WhiteLady : MonoBehaviour
     public float FarDespawnDistance => farDespawnDistance;
     public float FarRespawnSeconds => farRespawnSeconds;
     public float PeekChance => peekChance;
+    public float UnseenRelocateSeconds => unseenRelocateSeconds;
+    /// <summary>How often she moved because nobody spotted her.</summary>
+    public int Relocations { get; private set; }
     public bool Visible => worldSprite != null && worldSprite.enabled;
     /// <summary>True once the player has spotted her during the current lingering appearance.</summary>
     public bool Spotted => spotted;
@@ -231,6 +238,8 @@ public sealed class WhiteLady : MonoBehaviour
                 spotted |= IsSpotted(camera, spotAngle);
                 if (spotted && distance > farDespawnDistance)
                     EnterAway();
+                else if (!spotted && UnseenTooLong() && !IsOnScreen(camera))
+                    Relocate(eye);
                 break;
 
             case Phase.Away:
@@ -256,6 +265,8 @@ public sealed class WhiteLady : MonoBehaviour
                     Current = Phase.Retreating;
                     phaseStart = Time.time;
                 }
+                else if (UnseenTooLong() && !IsOnScreen(camera))
+                    Relocate(eye);
                 else if (Time.time - phaseStart >= peekTimeout)
                     EnterAway();
                 break;
@@ -345,6 +356,43 @@ public sealed class WhiteLady : MonoBehaviour
         spotted = false;
         phaseStart = Time.time;
         Current = Phase.Lingering;
+    }
+
+    private bool UnseenTooLong() => unseenRelocateSeconds > 0f && Time.time - phaseStart >= unseenRelocateSeconds;
+
+    /// <summary>Unspotted for too long: moves to a corner or open spot near the player without the Away wait.</summary>
+    private void Relocate(Vector3 eye)
+    {
+        Vector3 feet = cachedOwner != null ? cachedOwner.transform.position : eye;
+        Vector3 previous = transform.position;
+        if (random.NextDouble() < peekChance && TryFindPeekSpot(feet, eye, out PeekSpot corner) &&
+            HorizontalDistance(corner.Peek, previous) > 2f)
+        {
+            Relocations++;
+            EnterPeeking(corner);
+        }
+        else if (TryFindSpotNear(feet, respawnMinDistance, respawnMaxDistance, out Vector3 spot) &&
+                 HorizontalDistance(spot, previous) > 2f)
+        {
+            Relocations++;
+            transform.position = spot;
+            EnterLingering();
+        }
+        else
+            phaseStart = Time.time - unseenRelocateSeconds + 1f; // retry in a second
+    }
+
+    /// <summary>True while her face is inside the camera view and not hidden behind solid colliders.</summary>
+    public bool IsOnScreen(Camera camera)
+    {
+        Vector3 face = FacePosition;
+        Vector3 viewport = camera.WorldToViewportPoint(face);
+        if (viewport.z <= 0f || viewport.x < -0.1f || viewport.x > 1.1f || viewport.y < -0.1f || viewport.y > 1.1f)
+            return false;
+        Vector3 toFace = face - camera.transform.position;
+        float distance = toFace.magnitude;
+        return distance < 0.05f || !Physics.Raycast(camera.transform.position, toFace / distance, distance - 0.05f,
+            Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore);
     }
 
     private void EnterHidden()

@@ -32,7 +32,7 @@ public sealed class SteamNetworkManager : NetworkManager
 
     [Header("Join lock")]
     [SerializeField, Tooltip("Base scene used when there is no RoundClock. Leaving the base locks joining until the host stops and hosts again.")]
-    private string fallbackBaseSceneName = "SampleScene";
+    private string fallbackBaseSceneName = "Base";
 
     private bool clientWasConnected;
     private readonly HashSet<int> refusedConnections = new HashSet<int>();
@@ -46,6 +46,7 @@ public sealed class SteamNetworkManager : NetworkManager
     private TravelDirector Travel => TryGetComponent(out TravelDirector director) && director.enabled ? director : null;
     private RoundClock Clock => TryGetComponent(out RoundClock clock) && clock.enabled ? clock : null;
     private AgimatBank Agimats => TryGetComponent(out AgimatBank bank) && bank.enabled ? bank : null;
+    private ShopStock Shop => TryGetComponent(out ShopStock shop) && shop.enabled ? shop : null;
     private WhiteLadyDirector WhiteLady => TryGetComponent(out WhiteLadyDirector director) && director.enabled ? director : null;
     private GameSaveManager Saves => TryGetComponent(out GameSaveManager saves) && saves.enabled ? saves : null;
 
@@ -65,6 +66,7 @@ public sealed class SteamNetworkManager : NetworkManager
         Travel?.RegisterServerHandlers();
         Clock?.RegisterServerHandlers();
         Agimats?.RegisterServerHandlers();
+        Shop?.RegisterServerHandlers();
         WhiteLady?.RegisterServerHandlers();
         Saves?.OnServerStarted();
     }
@@ -96,6 +98,7 @@ public sealed class SteamNetworkManager : NetworkManager
         Travel?.RegisterClientHandlers();
         Clock?.RegisterClientHandlers();
         Agimats?.RegisterClientHandlers();
+        Shop?.RegisterClientHandlers();
         WhiteLady?.RegisterClientHandlers();
     }
 
@@ -184,6 +187,7 @@ public sealed class SteamNetworkManager : NetworkManager
         Travel?.OnServerConnect(connection);
         Clock?.OnServerConnect(connection);
         Agimats?.OnServerConnect(connection);
+        Shop?.OnServerConnect(connection);
     }
 
     public override void OnServerDisconnect(NetworkConnectionToClient connection)
@@ -242,6 +246,7 @@ public sealed class SteamNetworkManager : NetworkManager
         Travel?.ResetServer();
         Clock?.ResetServer();
         Agimats?.ResetServer();
+        Shop?.ResetServer();
         WhiteLady?.ResetServer();
         JoinsLocked = false;
         refusedConnections.Clear();
@@ -261,6 +266,7 @@ public sealed class SteamNetworkManager : NetworkManager
         Travel?.ResetClient();
         Clock?.ResetClient();
         Agimats?.ResetClient();
+        Shop?.ResetClient();
         WhiteLady?.ResetClient();
         base.OnStopClient();
         bool quitting = SteamSession.ApplicationQuitting || MenuLaunch.Quitting || MenuLaunch.ReturningToMenu;

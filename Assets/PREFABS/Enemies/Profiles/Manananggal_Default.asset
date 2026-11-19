@@ -22,7 +22,7 @@ MonoBehaviour:
   visionAngle: 70
   visionPitch: 50
   firstPassDelaySeconds: {x: 5, y: 15}
-  respawnDelaySeconds: {x: 8, y: 16}
+  respawnDelaySeconds: {x: 4, y: 8}
   edgeMargin: 12
   passDirectionStep: 0
   minimumBlocksCrossed: 1
@@ -34,3 +34,6 @@ MonoBehaviour:
   attackHeight: 2.5
   hitPauseSeconds: 2.5
   leaveTimeoutSeconds: 15
+  bloodMoonHoverIntervalSeconds: {x: 6, y: 12}
+  bloodMoonHoverSeconds: {x: 3, y: 5}
+  bloodMoonLookTurnSeconds: 1

@@ -11,7 +11,7 @@ using UnityEngine.SceneManagement;
 public static class MenuLaunch
 {
     public const string MenuSceneName = "MainMenu";
-    public const string GameSceneName = "SampleScene";
+    public const string GameSceneName = "Base";
 
     public enum Mode
     {

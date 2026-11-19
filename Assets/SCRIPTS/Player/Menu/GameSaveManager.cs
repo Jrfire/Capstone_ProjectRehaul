@@ -45,6 +45,7 @@ public sealed class GameSaveManager : MonoBehaviour
 
     private RoundClock Clock => RoundClock.Instance != null && RoundClock.Instance.enabled ? RoundClock.Instance : null;
     private AgimatBank Bank => AgimatBank.Instance != null && AgimatBank.Instance.enabled ? AgimatBank.Instance : null;
+    private ShopStock Shop => ShopStock.Instance != null && ShopStock.Instance.enabled ? ShopStock.Instance : null;
     private bool InBase => Clock == null || Clock.InBase;
 
     // ---------------------------------------------------------------- server lifecycle
@@ -73,6 +74,9 @@ public sealed class GameSaveManager : MonoBehaviour
         }
         Bank?.ServerRestore(data.gold, data.silver, data.bronze, data.turnedIn, data.money, data.roundReward);
         Clock?.ServerRestore(data.round, data.elapsed);
+        // After the clock, so the restored stock belongs to the restored round and is not rerolled.
+        if (Shop != null && data.shopRound > 0 && data.shopRound == data.round)
+            Shop.ServerRestore(data.shopRound, data.shopItems, data.shopSold);
         SpawnFloorItems(data.baseItems);
     }
 
@@ -222,6 +226,17 @@ public sealed class GameSaveManager : MonoBehaviour
         {
             data.round = clock.Round;
             data.elapsed = clock.Elapsed;
+        }
+        ShopStock shop = Shop;
+        if (shop != null && shop.StockRound > 0)
+        {
+            data.shopRound = shop.StockRound;
+            for (int index = 0; index < shop.Count; index++)
+            {
+                ItemDefinition item = shop.GetItem(index);
+                data.shopItems.Add(item != null ? item.Id : string.Empty);
+                data.shopSold.Add(shop.IsSold(index));
+            }
         }
         data.players.AddRange(profiles.Values);
         data.baseItems.AddRange(CaptureFloorItems());

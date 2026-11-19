@@ -86,6 +86,9 @@ public sealed class SteamSession : MonoBehaviour
 
     private void Start()
     {
+        // The NetworkManagerHUD is only a debug panel for Base opened directly in the Editor.
+        if (MenuLaunch.FromMenu)
+            GetComponent<NetworkManagerHUD>().enabled = false;
         if (!Initialized)
             return;
 

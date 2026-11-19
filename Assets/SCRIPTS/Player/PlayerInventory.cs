@@ -30,6 +30,7 @@ public sealed class PlayerInventory : NetworkBehaviour
     private float pickupRange = 5f;
 
     private readonly SyncList<string> slots = new SyncList<string>();
+    private readonly SyncList<int> durability = new SyncList<int>();
     [SyncVar] private string passiveItem = string.Empty;
     [SyncVar] private int syncedSelectedSlot;
 
@@ -52,6 +53,13 @@ public sealed class PlayerInventory : NetworkBehaviour
     private void Awake() => health = GetComponent<PlayerHealth>();
 
     public ItemDefinition GetItem(int slot) => slot >= 0 && slot < slots.Count ? Resolve(slots[slot]) : null;
+    public int GetDurability(int slot) =>
+        slot >= 0 && slot < durability.Count ? durability[slot] : 0;
+    public int GetMaxDurability(int slot)
+    {
+        ItemDefinition item = GetItem(slot);
+        return item != null ? item.Durability : 0;
+    }
 
     private ItemDefinition Resolve(string id) => catalog != null ? catalog.Find(id) : null;
 
@@ -59,6 +67,8 @@ public sealed class PlayerInventory : NetworkBehaviour
     {
         while (slots.Count < MaxSlots)
             slots.Add(string.Empty);
+        while (durability.Count < MaxSlots)
+            durability.Add(0);
     }
 
     public override void OnStartAuthority() => localSelectedSlot = syncedSelectedSlot;
@@ -208,7 +218,8 @@ public sealed class PlayerInventory : NetworkBehaviour
     {
         if (health != null && health.IsDead)
             return;
-        ServerDrop(ServerRemove(slot));
+        int uses = GetDurability(slot);
+        ServerDrop(ServerRemove(slot), uses);
     }
 
     [Command]
@@ -264,14 +275,14 @@ public sealed class PlayerInventory : NetworkBehaviour
         Vector3 delta = pickup.transform.position - transform.position;
         if (delta.sqrMagnitude > pickupRange * pickupRange)
             return false;
-        if (!ServerTryAdd(pickup.Item))
+        if (!ServerTryAdd(pickup.Item, pickup.Uses))
             return false;
         pickup.ServerCollect();
         return true;
     }
 
     /// <summary>Server: spawns a pickup for <paramref name="item"/> in front of the player.</summary>
-    public ItemPickup ServerDrop(ItemDefinition item)
+    public ItemPickup ServerDrop(ItemDefinition item, int uses = 0)
     {
         if (!NetworkServer.active || item == null)
             return null;
@@ -283,7 +294,7 @@ public sealed class PlayerInventory : NetworkBehaviour
         Vector3 forward = Vector3.ProjectOnPlane(transform.forward, Vector3.up);
         if (forward.sqrMagnitude < 0.0001f)
             forward = Vector3.forward;
-        return ItemPickup.ServerSpawn(itemPickupPrefab, item, transform.position + forward.normalized * dropDistance);
+        return ItemPickup.ServerSpawn(itemPickupPrefab, item, transform.position + forward.normalized * dropDistance, uses);
     }
 
     /// <summary>Server: drops every held item (active and passive) around the player, e.g. on death.</summary>
@@ -292,21 +303,27 @@ public sealed class PlayerInventory : NetworkBehaviour
         if (!NetworkServer.active)
             return 0;
         var dropped = new List<ItemDefinition>();
+        var droppedUses = new List<int>();
+        for (int index = 0; index < slots.Count; index++)
+        {
+            int uses = GetDurability(index);
+            ItemDefinition item = ServerRemove(index);
+            if (item != null)
+            {
+                dropped.Add(item);
+                droppedUses.Add(uses);
+            }
+        }
         ItemDefinition passive = ServerRemovePassive(dropped);
         if (passive != null)
             dropped.Add(passive);
-        for (int index = 0; index < slots.Count; index++)
-        {
-            ItemDefinition item = ServerRemove(index);
-            if (item != null)
-                dropped.Add(item);
-        }
         for (int index = 0; index < dropped.Count; index++)
         {
             float angle = dropped.Count > 1 ? index * 360f / dropped.Count : 0f;
             Vector3 offset = Quaternion.Euler(0f, angle, 0f) * Vector3.forward * (dropped.Count > 1 ? 0.6f : 0f);
             if (itemPickupPrefab != null)
-                ItemPickup.ServerSpawn(itemPickupPrefab, dropped[index], transform.position + offset);
+                ItemPickup.ServerSpawn(itemPickupPrefab, dropped[index], transform.position + offset,
+                    index < droppedUses.Count ? droppedUses[index] : 0);
         }
         return dropped.Count;
     }
@@ -317,7 +334,7 @@ public sealed class PlayerInventory : NetworkBehaviour
     /// Server: adds an item. Passive items take the passive slot when it is empty; active items take the first empty
     /// slot within <see cref="Capacity"/>. Returns false when there is no room (or the item is not in the catalog).
     /// </summary>
-    public bool ServerTryAdd(ItemDefinition item)
+    public bool ServerTryAdd(ItemDefinition item, int uses = 0)
     {
         if (!NetworkServer.active || item == null || Resolve(item.Id) == null)
             return false;
@@ -333,6 +350,11 @@ public sealed class PlayerInventory : NetworkBehaviour
             if (GetItem(index) == null)
             {
                 slots[index] = item.Id;
+                int remaining = uses > 0 ? Mathf.Min(uses, item.Durability) : item.Durability;
+                if (durability.Count <= index)
+                    durability.Add(remaining);
+                else
+                    durability[index] = remaining;
                 return true;
             }
         }
@@ -346,6 +368,8 @@ public sealed class PlayerInventory : NetworkBehaviour
         if (!NetworkServer.active || item == null)
             return null;
         slots[slot] = string.Empty;
+        if (slot >= 0 && slot < durability.Count)
+            durability[slot] = 0;
         return item;
     }
 
@@ -380,6 +404,8 @@ public sealed class PlayerInventory : NetworkBehaviour
         {
             if (!string.IsNullOrEmpty(slots[index]))
                 slots[index] = string.Empty;
+            if (durability.Count > index)
+                durability[index] = 0;
         }
     }
 
@@ -406,6 +432,8 @@ public sealed class PlayerInventory : NetworkBehaviour
         ServerClear();
         while (slots.Count < MaxSlots)
             slots.Add(string.Empty);
+        while (durability.Count < MaxSlots)
+            durability.Add(0);
         ItemDefinition passive = Resolve(passiveId);
         if (passive != null && passive.Kind == ItemSlotKind.Passive)
             passiveItem = passive.Id;
@@ -415,7 +443,30 @@ public sealed class PlayerInventory : NetworkBehaviour
         {
             ItemDefinition item = Resolve(slotIds[index]);
             if (item != null && item.Kind != ItemSlotKind.Passive)
+            {
                 slots[index] = item.Id;
+                durability[index] = item.Durability;
+            }
         }
+    }
+
+    /// <summary>Consumes durability after a successful weapon hit. Returns true when the item broke and was removed.</summary>
+    [Server]
+    public bool ServerConsumeDurability(int slot)
+    {
+        if (!NetworkServer.active || slot < 0 || slot >= durability.Count)
+            return false;
+        ItemDefinition item = GetItem(slot);
+        if (item == null || !item.DurabilityEnabled)
+            return false;
+        if (durability[slot] <= 0)
+            durability[slot] = item.Durability;
+        durability[slot] = Mathf.Max(0, durability[slot] - 1);
+        if (durability[slot] == 0)
+        {
+            ServerRemove(slot);
+            return true;
+        }
+        return false;
     }
 }

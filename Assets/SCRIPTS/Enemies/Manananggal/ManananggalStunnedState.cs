@@ -25,6 +25,6 @@ public sealed class ManananggalStunnedState : EnemyState
         brain.Flight.Stop();
         timeLeft -= deltaTime;
         if (timeLeft <= 0f)
-            brain.ChangeState(brain.Leaving);
+            brain.ChangeState(brain.AfterChaseState);
     }
 }

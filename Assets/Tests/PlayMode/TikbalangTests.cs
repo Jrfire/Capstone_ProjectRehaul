@@ -326,6 +326,24 @@ public sealed class TikbalangTests : InputTestFixture
     }
 
     [UnityTest]
+    public IEnumerator AMolotovFireBreaksOffTheChaseAndSendsItHome()
+    {
+        profile.walkSpeed = 0f;
+        SpawnArena();
+        Place(remotePlayer, new Vector3(-45f, 0f, -45f));
+        Place(localPlayer, new Vector3(0f, 0f, 5f));
+        TikbalangBrain brain = CreateTikbalang(Vector3.zero, 0f, homeHalfSize: 6f);
+        yield return WaitUntil(() => brain.StateName == "Chase", 1f, "The chase did not start.");
+
+        FireZone fire = TestFires.Spawn(brain.transform.position, created);
+        yield return WaitUntil(() => brain.StateName == "Returning" || brain.StateName == "Idle", 1f, "The fire did not end the chase.");
+        Assert.That(brain.ChaseTarget, Is.Null);
+        Assert.That(brain.NearbyFire, Is.SameAs(fire));
+        yield return new WaitForSeconds(0.5f);
+        Assert.That(brain.StateName, Is.Not.EqualTo("Chase"), "It will not chase again beside the fire.");
+    }
+
+    [UnityTest]
     public IEnumerator StunDropsTheChaseAndThenWalksHome()
     {
         profile.walkSpeed = 0f;

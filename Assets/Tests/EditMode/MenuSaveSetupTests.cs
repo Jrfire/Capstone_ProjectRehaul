@@ -14,7 +14,7 @@ using UnityEngine.UI;
 public sealed class MenuSaveSetupTests
 {
     private const string MenuScenePath = "Assets/Scenes/MainMenu.unity";
-    private const string SampleScenePath = "Assets/Scenes/SampleScene.unity";
+    private const string BasePath = "Assets/Scenes/Base.unity";
     private const string PlayerPath = "Assets/PREFABS/NetworkPlayer.prefab";
     private const string ActionsPath = "Assets/InputSystem_Actions.inputactions";
     private const string SettingsPath = "Assets/PREFABS/SettingsPanel.prefab";
@@ -39,13 +39,40 @@ public sealed class MenuSaveSetupTests
     }
 
     [Test]
+    public void InteractPromptsShowThePrimaryInteractBinding()
+    {
+        var action = new InputAction("Interact", InputActionType.Button);
+        action.AddBinding("<Gamepad>/buttonSouth");
+        action.AddBinding("<Keyboard>/e").WithGroup("Keyboard&Mouse");
+        action.AddBinding("<Keyboard>/r").WithGroup("Keyboard&Mouse");
+        try
+        {
+            Assert.That(GameSettings.PrimaryBindingDisplay(action), Is.EqualTo("E"), "The first keyboard/mouse binding is the primary key.");
+            action.ApplyBindingOverride(1, "<Keyboard>/f");
+            Assert.That(GameSettings.PrimaryBindingDisplay(action), Is.EqualTo("F"), "Rebinding changes the shown key.");
+            Assert.That(GameSettings.PrimaryBindingDisplay(null), Is.EqualTo("E"));
+        }
+        finally
+        {
+            action.Dispose();
+        }
+
+        Assert.That(NametagHud.FormatPrompt("[{1}] {0}", "Talk", "F"), Is.EqualTo("[F] Talk"));
+        Assert.That(NametagHud.FormatPrompt("[E] {0}", "Talk", "F"), Is.EqualTo("[F] Talk"), "Old formats follow the binding too.");
+        Assert.That(RoundClockHud.CountdownText(true, 3f, false, "F"), Does.EndWith("Press F on the back of the jeepney"));
+
+        GameObject hud = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/PREFABS/PlayerHud.prefab");
+        Assert.That(hud.GetComponentInChildren<NametagHud>(true).promptFormat, Does.Contain("{1}").And.Not.Contain("[E]"));
+    }
+
+    [Test]
     public void MainMenuIsTheFirstSceneAndIsWired()
     {
         EditorBuildSettingsScene[] scenes = EditorBuildSettings.scenes;
         Assert.That(scenes.Length, Is.GreaterThan(1));
         Assert.That(scenes[0].path, Is.EqualTo(MenuScenePath), "The game starts in the main menu.");
         Assert.That(scenes[0].enabled, Is.True);
-        Assert.That(scenes.Any(scene => scene.path == SampleScenePath && scene.enabled), Is.True);
+        Assert.That(scenes.Any(scene => scene.path == BasePath && scene.enabled), Is.True);
 
         Scene menu = EditorSceneManager.OpenScene(MenuScenePath, OpenSceneMode.Additive);
         try
@@ -71,6 +98,13 @@ public sealed class MenuSaveSetupTests
             Assert.That(InScene<EventSystem>(menu).Count(), Is.EqualTo(1));
             Assert.That(InScene<Camera>(menu).Count(), Is.EqualTo(1));
             Assert.That(InScene<NetworkManager>(menu), Is.Empty, "The menu has no NetworkManager.");
+            foreach (string name in new[] { "playButton", "settingsButton", "quitButton", "hostButton", "joinButton", "slotPlayButton" })
+            {
+                var button = (RectTransform)((Button)serialized.FindProperty(name).objectReferenceValue).transform;
+                Assert.That(button.anchorMin.x, Is.Zero, $"{name} is anchored to the left edge.");
+                Assert.That(button.anchoredPosition.x + button.sizeDelta.x * (1f - button.pivot.x), Is.LessThan(1920f * 0.5f),
+                    $"{name} stays in the left half so the animated background is visible.");
+            }
         }
         finally
         {
@@ -116,7 +150,7 @@ public sealed class MenuSaveSetupTests
         Assert.That(PrefabUtility.GetCorrespondingObjectFromSource(pauseSettings.gameObject), Is.SameAs(settingsPrefab),
             "Options uses the same settings as the main menu.");
 
-        Scene hub = EditorSceneManager.OpenScene(SampleScenePath, OpenSceneMode.Additive);
+        Scene hub = EditorSceneManager.OpenScene(BasePath, OpenSceneMode.Additive);
         try
         {
             PauseMenu placed = InScene<PauseMenu>(hub).Single();
@@ -150,7 +184,7 @@ public sealed class MenuSaveSetupTests
         Assert.That(sprites, Is.Not.Null);
         Assert.That(sprites.GetComponent<ReducedPixelation>(), Is.Not.Null, "Other players' sprites are not pixelated.");
 
-        Scene hub = EditorSceneManager.OpenScene(SampleScenePath, OpenSceneMode.Additive);
+        Scene hub = EditorSceneManager.OpenScene(BasePath, OpenSceneMode.Additive);
         try
         {
             AlbularyoInteractable albularyo = InScene<AlbularyoInteractable>(hub).Single();
@@ -166,7 +200,7 @@ public sealed class MenuSaveSetupTests
     [Test]
     public void TheNetworkManagerSavesTheGame()
     {
-        Scene hub = EditorSceneManager.OpenScene(SampleScenePath, OpenSceneMode.Additive);
+        Scene hub = EditorSceneManager.OpenScene(BasePath, OpenSceneMode.Additive);
         try
         {
             NetworkManager manager = InScene<NetworkManager>(hub).Single();

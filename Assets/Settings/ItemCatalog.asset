@@ -12,4 +12,10 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 7db9626f5962a74479fc9f2b37b2444e, type: 3}
   m_Name: ItemCatalog
   m_EditorClassIdentifier: Capstone.Player::ItemCatalog
-  items: []
+  items:
+  - {fileID: 11400000, guid: 54c3f742243a40943af2ace99274a74b, type: 2}
+  - {fileID: 11400000, guid: 2da555d5d70c3584cb39e1b03347513c, type: 2}
+  - {fileID: 11400000, guid: 3605ed5fabd9b524c9becbe83e96768e, type: 2}
+  - {fileID: 11400000, guid: 9ead7f8b370bf3a49973f2b4f8cbf293, type: 2}
+  - {fileID: 11400000, guid: 6935df87384d56c478cbe2cd11016a04, type: 2}
+  keyTemplate: {fileID: 11400000, guid: d4e1c534273fbe8418e4ada1fffde4d8, type: 2}

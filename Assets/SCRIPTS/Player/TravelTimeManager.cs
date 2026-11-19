@@ -22,7 +22,7 @@ public sealed class TravelTimeManager : MonoBehaviour
 {
     [SerializeField] private List<TravelTimeCost> costs = new List<TravelTimeCost>
     {
-        new TravelTimeCost { sceneName = "StreetsTest", hours = 1f },
+        new TravelTimeCost { sceneName = "Streets", hours = 1f },
     };
 
     private static readonly List<TravelTimeManager> managers = new List<TravelTimeManager>();

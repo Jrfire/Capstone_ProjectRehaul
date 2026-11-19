@@ -41,13 +41,13 @@ public sealed class RoundClockSetupTests
     [Test]
     public void BaseSceneHasTheClockAndTravelCosts()
     {
-        Scene hub = EditorSceneManager.OpenScene("Assets/Scenes/SampleScene.unity", OpenSceneMode.Additive);
+        Scene hub = EditorSceneManager.OpenScene("Assets/Scenes/Base.unity", OpenSceneMode.Additive);
         try
         {
             NetworkManager manager = InScene<NetworkManager>(hub).Single();
             RoundClock clock = manager.GetComponent<RoundClock>();
             Assert.That(clock, Is.Not.Null, "The round clock lives on the persistent NetworkManager.");
-            Assert.That(clock.BaseSceneName, Is.EqualTo("SampleScene"));
+            Assert.That(clock.BaseSceneName, Is.EqualTo("Base"));
             Assert.That(clock.RoundSeconds, Is.EqualTo(45f * 60f));
             Assert.That(clock.ClockHours, Is.EqualTo(12));
             Assert.That(clock.HourSeconds, Is.EqualTo(225f));
@@ -55,8 +55,8 @@ public sealed class RoundClockSetupTests
             Assert.That(clock.ReturnCountdownSeconds, Is.EqualTo(30f));
 
             TravelTimeManager costs = InScene<TravelTimeManager>(hub).Single();
-            Assert.That(costs.TryGetCost("StreetsTest", out float hours), Is.True);
-            Assert.That(hours, Is.GreaterThan(0f), "The StreetsTest cost is user-tunable.");
+            Assert.That(costs.TryGetCost("Streets", out float hours), Is.True);
+            Assert.That(hours, Is.GreaterThan(0f), "The Streets cost is user-tunable.");
             Assert.That(costs.TryGetCost("Elsewhere", out _), Is.False);
         }
         finally

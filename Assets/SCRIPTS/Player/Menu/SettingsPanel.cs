@@ -352,13 +352,7 @@ public sealed class SettingsPanel : MonoBehaviour
         RefreshBindingTexts();
     }
 
-    private static bool IsKeyboardMouse(InputBinding binding)
-    {
-        if (!string.IsNullOrEmpty(binding.groups) && binding.groups.Contains("Keyboard&Mouse"))
-            return true;
-        string path = binding.effectivePath ?? binding.path ?? string.Empty;
-        return path.StartsWith("<Keyboard>") || path.StartsWith("<Mouse>");
-    }
+    private static bool IsKeyboardMouse(InputBinding binding) => GameSettings.IsKeyboardMouse(binding);
 
     private static string Nicify(string name)
     {

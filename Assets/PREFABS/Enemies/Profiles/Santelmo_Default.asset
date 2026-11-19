@@ -18,8 +18,13 @@ MonoBehaviour:
   eyeHeight: 1.4
   visionRange: 16
   visionAngle: 70
-  gazeSeconds: 10
+  gazeSeconds: 7
   lostSightGraceSeconds: 0.75
   escapeCooldownSeconds: 8
   tranceCooldownSeconds: 90
+  investigateSpeed: 3
+  investigateLookSeconds: 3
+  investigateTimeoutSeconds: 20
+  bloodMoonWanderSpeed: 4.5
+  bloodMoonGazeSeconds: 4
   defaultStunSeconds: 3

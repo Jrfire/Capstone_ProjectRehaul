@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Collections;
 using Mirror;
 using UnityEngine;
 
@@ -22,6 +23,7 @@ public sealed class ManananggalBrain : EnemyBrain
     private bool fearSourceWasEnabled;
     private bool appliedHidden;
     private bool hasApplied;
+    private double repelledUntil = double.NegativeInfinity;
 
     public ManananggalProfile Profile => profile;
     public EnemyFlightMotor Flight { get; private set; }
@@ -32,12 +34,19 @@ public sealed class ManananggalBrain : EnemyBrain
     public bool IsChasing => chaseTarget != null;
     /// <summary>True while despawned between passes (invisible, no collider, no fear effect).</summary>
     public bool IsHidden => hidden;
+    public bool IsRepelled => NetworkTime.time < repelledUntil;
     public override bool RoamsWholeMap => true;
 
     public ManananggalHuntingState Hunting { get; private set; }
     public ManananggalChaseState Chase { get; private set; }
     public ManananggalLeavingState Leaving { get; private set; }
     public ManananggalStunnedState Stunned { get; private set; }
+    public ManananggalCirclingState Circling { get; private set; }
+
+    /// <summary>During a blood moon it never despawns: it circles the map instead of passing and leaving.</summary>
+    public bool IsBloodMoon => MoonSky.BloodMoon;
+    /// <summary>The state it falls back to after a chase or stun: Circling during a blood moon, else Leaving.</summary>
+    public EnemyState AfterChaseState => IsBloodMoon ? (EnemyState)Circling : Leaving;
 
     protected override void Awake()
     {
@@ -61,6 +70,7 @@ public sealed class ManananggalBrain : EnemyBrain
         Chase = new ManananggalChaseState(this);
         Leaving = new ManananggalLeavingState(this);
         Stunned = new ManananggalStunnedState(this);
+        Circling = new ManananggalCirclingState(this);
         ApplyVision();
         ApplyHidden();
     }
@@ -126,7 +136,7 @@ public sealed class ManananggalBrain : EnemyBrain
     [Server]
     public void EndChase()
     {
-        ChangeState(Leaving);
+        ChangeState(AfterChaseState);
     }
 
     /// <summary>Server: drops any chase and hovers still for <paramref name="seconds"/> (negative = profile default), then leaves.</summary>
@@ -143,6 +153,42 @@ public sealed class ManananggalBrain : EnemyBrain
             return false;
         Stun(weapon != null && weapon.StunSeconds > 0f ? weapon.StunSeconds : -1f);
         return true;
+    }
+
+    /// <summary>
+    /// Server: garlic or fire. Drops any chase, flies out of the map away from <paramref name="from"/> (when visible) and
+    /// makes no pass, chase or circling for <paramref name="seconds"/>; then the normal routine resumes.
+    /// </summary>
+    [Server]
+    public void RepelFor(float seconds, Vector3? from = null)
+    {
+        repelledUntil = System.Math.Max(repelledUntil, NetworkTime.time + Mathf.Max(0f, seconds));
+        ClearChaseTarget();
+        if (hidden)
+        {
+            if (CurrentState != Hunting)
+                ChangeState(Hunting);
+            return;
+        }
+        Leaving.AwayFrom = from;
+        ChangeState(Leaving);
+    }
+
+    /// <summary>Seconds left before a repelled Manananggal hunts again (0 when not repelled).</summary>
+    public float RepelRemaining => Mathf.Max(0f, (float)(repelledUntil - NetworkTime.time));
+
+    public override bool ServerTakeGarlic(NetworkIdentity thrower, float seconds)
+    {
+        if (!isServer || hidden)
+            return false;
+        RepelFor(seconds, thrower != null ? thrower.transform.position : (Vector3?)null);
+        return true;
+    }
+
+    protected override void ServerReactToFire(FireZone fire, bool inCore)
+    {
+        if (!hidden && !IsRepelled)
+            RepelFor(fire.RepelSeconds, fire.transform.position);
     }
 
     internal void ClearChaseTarget() => chaseTarget = null;

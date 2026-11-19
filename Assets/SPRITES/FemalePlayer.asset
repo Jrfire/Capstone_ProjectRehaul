@@ -1,0 +1,127 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c2192a5907374f5f8c5d53435b80a2aa, type: 3}
+  m_Name: FemalePlayer
+  m_EditorClassIdentifier: Capstone.Player::CharacterDefinition
+  idle:
+    assignmentMode: 1
+    manualFramesPerDirection: 1
+    spriteSheet: {fileID: 0}
+    cellSize: {x: 64, y: 64}
+    framesPerSecond: 4
+    pixelsPerUnit: 100
+    directional: 1
+    frames:
+    - {fileID: 21300000, guid: 88849a18121e5ea4193326ae5dffe517, type: 3}
+    - {fileID: 21300000, guid: ece4f56a772de9c47a406cb425b50b42, type: 3}
+    - {fileID: 21300000, guid: a5a1d7186c56516428a5e7f896a1adef, type: 3}
+    - {fileID: 21300000, guid: 81a62c6b05ee5c143b25d1f605f4f439, type: 3}
+    generatedSheet: {fileID: 0}
+    generatedCellSize: {x: 0, y: 0}
+    generatedPixelsPerUnit: 0
+  walk:
+    assignmentMode: 1
+    manualFramesPerDirection: 4
+    spriteSheet: {fileID: 0}
+    cellSize: {x: 64, y: 64}
+    framesPerSecond: 4
+    pixelsPerUnit: 100
+    directional: 1
+    frames:
+    - {fileID: 21300000, guid: 81e129697c47088498317aeb45874e6e, type: 3}
+    - {fileID: 21300000, guid: e1d5be70bd698ec49b6ffdaf78eec175, type: 3}
+    - {fileID: 21300000, guid: a6a00d4e09730064b92d95cef6478e6c, type: 3}
+    - {fileID: 21300000, guid: 029a7ad6a81bf3045819581f2344cb4e, type: 3}
+    - {fileID: 21300000, guid: e66f7dd3bb0377e449a01438e93584a0, type: 3}
+    - {fileID: 21300000, guid: 990685df87c67f54e8b30fb426e253ad, type: 3}
+    - {fileID: 21300000, guid: 1b56b7600182a6640bbe0f62f6104b0a, type: 3}
+    - {fileID: 21300000, guid: e744ebd0fa1ca6448be433b51e9541e5, type: 3}
+    - {fileID: 21300000, guid: 54da8bf27898d9c4bbc816aa837b725e, type: 3}
+    - {fileID: 21300000, guid: 527596f66d2fad445ad41dfa5167d6eb, type: 3}
+    - {fileID: 21300000, guid: 987e80b1b479e2e4e855e29d61432048, type: 3}
+    - {fileID: 21300000, guid: 0d4bff0c999c77c4fb71d21a8ae72d0a, type: 3}
+    - {fileID: 21300000, guid: ad1168a73ef43ab439b9edaa2f2274c8, type: 3}
+    - {fileID: 21300000, guid: beca333b777501046b5a7bdb6be52d82, type: 3}
+    - {fileID: 21300000, guid: 530ddc02c6e84d74b8e1b1fc01f70d19, type: 3}
+    - {fileID: 21300000, guid: 6b44e7f3b63727745a2c8c92b34e1e25, type: 3}
+    generatedSheet: {fileID: 0}
+    generatedCellSize: {x: 0, y: 0}
+    generatedPixelsPerUnit: 0
+  run:
+    assignmentMode: 1
+    manualFramesPerDirection: 4
+    spriteSheet: {fileID: 0}
+    cellSize: {x: 64, y: 64}
+    framesPerSecond: 8
+    pixelsPerUnit: 100
+    directional: 1
+    frames:
+    - {fileID: 21300000, guid: 5e7442f4db023334dbe9346b80f56bac, type: 3}
+    - {fileID: 21300000, guid: 35a8bd7e0e134e74582272d06bfd0432, type: 3}
+    - {fileID: 21300000, guid: b027c91116debdf48989a0388a3b8fb1, type: 3}
+    - {fileID: 21300000, guid: f77998b3c7b44134ea96813146b05499, type: 3}
+    - {fileID: 21300000, guid: f471f4dbe3ca2df4487affcab1435f86, type: 3}
+    - {fileID: 21300000, guid: f748cc6fe52df1041acf8478fae96dcc, type: 3}
+    - {fileID: 21300000, guid: 92018f9756b133f449ab0d74a3bed3ab, type: 3}
+    - {fileID: 21300000, guid: 92018f9756b133f449ab0d74a3bed3ab, type: 3}
+    - {fileID: 21300000, guid: 324215ec1995b8a4c939e563711f9668, type: 3}
+    - {fileID: 21300000, guid: 867c4849db4668546aeb5167acaa7f4e, type: 3}
+    - {fileID: 21300000, guid: f1a6bc9422cf3834ea23ca2e61bd790a, type: 3}
+    - {fileID: 21300000, guid: cfa6cc172cdeb6a4daec65d98b6edd65, type: 3}
+    - {fileID: 21300000, guid: cfc8a483e46a2bc449f1c0186ce13f5c, type: 3}
+    - {fileID: 21300000, guid: d5622dc8fecc38c4891531942ada5a55, type: 3}
+    - {fileID: 21300000, guid: cff8090f8f13d2749b67c4e9b4afd63f, type: 3}
+    - {fileID: 21300000, guid: 5b68ee50b2b5e9f4a86247fd87564b72, type: 3}
+    generatedSheet: {fileID: 0}
+    generatedCellSize: {x: 0, y: 0}
+    generatedPixelsPerUnit: 0
+  attack:
+    assignmentMode: 1
+    manualFramesPerDirection: 4
+    spriteSheet: {fileID: 0}
+    cellSize: {x: 64, y: 64}
+    framesPerSecond: 8
+    pixelsPerUnit: 100
+    directional: 1
+    frames:
+    - {fileID: 21300000, guid: b6ecf1169d4232140bb0172a02f3d59e, type: 3}
+    - {fileID: 21300000, guid: cb2c11d06e9e1a74781c1f48838ade2c, type: 3}
+    - {fileID: 21300000, guid: 4e731ceda1706b74998671cd9e6dafff, type: 3}
+    - {fileID: 21300000, guid: 5a6742f821ac21a43af1f69b271cb10a, type: 3}
+    - {fileID: 21300000, guid: 7313950e133c05f4a8565eba5f220dd9, type: 3}
+    - {fileID: 21300000, guid: a2bfaf8859e3e2c42a4bb5737d76ea25, type: 3}
+    - {fileID: 21300000, guid: 83f5134fa54df85438eb9d3bfa7bfb56, type: 3}
+    - {fileID: 21300000, guid: 59ed2b2671091fc439a8378b063b64d6, type: 3}
+    - {fileID: 21300000, guid: 099f80cfc2328fb45abae0e49a027803, type: 3}
+    - {fileID: 21300000, guid: 4b7db440ea5c4ad469d5da2c05dd14c4, type: 3}
+    - {fileID: 21300000, guid: ae2bb6b658267a34ebf64a68f78aa5d8, type: 3}
+    - {fileID: 21300000, guid: 8df628366b9fafe41baa5c229efbdeb2, type: 3}
+    - {fileID: 21300000, guid: dfcb1c311a16e0543af96a89d261777d, type: 3}
+    - {fileID: 21300000, guid: df5ac25d007251847aa81bd8b212fbb5, type: 3}
+    - {fileID: 21300000, guid: 23d9f5a7db172e34195c0595a9837383, type: 3}
+    - {fileID: 21300000, guid: e9d2afcad1c851643a602170394d4b41, type: 3}
+    generatedSheet: {fileID: 0}
+    generatedCellSize: {x: 0, y: 0}
+    generatedPixelsPerUnit: 0
+  dead:
+    assignmentMode: 1
+    manualFramesPerDirection: 1
+    spriteSheet: {fileID: 0}
+    cellSize: {x: 64, y: 64}
+    framesPerSecond: 8
+    pixelsPerUnit: 100
+    directional: 0
+    frames:
+    - {fileID: 21300000, guid: 4a348b99c9f64d84791f1b1eff72397e, type: 3}
+    generatedSheet: {fileID: 0}
+    generatedCellSize: {x: 0, y: 0}
+    generatedPixelsPerUnit: 0

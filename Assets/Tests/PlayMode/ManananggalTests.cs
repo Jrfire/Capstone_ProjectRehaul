@@ -61,6 +61,7 @@ public sealed class ManananggalTests : InputTestFixture
         }
         Object.DestroyImmediate(profile);
         NoiseSystem.ClearPulses();
+        MoonSky.BloodMoon = false;
         PlayerStamina.TravelPaused = false;
         PlayerPersistence.ResetLocalPlayerState();
         Transport.active = previousTransport;
@@ -108,7 +109,7 @@ public sealed class ManananggalTests : InputTestFixture
         Assert.That(brain.Hunting.CompletedPassCount, Is.EqualTo(1));
         Assert.That(brain.IsHidden, Is.True, "It despawns at the far side.");
         Assert.That(brain.Hunting.Phase, Is.EqualTo(ManananggalHuntingState.HuntPhase.Waiting));
-        Assert.That(brain.Hunting.TimeRemaining, Is.InRange(14.9f, 40f), "It waits 15-40 s before the next pass.");
+        Assert.That(brain.Hunting.TimeRemaining, Is.InRange(3.9f, 8f), "It waits 4-8 s before the next pass.");
 
         brain.Hunting.SkipWait();
         yield return WaitUntil(() => brain.Hunting.PassCount == 2, 1f, "The next pass did not start.");
@@ -202,7 +203,35 @@ public sealed class ManananggalTests : InputTestFixture
 
         yield return WaitUntil(() => brain.StateName == "Hunting", 5f, "It never left.");
         Assert.That(brain.IsHidden, Is.True);
-        Assert.That(brain.Hunting.TimeRemaining, Is.InRange(14.9f, 40f), "It waits the respawn delay before hunting again.");
+        Assert.That(brain.Hunting.TimeRemaining, Is.InRange(3.9f, 8f), "It waits the respawn delay before hunting again.");
+    }
+
+    [UnityTest]
+    public IEnumerator BloodMoonCirclesWithoutDespawningAndStopsToHover()
+    {
+        MoonSky.BloodMoon = true;
+        profile.bloodMoonHoverIntervalSeconds = new Vector2(30f, 30f);
+        profile.bloodMoonHoverSeconds = new Vector2(1f, 1f);
+        SpawnPlayers();
+        Place(localPlayer, new Vector3(300f, 0f, 300f));
+        Place(remotePlayer, new Vector3(-300f, 0f, 300f));
+        ManananggalBrain brain = CreateManananggal(new Vector3(0f, 0f, -10f));
+        yield return WaitUntil(() => brain.StateName == "Circling", 1f, "A blood moon Manananggal did not start circling.");
+        Assert.That(brain.IsHidden, Is.False, "It never despawns under a blood moon.");
+
+        Vector3 before = brain.transform.position;
+        yield return new WaitForSeconds(0.5f);
+        Assert.That(Vector3.Distance(before, brain.transform.position), Is.GreaterThan(1f), "It circles the map.");
+        Assert.That(brain.transform.position.y, Is.EqualTo(10f).Within(0.5f), "It circles at hunting altitude.");
+
+        brain.Circling.HoverNow();
+        yield return WaitUntil(() => brain.Circling.IsHovering, 1f, "It never stopped to hover.");
+        Vector3 hoverAt = brain.transform.position;
+        yield return new WaitForSeconds(0.4f);
+        Assert.That(Vector3.Distance(hoverAt, brain.transform.position), Is.LessThan(0.05f), "It hovers in place to look around.");
+        yield return WaitUntil(() => !brain.Circling.IsHovering, 2f, "The hover never ended.");
+        Assert.That(brain.StateName, Is.EqualTo("Circling"));
+        Assert.That(brain.IsHidden, Is.False);
     }
 
     [UnityTest]
@@ -243,6 +272,28 @@ public sealed class ManananggalTests : InputTestFixture
         {
             Object.DestroyImmediate(stick);
         }
+    }
+
+    [UnityTest]
+    public IEnumerator BawangOrFireDriveItAwayWithoutPassesForTheRepelTime()
+    {
+        profile.firstPassDelaySeconds = new Vector2(30f, 30f);
+        profile.contactDamage = 0;
+        SpawnPlayers();
+        ManananggalBrain brain = CreateManananggal(new Vector3(0f, 0f, -10f));
+        yield return WaitUntil(() => brain.CurrentState == brain.Hunting, 1f, "It did not start hunting.");
+        Assert.That(brain.ServerTakeGarlic(localPlayer.GetComponent<NetworkIdentity>(), 30f), Is.False, "Hidden, it cannot be hit.");
+
+        brain.SetHidden(false);
+        brain.StartChase(localPlayer.GetComponent<PlayerPersistence>());
+        Assert.That(brain.ServerTakeGarlic(localPlayer.GetComponent<NetworkIdentity>(), 30f), Is.True);
+        Assert.That(brain.StateName, Is.EqualTo("Leaving"), "Garlic sends it away.");
+        Assert.That(brain.ChaseTarget, Is.Null);
+        Assert.That(brain.IsRepelled, Is.True);
+        Assert.That(brain.RepelRemaining, Is.GreaterThan(29f), "No fly-by for 30 seconds.");
+        yield return WaitUntil(() => brain.IsHidden, 15f, "It never left the map.");
+        yield return new WaitForSeconds(0.5f);
+        Assert.That(brain.IsHidden, Is.True, "It stays away while repelled.");
     }
 
     [UnityTest]

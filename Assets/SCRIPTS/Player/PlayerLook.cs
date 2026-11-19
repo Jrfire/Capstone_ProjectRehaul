@@ -105,6 +105,8 @@ public sealed class PlayerLook : NetworkBehaviour
             return;
 
         Vector2 delta = lookAction.ReadValue<Vector2>() * mouseSensitivity;
+        if (ControlInversion.Active)
+            delta = -delta;
         transform.Rotate(Vector3.up, delta.x, Space.World);
         // Mouse delta already measures movement this frame; multiplying by deltaTime changes sensitivity.
         pitch = Mathf.Clamp(pitch - delta.y, -pitchLimit, pitchLimit);

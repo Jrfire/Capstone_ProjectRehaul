@@ -12,8 +12,12 @@ public sealed class PlayerHud : MonoBehaviour
     [SerializeField] private Image[] hearts = new Image[3];
     [Header("Assign your heart sprites")]
     [SerializeField] private Sprite fullHeart;
+
+    public Sprite FullHeart => fullHeart;
     [SerializeField] private Sprite halfHeart;
     [SerializeField] private Sprite emptyHeart;
+
+    public Sprite EmptyHeart => emptyHeart;
 
     [Header("Stamina")]
     [SerializeField] private GameObject staminaPanel;

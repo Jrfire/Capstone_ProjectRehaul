@@ -1,0 +1,58 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: cbd51a40f9da4dfa8e191c9bdd94b8b9, type: 3}
+  m_Name: Tiktik_Sprites
+  m_EditorClassIdentifier: Capstone.Enemies::EnemySpriteDefinition
+  idle:
+    assignmentMode: 1
+    manualFramesPerDirection: 1
+    spriteSheet: {fileID: 0}
+    cellSize: {x: 64, y: 64}
+    framesPerSecond: 1
+    pixelsPerUnit: 100
+    directional: 1
+    frames:
+    - {fileID: 988571688, guid: 669f71c1408c6784f99f061ebb7e3ac0, type: 3}
+    - {fileID: 982673445, guid: bd53ebca4aaa4ff4b8ace73e88fad78b, type: 3}
+    - {fileID: 1133833444, guid: fb924a3932481ea4ebbdf120d7e2ca27, type: 3}
+    - {fileID: -1675032082, guid: b80e2f2595680c448a39b71b812b2207, type: 3}
+    generatedSheet: {fileID: 0}
+    generatedCellSize: {x: 0, y: 0}
+    generatedPixelsPerUnit: 0
+  moving:
+    assignmentMode: 1
+    manualFramesPerDirection: 4
+    spriteSheet: {fileID: 0}
+    cellSize: {x: 64, y: 64}
+    framesPerSecond: 10
+    pixelsPerUnit: 100
+    directional: 1
+    frames:
+    - {fileID: 988571688, guid: 669f71c1408c6784f99f061ebb7e3ac0, type: 3}
+    - {fileID: -997922800, guid: 669f71c1408c6784f99f061ebb7e3ac0, type: 3}
+    - {fileID: -1978999849, guid: 669f71c1408c6784f99f061ebb7e3ac0, type: 3}
+    - {fileID: -1162762535, guid: 669f71c1408c6784f99f061ebb7e3ac0, type: 3}
+    - {fileID: 982673445, guid: bd53ebca4aaa4ff4b8ace73e88fad78b, type: 3}
+    - {fileID: 1584726369, guid: bd53ebca4aaa4ff4b8ace73e88fad78b, type: 3}
+    - {fileID: 99350852, guid: bd53ebca4aaa4ff4b8ace73e88fad78b, type: 3}
+    - {fileID: -1301116117, guid: bd53ebca4aaa4ff4b8ace73e88fad78b, type: 3}
+    - {fileID: 1133833444, guid: fb924a3932481ea4ebbdf120d7e2ca27, type: 3}
+    - {fileID: -959619432, guid: fb924a3932481ea4ebbdf120d7e2ca27, type: 3}
+    - {fileID: -1596011046, guid: fb924a3932481ea4ebbdf120d7e2ca27, type: 3}
+    - {fileID: -1249117859, guid: fb924a3932481ea4ebbdf120d7e2ca27, type: 3}
+    - {fileID: -1675032082, guid: b80e2f2595680c448a39b71b812b2207, type: 3}
+    - {fileID: 565730322, guid: b80e2f2595680c448a39b71b812b2207, type: 3}
+    - {fileID: -1389044583, guid: b80e2f2595680c448a39b71b812b2207, type: 3}
+    - {fileID: -1331745920, guid: b80e2f2595680c448a39b71b812b2207, type: 3}
+    generatedSheet: {fileID: 0}
+    generatedCellSize: {x: 0, y: 0}
+    generatedPixelsPerUnit: 0

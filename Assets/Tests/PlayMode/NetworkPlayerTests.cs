@@ -335,8 +335,8 @@ public sealed class NetworkPlayerTests : InputTestFixture
         Assert.That(localPlayer.GetComponent<PlayerMovement>().IsSprinting, Is.True);
         Assert.That(localCamera.fieldOfView, Is.EqualTo(baseFov + sprintFov.fovIncrease).Within(0.01f));
         Assert.That(remoteCamera.fieldOfView, Is.EqualTo(remoteFov));
-        CharacterAnimationState expected = new SerializedObject(vision).FindProperty("characterDefinition")
-            .objectReferenceValue is CharacterDefinition definition &&
+        CharacterDefinition definition = vision.ActiveDefinition;
+        CharacterAnimationState expected = definition != null &&
             definition.GetAnimation(CharacterAnimationState.Run).IsReady
             ? CharacterAnimationState.Run : CharacterAnimationState.Walk;
         yield return WaitForAnimationState(vision, expected);
@@ -700,7 +700,8 @@ public sealed class NetworkPlayerTests : InputTestFixture
             Assert.That(interaction.CurrentTarget, Is.SameAs(target));
             yield return null;
             Assert.That(nametagHud.ShownName, Is.EqualTo("Steam Invite Terminal"));
-            Assert.That(nametagHud.ShownPrompt, Is.EqualTo(string.Format(nametagHud.promptFormat, target.Prompt)));
+            Assert.That(nametagHud.ShownPrompt, Is.EqualTo($"[{interaction.InteractKey}] {target.Prompt}"));
+            Assert.That(interaction.InteractKey, Is.EqualTo("E"), "The prompt shows the primary Interact binding.");
 
             // Beyond the nametag's own distance nothing is shown.
             inviteTarget.transform.position = camera.transform.position + camera.transform.forward * (nametag.MaxDistance + 1.5f);

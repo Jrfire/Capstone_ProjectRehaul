@@ -18,7 +18,8 @@ public sealed class AgimatSpawner : MonoBehaviour
     private MapManager map;
     [SerializeField, Tooltip("Networked agimat pickup prefab (must be in the NetworkManager's Registered Spawnable Prefabs).")]
     private AgimatPickup pickupPrefab;
-    [SerializeField, Min(0)] private int minCount = 3;
+    [SerializeField, Min(0), Tooltip("Agimat count range for round 1; every completed quota adds 1 to the minimum and 2 to the maximum.")]
+    private int minCount = 3;
     [SerializeField, Min(0)] private int maxCount = 5;
     [SerializeField, Min(0f), Tooltip("Relative chance of each type.")]
     private float goldWeight = 1f;
@@ -36,16 +37,64 @@ public sealed class AgimatSpawner : MonoBehaviour
     private float entranceClearance = 3f;
     [SerializeField, Min(0), Tooltip("Frames to wait after the map and enemies are ready so NavMesh carving is applied.")]
     private int settleFrames = 3;
+    [Header("Blood moon")]
+    [SerializeField, Min(1f), Tooltip("During a blood moon (MoonSky.BloodMoon) the agimat count is multiplied by this.")]
+    private float bloodMoonCountMultiplier = 2.5f;
+    [SerializeField, Min(0f), Tooltip("Gold weight during a blood moon (bronze never spawns then).")]
+    private float bloodMoonGoldWeight = 1f;
+    [SerializeField, Min(0f)] private float bloodMoonSilverWeight = 1.5f;
+    [Header("Items")]
+    [SerializeField, Tooltip("Networked item pickup prefab used to scatter Items and gate keys (ItemPickup).")]
+    private ItemPickup itemPickupPrefab;
+    [SerializeField, Tooltip("Items that may be scattered on the map, each picked by its ItemDefinition Loot Weight. Empty = no items.")]
+    private List<ItemDefinition> items = new List<ItemDefinition>();
+    [SerializeField, Min(0f), Tooltip("Items per placed street block (the map grows with every quota, so does the loot).")]
+    private float itemsPerBlock = 0.4f;
+    [SerializeField, Min(0), Tooltip("Never fewer items than this (when any item is listed).")]
+    private int minItemCount = 1;
+    [SerializeField, Min(0), Tooltip("Random extra items added on top (0..this).")]
+    private int itemCountVariance = 1;
+    [SerializeField, Min(1f), Tooltip("During a blood moon the item count is multiplied by this.")]
+    private float bloodMoonItemMultiplier = 1.5f;
+    [SerializeField, Tooltip("Spawn one key pickup for every locked map gate (MapManager.KeyGates), in a block reachable without opening it.")]
+    private bool spawnGateKeys = true;
 
     private readonly List<AgimatPickup> spawned = new List<AgimatPickup>();
+    private readonly List<ItemPickup> spawnedItems = new List<ItemPickup>();
+    private readonly List<ItemPickup> spawnedKeys = new List<ItemPickup>();
     private bool hasSpawned;
 
     public IReadOnlyList<AgimatPickup> Spawned => spawned;
+    public IReadOnlyList<ItemPickup> SpawnedItems => spawnedItems;
+    /// <summary>Key pickups placed for the map's locked gates.</summary>
+    public IReadOnlyList<ItemPickup> SpawnedKeys => spawnedKeys;
+    public List<ItemDefinition> Items => items;
+    public ItemPickup ItemPickupPrefab
+    {
+        get => itemPickupPrefab;
+        set => itemPickupPrefab = value;
+    }
+    public float BloodMoonCountMultiplier => bloodMoonCountMultiplier;
+
+    /// <summary>Agimats to place for a rolled base count: multiplied during a blood moon.</summary>
+    public int CountFor(int baseCount, bool bloodMoon) =>
+        bloodMoon ? Mathf.CeilToInt(baseCount * bloodMoonCountMultiplier) : baseCount;
     public bool HasSpawned => hasSpawned;
     public AgimatPickup PickupPrefab => pickupPrefab;
     public int MinCount => minCount;
     public int MaxCount => maxCount;
     public int MinReachableCount => minReachableCount;
+    /// <summary>Agimat minimum for <paramref name="round"/>: +1 per completed quota.</summary>
+    public int MinCountForRound(int round) => minCount + Mathf.Max(0, round - 1);
+    /// <summary>Agimat maximum for <paramref name="round"/>: +2 per completed quota (never below the minimum).</summary>
+    public int MaxCountForRound(int round) => Mathf.Max(MinCountForRound(round), maxCount + 2 * Mathf.Max(0, round - 1));
+
+    /// <summary>Items for a map of <paramref name="blockCount"/> blocks before variance: Items Per Block (at least Min Item Count), x1.5 in a blood moon.</summary>
+    public int ItemCountFor(int blockCount, bool bloodMoon, int extra = 0)
+    {
+        int count = Mathf.Max(minItemCount, Mathf.RoundToInt(Mathf.Max(0, blockCount) * itemsPerBlock)) + Mathf.Max(0, extra);
+        return bloodMoon ? Mathf.CeilToInt(count * bloodMoonItemMultiplier) : count;
+    }
 
     private void OnEnable() => StartCoroutine(SpawnWhenReady());
 
@@ -98,7 +147,11 @@ public sealed class AgimatSpawner : MonoBehaviour
             }
         }
 
-        int count = Random.Range(Mathf.Min(minCount, maxCount), Mathf.Max(minCount, maxCount) + 1);
+        bool bloodMoon = MoonSky.BloodMoon;
+        int round = RoundClock.Instance != null ? RoundClock.Instance.Round : 1;
+        int rolledMin = MinCountForRound(round);
+        int rolledMax = MaxCountForRound(round);
+        int count = CountFor(Random.Range(Mathf.Min(rolledMin, rolledMax), Mathf.Max(rolledMin, rolledMax) + 1), bloodMoon);
         var used = new List<Vector3>();
         foreach (int block in PlanBlocks(map, homes, count, new System.Random(Random.Range(int.MinValue, int.MaxValue)), minReachableCount))
         {
@@ -107,9 +160,58 @@ public sealed class AgimatSpawner : MonoBehaviour
             used.Add(position);
             AgimatPickup pickup = Instantiate(pickupPrefab, position, Quaternion.identity);
             pickup.name = $"{pickupPrefab.name} (Block {block})";
-            pickup.ServerSetType(RollType());
+            pickup.ServerSetType(RollType(bloodMoon));
             NetworkServer.Spawn(pickup.gameObject);
             spawned.Add(pickup);
+        }
+        SpawnKeys(used);
+        SpawnItems(homes, used, bloodMoon);
+    }
+
+    private void SpawnItems(List<int> homes, List<Vector3> used, bool bloodMoon)
+    {
+        items.RemoveAll(item => item == null);
+        if (itemPickupPrefab == null || !items.Exists(item => item.LootWeight > 0f))
+            return;
+        int count = ItemCountFor(map.BlockCount, bloodMoon, Random.Range(0, itemCountVariance + 1));
+        foreach (int block in PlanBlocks(map, homes, count, new System.Random(Random.Range(int.MinValue, int.MaxValue)), minReachableCount))
+        {
+            if (!TryFindSpot(block, used, out Vector3 position))
+                continue;
+            ItemDefinition item = RollItem();
+            if (item == null)
+                continue;
+            used.Add(position);
+            ItemPickup pickup = ItemPickup.ServerSpawn(itemPickupPrefab, item, position);
+            if (pickup != null)
+                spawnedItems.Add(pickup);
+        }
+    }
+
+    /// <summary>One "Key Gx" pickup per locked gate, in a block reachable from spawn without opening any barricade.</summary>
+    private void SpawnKeys(List<Vector3> used)
+    {
+        if (!spawnGateKeys || map.KeyGates.Count == 0)
+            return;
+        ItemCatalog catalog = itemPickupPrefab != null ? itemPickupPrefab.Catalog : null;
+        if (catalog == null)
+        {
+            Debug.LogWarning("AgimatSpawner cannot place gate keys: no Item Pickup Prefab with an Item Catalog.", this);
+            return;
+        }
+        var random = new System.Random(Random.Range(int.MinValue, int.MaxValue));
+        // No homes, no sealed blocks: every key must be collectable without opening anything.
+        List<int> blocks = PlanBlocks(map, null, map.KeyGates.Count, random, map.KeyGates.Count);
+        for (int i = 0; i < map.KeyGates.Count && i < blocks.Count; i++)
+        {
+            EntranceObstacle gate = map.KeyGates[i];
+            ItemDefinition key = gate != null ? catalog.GetKey(gate.RequiredKeyId) : null;
+            if (key == null || !TryFindSpot(blocks[i], used, out Vector3 position))
+                continue;
+            used.Add(position);
+            ItemPickup pickup = ItemPickup.ServerSpawn(itemPickupPrefab, key, position);
+            if (pickup != null)
+                spawnedKeys.Add(pickup);
         }
     }
 
@@ -305,14 +407,45 @@ public sealed class AgimatSpawner : MonoBehaviour
 
     private static float HorizontalDistance(Vector3 a, Vector3 b) => new Vector2(a.x - b.x, a.z - b.z).magnitude;
 
-    private AgimatType RollType()
+    /// <summary>Weighted agimat type; a blood moon only rolls gold and silver.</summary>
+    public AgimatType RollType(bool bloodMoon, float random01 = -1f)
     {
-        float total = goldWeight + silverWeight + bronzeWeight;
+        float gold = bloodMoon ? bloodMoonGoldWeight : goldWeight;
+        float silver = bloodMoon ? bloodMoonSilverWeight : silverWeight;
+        float bronze = bloodMoon ? 0f : bronzeWeight;
+        float total = gold + silver + bronze;
         if (total <= 0f)
-            return AgimatType.Bronze;
-        float pick = Random.value * total;
-        if (pick < goldWeight)
+            return bloodMoon ? AgimatType.Silver : AgimatType.Bronze;
+        float pick = (random01 >= 0f ? random01 : Random.value) * total;
+        if (pick < gold)
             return AgimatType.Gold;
-        return pick < goldWeight + silverWeight ? AgimatType.Silver : AgimatType.Bronze;
+        return pick < gold + silver || bronze <= 0f ? AgimatType.Silver : AgimatType.Bronze;
+    }
+
+    /// <summary>Rolls one of <see cref="Items"/> by each ItemDefinition's Loot Weight (0 = never), or null.</summary>
+    public ItemDefinition RollItem(float random01 = -1f) => RollWeighted(items, random01 >= 0f ? random01 : Random.value);
+
+    public static ItemDefinition RollWeighted(IReadOnlyList<ItemDefinition> pool, float random01)
+    {
+        float total = 0f;
+        foreach (ItemDefinition item in pool)
+        {
+            if (item != null && item.LootWeight > 0f)
+                total += item.LootWeight;
+        }
+        if (total <= 0f)
+            return null;
+        float pick = Mathf.Clamp01(random01) * total;
+        ItemDefinition last = null;
+        foreach (ItemDefinition item in pool)
+        {
+            if (item == null || item.LootWeight <= 0f)
+                continue;
+            last = item;
+            if (pick < item.LootWeight)
+                return item;
+            pick -= item.LootWeight;
+        }
+        return last;
     }
 }

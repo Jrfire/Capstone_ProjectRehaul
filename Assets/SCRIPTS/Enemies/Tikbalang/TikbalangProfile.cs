@@ -59,4 +59,24 @@ public sealed class TikbalangProfile : ScriptableObject
 
     [Header("Stun")]
     [Min(0f)] public float defaultStunSeconds = 4f;
+
+    [Header("Relocation")]
+    [Min(0f), Tooltip("When no player has been in its home block for this long, it reappears (hidden) in the block players entered most (0 = never). Skips spawn blocks, blocks behind uncleared barricades and other Tikbalangs' homes, and waits while players are still in the chosen block.")]
+    public float unvisitedRespawnSeconds = 30f;
+
+    [Header("Blood moon")]
+    [Min(0f), Tooltip("Speed while hunting players across the map during a blood moon.")]
+    public float bloodMoonHuntSpeed = 3.5f;
+    [Min(0f), Tooltip("Seconds it pauses at each hunt point during a blood moon.")]
+    public float bloodMoonHuntWaitSeconds = 1.5f;
+    [Min(1f), Tooltip("Shortest time between jumpscare flashes on its target during a blood moon.")]
+    public float scareMinSeconds = 20f;
+    [Min(1f), Tooltip("Longest time between jumpscare flashes on its target during a blood moon.")]
+    public float scareMaxSeconds = 60f;
+    [Min(0.02f), Tooltip("How long the jumpscare flash stays on screen.")]
+    public float scareFlashSeconds = 0.2f;
+    [Min(0f), Tooltip("Seconds the target's A/D and mouse look (both axes) stay inverted after a flash.")]
+    public float scrambleSeconds = 8f;
+    [Range(0f, 1f), Tooltip("Speed multiplier while its target's controls are inverted (fairness).")]
+    public float scrambledSpeedMultiplier = 0.5f;
 }

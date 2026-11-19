@@ -95,6 +95,13 @@ public sealed class PlayerAudio : NetworkBehaviour
     }
 
     /// <summary>Owner: plays the attack sound here and for everyone else.</summary>
+    /// <summary>Plays the damaged sound without any damage (local only, e.g. the blood-moon Tiktik's fake rush).</summary>
+    public void PlayFakeDamage()
+    {
+        DamageSoundsPlayed++;
+        AudioManager.PlayAt(damagedSound, transform.position + Vector3.up, AudioChannel.Sfx, 1f, 20f);
+    }
+
     public void Attack()
     {
         PlayAttackSound();

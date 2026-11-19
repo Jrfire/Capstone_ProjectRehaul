@@ -34,9 +34,9 @@ public sealed class NightVisionTests
     }
 
     [Test]
-    public void SampleSceneHasAdjustableGrainVolumetricsAndNightLighting()
+    public void BaseHasAdjustableGrainVolumetricsAndNightLighting()
     {
-        var scene = EditorSceneManager.OpenScene("Assets/Scenes/SampleScene.unity", OpenSceneMode.Additive);
+        var scene = EditorSceneManager.OpenScene("Assets/Scenes/Base.unity", OpenSceneMode.Additive);
         try
         {
             Volume volume = scene.GetRootGameObjects().SelectMany(root =>
@@ -58,12 +58,12 @@ public sealed class NightVisionTests
             Assert.That(color.postExposure.value, Is.InRange(-1f, -0.4f), "The endless night is dark, but readable.");
             Assert.That(Mathf.Abs(color.colorFilter.value.b - color.colorFilter.value.r), Is.LessThan(0.05f),
                 "The night palette is neutral rather than tinted blue.");
-            Assert.That(System.IO.File.ReadAllText("Assets/Scenes/SampleScene.unity"),
+            Assert.That(System.IO.File.ReadAllText("Assets/Scenes/Base.unity"),
                 Does.Contain("m_AmbientSkyColor: {r: 0.008, g: 0.008, b: 0.009, a: 1}"));
-            string streets = System.IO.File.ReadAllText("Assets/Scenes/StreetsTest.unity");
+            string streets = System.IO.File.ReadAllText("Assets/Scenes/Streets.unity");
             Assert.That(streets, Does.Contain("m_AmbientSkyColor: {r: 0.004, g: 0.004, b: 0.0045, a: 1}"),
                 "The streets are darker than the base so flashlights matter.");
-            foreach (string path in new[] { "Assets/Scenes/SampleScene.unity", "Assets/Scenes/StreetsTest.unity" })
+            foreach (string path in new[] { "Assets/Scenes/Base.unity", "Assets/Scenes/Streets.unity" })
             {
                 string text = System.IO.File.ReadAllText(path).Replace("\r\n", "\n");
                 Assert.That(text, Does.Contain("m_DefaultReflectionMode: 1"), path);
@@ -71,7 +71,7 @@ public sealed class NightVisionTests
                 Assert.That(text, Does.Contain("m_SkyboxMaterial: {fileID: 2100000, guid: 5583f3ef29b348ca8a709629dfae1de2, type: 2}"),
                     path + " uses the Night Sky skybox.");
                 Assert.That(text, Does.Contain("m_AmbientMode: 3"), path + " keeps flat ambient so the skybox never lights the scene.");
-                var scene2 = path == "Assets/Scenes/SampleScene.unity" ? scene : EditorSceneManager.OpenScene(path, OpenSceneMode.Additive);
+                var scene2 = path == "Assets/Scenes/Base.unity" ? scene : EditorSceneManager.OpenScene(path, OpenSceneMode.Additive);
                 try
                 {
                     MoonSky moonSky = scene2.GetRootGameObjects().SelectMany(root => root.GetComponentsInChildren<MoonSky>(true)).Single();
@@ -112,8 +112,8 @@ public sealed class NightVisionTests
     [Test]
     public void FearSourcesAreWiredAndTheTikbalangHasDistanceControls()
     {
-        // The EnemyFearTest cube was removed from SampleScene once the Tikbalang existed; any remaining sources must be valid.
-        var scene = EditorSceneManager.OpenScene("Assets/Scenes/SampleScene.unity", OpenSceneMode.Additive);
+        // The EnemyFearTest cube was removed from Base once the Tikbalang existed; any remaining sources must be valid.
+        var scene = EditorSceneManager.OpenScene("Assets/Scenes/Base.unity", OpenSceneMode.Additive);
         try
         {
             foreach (EnemyFearSource sceneSource in scene.GetRootGameObjects().SelectMany(root =>

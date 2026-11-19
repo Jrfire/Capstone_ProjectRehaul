@@ -28,26 +28,26 @@ public sealed class NightAudioSetupTests
     }
 
     [Test]
-    public void EnemyCountsGrowEveryTwoQuotasUpToFourAndFavourLargeMaps()
+    public void EnemyCountsStartAtTwoPerTypeAndGainTwoEveryTwoQuotas()
     {
         var host = new GameObject("Spawner");
         try
         {
             EnemySpawner spawner = host.AddComponent<EnemySpawner>();
-            Assert.That(spawner.MaxCountForRound(1), Is.EqualTo(1));
-            Assert.That(spawner.MaxCountForRound(2), Is.EqualTo(1));
-            Assert.That(spawner.MaxCountForRound(3), Is.EqualTo(2));
-            Assert.That(spawner.MaxCountForRound(5), Is.EqualTo(3));
-            Assert.That(spawner.MaxCountForRound(7), Is.EqualTo(4));
-            Assert.That(spawner.MaxCountForRound(50), Is.EqualTo(4));
-            Assert.That(spawner.ExtraChanceForBlocks(15), Is.GreaterThan(spawner.ExtraChanceForBlocks(5)));
+            Assert.That(spawner.RolledEnemyCount, Is.EqualTo(2));
+            Assert.That(spawner.ExtrasForRound(1), Is.EqualTo(0));
+            Assert.That(spawner.ExtrasForRound(2), Is.EqualTo(0));
+            Assert.That(spawner.ExtrasForRound(3), Is.EqualTo(2), "Two quotas completed add two enemies.");
+            Assert.That(spawner.ExtrasForRound(5), Is.EqualTo(4));
 
-            Assert.That(spawner.RollCount(1, 15, () => 0f), Is.EqualTo(1), "Round 1 never adds extras.");
-            Assert.That(spawner.RollCount(7, 15, () => 0f), Is.EqualTo(4));
-            Assert.That(spawner.RollCount(7, 15, () => 0.99f), Is.EqualTo(1), "Every extra is rolled.");
-            float mid = (spawner.ExtraChanceForBlocks(5) + spawner.ExtraChanceForBlocks(15)) * 0.5f;
-            Assert.That(spawner.RollCount(7, 15, () => mid), Is.EqualTo(4), "Large maps pass rolls small maps fail.");
-            Assert.That(spawner.RollCount(7, 5, () => mid), Is.EqualTo(1));
+            Assert.That(spawner.DistributeCounts(1, 1, () => 0f), Is.EqualTo(new[] { 2 }), "Two of a type regardless of map size.");
+            Assert.That(spawner.DistributeCounts(1, 3, () => 0f), Is.EqualTo(new[] { 4 }));
+            Assert.That(spawner.DistributeCounts(2, 3, () => 0f), Is.EqualTo(new[] { 4, 2 }), "Extras go to random types.");
+            Assert.That(spawner.DistributeCounts(2, 3, () => 0.99f), Is.EqualTo(new[] { 2, 4 }));
+            Assert.That(spawner.DistributeCounts(1, 9, () => 0f), Is.EqualTo(new[] { 10 }), "+2 every 2 quotas keeps growing (no cap).");
+            Assert.That(spawner.DistributeCounts(4, 21, () => 0f).Sum(), Is.EqualTo(14), "Capped at 14 enemies in total.");
+            Assert.That(spawner.DistributeCounts(2, 9, () => 0f).Sum(), Is.EqualTo(12), "Below the cap extras still grow.");
+            Assert.That(spawner.DistributeCounts(0, 5), Is.Empty);
         }
         finally
         {
@@ -132,11 +132,11 @@ public sealed class NightAudioSetupTests
     {
         foreach (string enemy in new[] { "Tikbalang", "Manananggal" })
             Assert.That(AssetDatabase.LoadAssetAtPath<GameObject>($"Assets/PREFABS/Enemies/{enemy}.prefab").GetComponent<EnemyAudio>(), Is.Not.Null, enemy);
-        GroundSurface road = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefab/Streets Object/Path_Road.prefab").GetComponent<GroundSurface>();
+        GroundSurface road = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefab/_Prefab Street Building/Path_Road.prefab").GetComponent<GroundSurface>();
         Assert.That(road, Is.Not.Null);
         Assert.That(road.Type, Is.EqualTo(GroundSurfaceType.Solid));
 
-        Scene hub = EditorSceneManager.OpenScene("Assets/Scenes/SampleScene.unity", OpenSceneMode.Additive);
+        Scene hub = EditorSceneManager.OpenScene("Assets/Scenes/Base.unity", OpenSceneMode.Additive);
         try
         {
             NetworkManager manager = InScene<NetworkManager>(hub).Single();
@@ -157,7 +157,7 @@ public sealed class NightAudioSetupTests
         {
             EditorSceneManager.CloseScene(hub, true);
         }
-        Scene streets = EditorSceneManager.OpenScene("Assets/Scenes/StreetsTest.unity", OpenSceneMode.Additive);
+        Scene streets = EditorSceneManager.OpenScene("Assets/Scenes/Streets.unity", OpenSceneMode.Additive);
         try
         {
             Assert.That(InScene<SceneMusic>(streets), Has.Length.EqualTo(1));

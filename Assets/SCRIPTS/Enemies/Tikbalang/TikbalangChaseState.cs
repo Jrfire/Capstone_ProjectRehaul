@@ -98,7 +98,7 @@ public sealed class TikbalangChaseState : EnemyState
         if ((targetPosition - brain.transform.position).sqrMagnitude <= brain.Profile.catchDistance * brain.Profile.catchDistance)
             brain.Motor.Stop();
         else if (NavMesh.SamplePosition(targetPosition, out NavMeshHit hit, 3f, brain.Motor.AreaMask))
-            brain.Motor.MoveTo(hit.position, brain.Profile.chaseSpeed);
+            brain.Motor.MoveTo(hit.position, brain.SpeedFor(brain.Profile.chaseSpeed));
     }
 
     private bool IsTouching(Vector3 targetPosition)

@@ -21,6 +21,8 @@ public sealed class PlayerItemUse : NetworkBehaviour
     private float useCooldown = 0.35f;
     [SerializeField, Min(0.5f), Tooltip("Server: furthest the reported aim origin may be from the player's root (anti-cheat).")]
     private float maxAimOriginOffset = 3f;
+    [SerializeField, Min(0.5f), Tooltip("How far in front a key reaches a gate.")]
+    private float keyReach = 3.5f;
 
     private const float DefaultEyeHeight = 1.6f;
     private static readonly RaycastHit[] attackHits = new RaycastHit[32];
@@ -163,7 +165,15 @@ public sealed class PlayerItemUse : NetworkBehaviour
                     inventory.ServerRemove(slot);
                 break;
             case ItemUseKind.Weapon:
-                ServerAttack(item, aimOrigin, aimDirection);
+                ServerAttack(item, aimOrigin, aimDirection, slot);
+                break;
+            case ItemUseKind.Key:
+                if (ServerUseKey(item, aimOrigin, aimDirection, slot) == null)
+                    return false;
+                break;
+            case ItemUseKind.Throwable:
+                if (ServerThrow(item, aimOrigin, aimDirection, slot) == null)
+                    return false;
                 break;
             default:
                 return false;
@@ -180,15 +190,12 @@ public sealed class PlayerItemUse : NetworkBehaviour
     /// The attacker's own colliders and other players are ignored. Returns the affected object, or null.
     /// </summary>
     [Server]
-    public GameObject ServerAttack(ItemDefinition weapon, Vector3 aimOrigin, Vector3 aimDirection)
+    public GameObject ServerAttack(ItemDefinition weapon, Vector3 aimOrigin, Vector3 aimDirection, int slot = -1)
     {
         LastWeaponHit = null;
         if (weapon == null)
             return null;
-        if (!IsFinite(aimOrigin) || !IsFinite(aimDirection) || aimDirection.sqrMagnitude < 0.0001f ||
-            (aimOrigin - transform.position).sqrMagnitude > maxAimOriginOffset * maxAimOriginOffset)
-            GetAim(out aimOrigin, out aimDirection);
-        aimDirection.Normalize();
+        ValidateAim(ref aimOrigin, ref aimDirection);
 
         int count = Physics.SphereCastNonAlloc(aimOrigin, weapon.AttackRadius, aimDirection, attackHits, weapon.AttackRange,
             Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore);
@@ -215,10 +222,68 @@ public sealed class PlayerItemUse : NetworkBehaviour
             {
                 LastWeaponHit = affected;
                 ServerWeaponHit?.Invoke(this, weapon, affected);
+                if (slot >= 0)
+                    inventory.ServerConsumeDurability(slot);
             }
             return affected;
         }
         return null;
+    }
+
+    /// <summary>Validates a client's aim; falls back to the player's own aim when it is invalid or too far away.</summary>
+    private void ValidateAim(ref Vector3 aimOrigin, ref Vector3 aimDirection)
+    {
+        if (!IsFinite(aimOrigin) || !IsFinite(aimDirection) || aimDirection.sqrMagnitude < 0.0001f ||
+            (aimOrigin - transform.position).sqrMagnitude > maxAimOriginOffset * maxAimOriginOffset)
+            GetAim(out aimOrigin, out aimDirection);
+        aimDirection.Normalize();
+    }
+
+    /// <summary>
+    /// Server: uses <paramref name="key"/> on the gate in front (first solid collider within reach). Only the matching gate
+    /// opens ("Key G1" opens "Gate G1"); the key is then consumed.
+    /// </summary>
+    [Server]
+    public EntranceObstacle ServerUseKey(ItemDefinition key, Vector3 aimOrigin, Vector3 aimDirection, int slot)
+    {
+        if (key == null || key.KeyCategory != KeyCategory.Gate)
+            return null;
+        ValidateAim(ref aimOrigin, ref aimDirection);
+        int count = Physics.SphereCastNonAlloc(aimOrigin, 0.25f, aimDirection, attackHits, keyReach,
+            Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore);
+        Array.Sort(attackHits, 0, count, HitDistanceComparer.Instance);
+        for (int index = 0; index < count; index++)
+        {
+            Collider hit = attackHits[index].collider;
+            if (hit == null || hit.transform.IsChildOf(transform) || hit.GetComponentInParent<PlayerPersistence>() != null)
+                continue;
+            EntranceObstacle obstacle = hit.GetComponentInParent<EntranceObstacle>();
+            if (obstacle == null || !obstacle.TryUseKey(key.KeyId))
+                return null; // walls and other gates block the key
+            inventory.ServerRemove(slot);
+            return obstacle;
+        }
+        return null;
+    }
+
+    /// <summary>Server: throws the selected throwable along the aim (it leaves the inventory).</summary>
+    [Server]
+    public ThrowableProjectile ServerThrow(ItemDefinition throwable, Vector3 aimOrigin, Vector3 aimDirection, int slot)
+    {
+        ThrowableProjectile prefab = throwable != null && throwable.ThrowablePrefab != null
+            ? throwable.ThrowablePrefab.GetComponent<ThrowableProjectile>()
+            : null;
+        if (prefab == null)
+        {
+            Debug.LogWarning($"{(throwable != null ? throwable.DisplayName : "Item")} has no Throwable Prefab with a ThrowableProjectile.", this);
+            return null;
+        }
+        ValidateAim(ref aimOrigin, ref aimDirection);
+        Vector3 velocity = aimDirection * throwable.ThrowSpeed + Vector3.up * prefab.UpwardSpeed;
+        ThrowableProjectile projectile = ThrowableProjectile.ServerLaunch(prefab, aimOrigin + aimDirection * 0.4f, velocity, netIdentity);
+        if (projectile != null)
+            inventory.ServerRemove(slot);
+        return projectile;
     }
 
     private static bool IsFinite(Vector3 value) =>

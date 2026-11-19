@@ -32,6 +32,8 @@ public struct TravelBeginMessage : NetworkMessage
     public float fadeDuration;
     /// <summary>Asset ids of the destination's enemy prefabs, shown as miniatures on the loading screen.</summary>
     public uint[] enemyAssetIds;
+    /// <summary>The destination rolled a blood moon.</summary>
+    public bool bloodMoon;
 }
 
 public struct TravelSceneReadyMessage : NetworkMessage
@@ -54,6 +56,10 @@ public struct TravelEnemyRollMessage : NetworkMessage
 {
     public string[] scenes;
     public string[] enemies;
+    /// <summary>Destinations that rolled a blood moon (parallel to <see cref="scenes"/>).</summary>
+    public bool[] bloodMoons;
+    /// <summary>Total enemy population expected for each destination (parallel to <see cref="scenes"/>).</summary>
+    public int[] populations;
 }
 
 /// <summary>
@@ -75,10 +81,23 @@ public sealed class TravelDirector : MonoBehaviour
     private float readyTimeout = 60f;
     [SerializeField, Min(0f), Tooltip("The loading screen stays up at least this many seconds, even when the scene builds sooner.")]
     private float minimumLoadingSeconds = 8f;
-    [SerializeField, Range(0f, 1f), Tooltip("From round 3 on, the chance of each extra enemy type (up to 2 in round 3, 3 in round 6, 4 from round 9).")]
+    [SerializeField, Range(0f, 1f), Tooltip("From round 2 on, the chance of each enemy type beyond the guaranteed two (up to 3 in round 4, 4 from round 6).")]
     private float extraEnemyChance = 0.5f;
     [SerializeField, Min(0), Tooltip("Connector blocks added to every map per quota met (MapManager keeps the whole map, end caps and spawn included, within its Max Block Count).")]
     private int extraBlocksPerQuota = 2;
+    [SerializeField, Range(0f, 1f), Tooltip("Chance of each destination rolling a blood moon (red moon, abundant gold/silver loot, aggressive enemies).")]
+    private float bloodMoonChance = 0.1f;
+    [Header("Population shown on the travel map (keep in sync with the map scenes' EnemySpawner)")]
+    [SerializeField, Min(0), Tooltip("Enemies of each rolled type (EnemySpawner Rolled Enemy Count).")]
+    private int populationPerType = 2;
+    [SerializeField, Min(0), Tooltip("Extra enemies per step (EnemySpawner Extra Enemies Per Step).")]
+    private int populationExtrasPerStep = 2;
+    [SerializeField, Min(1), Tooltip("Quotas per extra step (EnemySpawner Quotas Per Extra Enemy).")]
+    private int populationQuotasPerStep = 2;
+    [SerializeField, Min(0), Tooltip("Per-type limit, 0 = none (EnemySpawner Max Enemies Per Type).")]
+    private int populationMaxPerType;
+    [SerializeField, Min(0), Tooltip("Total limit, 0 = none (EnemySpawner Max Total Enemies).")]
+    private int populationMaxTotal = 14;
     private float serverLoadingShownAt;
     private int serverRolledRound = -1;
 
@@ -95,6 +114,10 @@ public sealed class TravelDirector : MonoBehaviour
     private readonly Dictionary<string, List<EnemyDefinition>> serverRolls = new Dictionary<string, List<EnemyDefinition>>();
     private readonly List<EnemyDefinition> arrivalEnemies = new List<EnemyDefinition>();
     private readonly Dictionary<string, string> clientRolls = new Dictionary<string, string>();
+    private readonly Dictionary<string, int> clientPopulations = new Dictionary<string, int>();
+    private readonly HashSet<string> serverBloodMoons = new HashSet<string>();
+    private readonly HashSet<string> clientBloodMoons = new HashSet<string>();
+    private bool clientPendingBloodMoon;
 
     public static TravelDirector Instance { get; private set; }
 
@@ -107,6 +130,13 @@ public sealed class TravelDirector : MonoBehaviour
     public IReadOnlyList<EnemyDefinition> ArrivalEnemies => arrivalEnemies;
     /// <summary>Server: the first rolled enemy type, or null.</summary>
     public EnemyDefinition ArrivalEnemy => arrivalEnemies.Count > 0 ? arrivalEnemies[0] : null;
+    /// <summary>Server: the trip into this scene rolled a blood moon.</summary>
+    public bool ArrivalBloodMoon { get; private set; }
+    public float BloodMoonChance
+    {
+        get => bloodMoonChance;
+        set => bloodMoonChance = Mathf.Clamp01(value);
+    }
     public float ExtraEnemyChance
     {
         get => extraEnemyChance;
@@ -224,7 +254,12 @@ public sealed class TravelDirector : MonoBehaviour
         {
             if (destination == null || string.IsNullOrEmpty(destination.Name) || serverRolls.ContainsKey(destination.Name))
                 continue;
-            serverRolls[destination.Name] = destination.RollMany(maxTypes, extraEnemyChance);
+            serverRolls[destination.Name] = destination.RollMany(maxTypes, extraEnemyChance, null,
+                TravelDestination.GuaranteedEnemyTypesForRound(CurrentRound));
+            if (Random.value < bloodMoonChance)
+                serverBloodMoons.Add(destination.Name);
+            else
+                serverBloodMoons.Remove(destination.Name);
             changed = true;
         }
         if (changed)
@@ -241,6 +276,7 @@ public sealed class TravelDirector : MonoBehaviour
         if (!NetworkServer.active || Instance != this || ServerTraveling || serverRolledRound < 0 || serverRolledRound == CurrentRound)
             return;
         serverRolls.Clear();
+        serverBloodMoons.Clear();
         serverRolledRound = CurrentRound;
         foreach (MapTerminal terminal in FindObjectsByType<MapTerminal>(FindObjectsInactive.Exclude, FindObjectsSortMode.None))
             ServerRollDestinations(terminal);
@@ -270,11 +306,42 @@ public sealed class TravelDirector : MonoBehaviour
             ? enemies
             : (IReadOnlyList<EnemyDefinition>)System.Array.Empty<EnemyDefinition>();
 
+    /// <summary>Server: whether a destination rolled a blood moon.</summary>
+    public bool ServerBloodMoonFor(string sceneName) => sceneName != null && serverBloodMoons.Contains(sceneName);
+
+    /// <summary>Client: whether a destination rolled a blood moon (shown on the travel map).</summary>
+    public bool IsBloodMoonRolled(string sceneName) => sceneName != null && clientBloodMoons.Contains(sceneName);
+
     /// <summary>
     /// Client: rolled enemy names for a destination (joined by ", "), "" when it rolled none, or null when not rolled yet.
     /// </summary>
     public string RolledEnemyName(string sceneName) =>
         sceneName != null && clientRolls.TryGetValue(sceneName, out string enemy) ? enemy : null;
+    /// <summary>Client: total enemies expected at a destination (see <see cref="PopulationFor"/>), or -1 when not rolled yet.</summary>
+    public int RolledPopulation(string sceneName) =>
+        sceneName != null && clientPopulations.TryGetValue(sceneName, out int population) ? population : -1;
+
+    /// <summary>
+    /// Total enemies EnemySpawner places for <paramref name="typeCount"/> rolled types in <paramref name="round"/>:
+    /// <paramref name="perType"/> each, plus <paramref name="extrasPerStep"/> every <paramref name="quotasPerStep"/> quotas
+    /// completed, within the optional per-type (<paramref name="maxPerType"/>) and total (<paramref name="maxTotal"/>) limits (0 = none).
+    /// </summary>
+    public static int PopulationFor(int typeCount, int round, int perType, int extrasPerStep, int quotasPerStep, int maxPerType, int maxTotal)
+    {
+        if (typeCount <= 0)
+            return 0;
+        long typeLimit = maxPerType > 0 ? maxPerType : int.MaxValue;
+        long total = (long)typeCount * System.Math.Min(perType, typeLimit);
+        total += (long)extrasPerStep * (Mathf.Max(0, round - 1) / Mathf.Max(1, quotasPerStep));
+        total = System.Math.Min(total, typeCount * typeLimit);
+        if (maxTotal > 0)
+            total = System.Math.Min(total, maxTotal);
+        return (int)System.Math.Max(0, System.Math.Min(total, int.MaxValue));
+    }
+
+    /// <summary>Expected population with this director's settings.</summary>
+    public int PopulationFor(int typeCount, int round) => PopulationFor(typeCount, round, populationPerType,
+        populationExtrasPerStep, populationQuotasPerStep, populationMaxPerType, populationMaxTotal);
 
     public static string JoinEnemyNames(IEnumerable<EnemyDefinition> enemies)
     {
@@ -294,14 +361,18 @@ public sealed class TravelDirector : MonoBehaviour
     {
         var scenes = new string[serverRolls.Count];
         var enemies = new string[serverRolls.Count];
+        var bloodMoons = new bool[serverRolls.Count];
+        var populations = new int[serverRolls.Count];
         int index = 0;
         foreach (KeyValuePair<string, List<EnemyDefinition>> roll in serverRolls)
         {
             scenes[index] = roll.Key;
             enemies[index] = JoinEnemyNames(roll.Value);
+            bloodMoons[index] = serverBloodMoons.Contains(roll.Key);
+            populations[index] = PopulationFor(roll.Value.Count, CurrentRound);
             index++;
         }
-        return new TravelEnemyRollMessage { scenes = scenes, enemies = enemies };
+        return new TravelEnemyRollMessage { scenes = scenes, enemies = enemies, bloodMoons = bloodMoons, populations = populations };
     }
 
     public void ResetServer()
@@ -314,7 +385,9 @@ public sealed class TravelDirector : MonoBehaviour
         ServerTraveling = false;
         serverFadeInEndsAt = 0f;
         serverRolls.Clear();
+        serverBloodMoons.Clear();
         HasArrivalRoll = false;
+        ArrivalBloodMoon = false;
         arrivalEnemies.Clear();
         serverRolledRound = -1;
         pendingConnections.Clear();
@@ -483,7 +556,10 @@ public sealed class TravelDirector : MonoBehaviour
         HasArrivalRoll = true;
         arrivalEnemies.Clear();
         arrivalEnemies.AddRange(ServerRollsFor(sceneName));
+        // Trips home (or anywhere without a roll) never have a blood moon.
+        ArrivalBloodMoon = ServerBloodMoonFor(sceneName);
         serverRolls.Clear();
+        serverBloodMoons.Clear();
         NetworkServer.SendToAll(BuildRollMessage());
 
         // The seed goes out before the scene message so every peer builds the same street.
@@ -495,7 +571,8 @@ public sealed class TravelDirector : MonoBehaviour
         {
             sceneName = sceneName,
             fadeDuration = fadeDuration,
-            enemyAssetIds = ArrivalEnemyAssetIds()
+            enemyAssetIds = ArrivalEnemyAssetIds(),
+            bloodMoon = ArrivalBloodMoon
         });
         // Clients reveal the loading screen once their fade to black finishes.
         serverLoadingShownAt = Time.realtimeSinceStartup + fadeDuration;
@@ -512,6 +589,7 @@ public sealed class TravelDirector : MonoBehaviour
         foreach (int id in NetworkServer.connections.Keys)
             pendingConnections.Add(id);
         serverRoutine = null;
+        MoonSky.BloodMoon = ArrivalBloodMoon;
         NetworkManager.singleton.ServerChangeScene(sceneName);
     }
 
@@ -605,11 +683,18 @@ public sealed class TravelDirector : MonoBehaviour
     private void OnClientRolls(TravelEnemyRollMessage message)
     {
         clientRolls.Clear();
+        clientBloodMoons.Clear();
+        clientPopulations.Clear();
         int count = Mathf.Min(message.scenes?.Length ?? 0, message.enemies?.Length ?? 0);
         for (int index = 0; index < count; index++)
         {
-            if (!string.IsNullOrEmpty(message.scenes[index]))
-                clientRolls[message.scenes[index]] = message.enemies[index] ?? string.Empty;
+            if (string.IsNullOrEmpty(message.scenes[index]))
+                continue;
+            clientRolls[message.scenes[index]] = message.enemies[index] ?? string.Empty;
+            if (message.populations != null && index < message.populations.Length)
+                clientPopulations[message.scenes[index]] = Mathf.Max(0, message.populations[index]);
+            if (message.bloodMoons != null && index < message.bloodMoons.Length && message.bloodMoons[index])
+                clientBloodMoons.Add(message.scenes[index]);
         }
         RollsChanged?.Invoke();
     }
@@ -621,6 +706,11 @@ public sealed class TravelDirector : MonoBehaviour
         SelectedDestination = null;
         IsTraveling = false;
         clientRolls.Clear();
+        clientBloodMoons.Clear();
+        clientPopulations.Clear();
+        clientPendingBloodMoon = false;
+        ControlInversion.Clear();
+        MoonSky.BloodMoon = false;
         PlayerControlLock.Release(this);
         PlayerStamina.TravelPaused = false;
         TravelMapScreen.CloseIfOpen();
@@ -639,6 +729,8 @@ public sealed class TravelDirector : MonoBehaviour
     public void OnClientChangeScene(string sceneName)
     {
         TravelMapScreen.CloseIfOpen();
+        // The old scene stays as it was during the fade-out; the new one opens under the rolled moon.
+        MoonSky.BloodMoon = clientPendingBloodMoon;
         IsTraveling = true;
         PlayerControlLock.Acquire(this);
         PlayerStamina.TravelPaused = true;
@@ -674,6 +766,8 @@ public sealed class TravelDirector : MonoBehaviour
     private void OnClientBegin(TravelBeginMessage message)
     {
         IsTraveling = true;
+        clientPendingBloodMoon = message.bloodMoon;
+        ControlInversion.Clear();
         PlayerControlLock.Acquire(this);
         PlayerStamina.TravelPaused = true;
         if (NetworkClient.localPlayer != null && NetworkClient.localPlayer.TryGetComponent(out PlayerStamina stamina))

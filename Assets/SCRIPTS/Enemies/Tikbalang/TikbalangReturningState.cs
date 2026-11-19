@@ -14,13 +14,14 @@ public sealed class TikbalangReturningState : EnemyState
         brain.ApplyNormalVision();
         brain.LookTarget = null;
         brain.Motor.Stop();
-        if (!brain.Home.Contains(brain.transform.position))
+        if (!brain.IsBloodMoon && !brain.Home.Contains(brain.transform.position))
             HeadHome();
     }
 
     public override void Tick(float deltaTime)
     {
-        if (brain.Home.Contains(brain.transform.position))
+        // During a blood moon it never walks home; it goes straight back to hunting.
+        if (brain.IsBloodMoon || brain.Home.Contains(brain.transform.position))
         {
             brain.ChangeState(brain.Idle);
             return;
@@ -31,7 +32,7 @@ public sealed class TikbalangReturningState : EnemyState
 
     private void HeadHome()
     {
-        if (brain.TryGetHomePoint(out Vector3 point) && brain.Motor.MoveTo(point, brain.Profile.walkSpeed))
+        if (brain.TryGetHomePoint(out Vector3 point) && brain.Motor.MoveTo(point, brain.SpeedFor(brain.Profile.walkSpeed)))
             return;
         // No walkable route (e.g. an entrance obstacle closed behind it): reappear somewhere hidden at home.
         brain.TryTeleportHidden(new[] { brain.Home }, brain.Profile.teleportMinPlayerDistance, null);

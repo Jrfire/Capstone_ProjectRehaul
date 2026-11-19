@@ -40,11 +40,28 @@ public sealed class ManananggalHuntingState : EnemyState
         timer = ManananggalProfile.RandomIn(hasFlown ? brain.Profile.respawnDelaySeconds : brain.Profile.firstPassDelaySeconds);
     }
 
+    /// <summary>Makes the next wait use the respawn delay (after any visit, not only a full pass).</summary>
+    public void MarkFlown() => hasFlown = true;
+
     /// <summary>Skips the remaining wait (for tests/debugging).</summary>
     public void SkipWait() => timer = 0f;
 
     public override void Tick(float deltaTime)
     {
+        // Garlic/fire: stays despawned until the repel ends, then waits at least the usual respawn delay.
+        if (brain.IsRepelled)
+        {
+            if (Phase != HuntPhase.Waiting)
+                Enter();
+            brain.SetHidden(true);
+            timer = Mathf.Max(timer - deltaTime, brain.RepelRemaining);
+            return;
+        }
+        if (brain.IsBloodMoon)
+        {
+            brain.ChangeState(brain.Circling);
+            return;
+        }
         switch (Phase)
         {
             case HuntPhase.Waiting:

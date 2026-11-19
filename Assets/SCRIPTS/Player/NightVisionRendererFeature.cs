@@ -145,7 +145,8 @@ public sealed class NightVisionRendererFeature : ScriptableRendererFeature
                 material.SetFloat("_FilmTime", panic ? Time.time * Mathf.Max(0f, fear.filmJitterSpeed) : 0f);
                 material.SetFloat("_FilmLineThickness", panic ? Mathf.Clamp(fear.verticalLineThickness, 0.05f, 2f) : 1f);
                 material.SetVector("_PanicStatic", panic ? new Vector4(fear.OverlayIntensity * Mathf.Clamp01(fear.staticStrength),
-                    Mathf.Floor(Time.time * Mathf.Max(1f, fear.staticFramesPerSecond)) % 997f, 0f, 0f) : Vector4.zero);
+                    Mathf.Floor(Time.time * Mathf.Max(1f, fear.staticFramesPerSecond)) % 997f,
+                    Mathf.Clamp01(fear.staticCenterAmount), 0f) : Vector4.zero);
                 material.SetVector("_Trance", new Vector4(Mathf.Clamp01(effects.TranceBlur) * 0.025f, 0f, 0f, 0f));
                 material.SetColor("_TranceTint", effects.TranceTint);
                 material.SetColor("_TranceFade", effects.ScreenFade);

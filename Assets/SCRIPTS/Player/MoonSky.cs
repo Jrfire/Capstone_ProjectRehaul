@@ -24,8 +24,8 @@ public sealed class MoonSky : MonoBehaviour
     private Material normalSky;
     [SerializeField, Tooltip("Skybox used during a blood moon (e.g. BloodMoonSky).")]
     private Material bloodMoonSky;
-    [SerializeField, Tooltip("Moon light color during a blood moon. The normal color is the Light's own color.")]
-    private Color bloodMoonLightColor = new Color(1f, 0.12f, 0.08f);
+    [SerializeField, Tooltip("Crimson moon light color during a blood moon. The normal color is the Light's own color.")]
+    private Color bloodMoonLightColor = new Color(0.86f, 0.03f, 0.1f);
     [SerializeField, Min(0f), Tooltip("Multiplies the Light's own intensity during a blood moon.")]
     private float bloodMoonIntensityMultiplier = 1.5f;
 

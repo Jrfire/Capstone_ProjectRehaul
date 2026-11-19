@@ -84,7 +84,7 @@ public sealed class TikbalangSearchingState : EnemyState
         lookingAround = false;
         brain.Motor.FaceTowards(origin);
         if (NavMesh.SamplePosition(origin, out NavMeshHit hit, 3f, brain.Motor.AreaMask) &&
-            brain.Motor.MoveTo(hit.position, brain.Profile.walkSpeed))
+            brain.Motor.MoveTo(hit.position, brain.SpeedFor(brain.Profile.walkSpeed)))
             return;
         StartLookingAround();
     }
