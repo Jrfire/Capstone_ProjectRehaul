@@ -306,6 +306,67 @@ public sealed class NightAudioTests
         Assert.That(audio.CurrentTrack, Is.Null);
     }
 
+    [UnityTest]
+    public IEnumerator FlashlightClicksDamageSoundsSkipJumpscareDeathsAndFiresCrackle()
+    {
+        Track(GroundAt(Vector3.zero));
+        StartHost();
+        yield return WaitUntil(() => NetworkClient.localPlayer != null, 5f, "The host player did not spawn.");
+        GameObject player = NetworkClient.localPlayer.gameObject;
+        PlayerAudio audio = player.GetComponent<PlayerAudio>();
+        PlayerFlashlight flashlight = player.GetComponent<PlayerFlashlight>();
+        PlayerHealth health = player.GetComponent<PlayerHealth>();
+        yield return null;
+        yield return null;
+        Assert.That(flashlight.ToggleSoundsPlayed, Is.Zero, "Spawning with the light on makes no click.");
+        flashlight.Toggle();
+        yield return WaitUntil(() => flashlight.ToggleSoundsPlayed == 1, 2f, "Turning the flashlight off made no click.");
+        flashlight.Toggle();
+        yield return WaitUntil(() => flashlight.ToggleSoundsPlayed == 2, 2f, "Turning the flashlight on made no click.");
+
+        health.TakeDamage(2);
+        Assert.That(audio.DamageSoundsPlayed, Is.EqualTo(1));
+        var tikbalang = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/PREFABS/Enemies/Tikbalang.prefab").GetComponent<NetworkIdentity>();
+        health.TakeDamage(PlayerHealth.MaxHealth, tikbalang);
+        Assert.That(health.IsDead, Is.True);
+        Assert.That(audio.DamageSoundsPlayed, Is.EqualTo(1), "A death followed by the killer's jumpscare plays no damage sound.");
+
+        var prefab = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/PREFABS/Items/MolotovFire.prefab").GetComponent<FireZone>();
+        FireZone fire = FireZone.ServerSpawn(prefab, new Vector3(10f, 0f, 0f));
+        fire.Configure(3f, 1.25f, 2f, damage: 0);
+        Track(fire.gameObject);
+        yield return WaitUntil(() => fire.ImpactSoundsPlayed == 1, 1f, "The shatter and ignite sounds did not play.");
+        yield return WaitUntil(() => fire.LoopSound.Source != null && fire.LoopSound.Source.isPlaying, 1f, "The fire loop is not playing.");
+        Assert.That(fire.LoopSound.Source.loop, Is.True);
+        yield return WaitUntil(() => fire.LoopSound.VolumeMultiplier < 0.6f, 3f, "The fire loop does not fade with the flames.");
+        Assert.That(fire.ImpactSoundsPlayed, Is.EqualTo(1), "Impact sounds play once.");
+    }
+
+    [UnityTest]
+    public IEnumerator AmbienceSoundsFarAroundTheListener()
+    {
+        GameObject listener = Track(new GameObject("Test Listener", typeof(AudioListener)));
+        listener.transform.position = new Vector3(5f, 1f, -3f);
+        GameObject host = Track(new GameObject("Test Ambience"));
+        host.SetActive(false);
+        AmbientSoundscape ambience = host.AddComponent<AmbientSoundscape>();
+        var so = new SerializedObject(ambience);
+        SerializedProperty sets = so.FindProperty("sets");
+        sets.arraySize = 1;
+        SerializedProperty clips = sets.GetArrayElementAtIndex(0).FindPropertyRelative("clips");
+        clips.arraySize = 1;
+        clips.GetArrayElementAtIndex(0).objectReferenceValue = Track(AudioClip.Create("owl", 4410, 1, 44100, false));
+        so.FindProperty("interval").vector2Value = new Vector2(0.5f, 0.5f);
+        so.FindProperty("firstDelay").vector2Value = new Vector2(0.1f, 0.1f);
+        so.ApplyModifiedPropertiesWithoutUndo();
+        host.SetActive(true);
+
+        yield return WaitUntil(() => ambience.Played >= 2, 3f, "Ambient sounds did not repeat.");
+        Vector3 offset = ambience.LastPosition - listener.transform.position;
+        float horizontal = new Vector2(offset.x, offset.z).magnitude;
+        Assert.That(horizontal, Is.InRange(ambience.Distance.x - 0.01f, ambience.Distance.y + 0.01f), "Ambience plays far around the listener.");
+    }
+
     [Test]
     public void GroundSurfacesAreFoundOnTheColliderOrItsTile()
     {

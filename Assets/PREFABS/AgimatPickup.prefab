@@ -16,7 +16,7 @@ GameObject:
   - component: {fileID: 3377845712488927697}
   - component: {fileID: 7234294723852396772}
   - component: {fileID: 8826525314090555392}
-  m_Layer: 0
+  m_Layer: 6
   m_Name: AgimatPickup
   m_TagString: Untagged
   m_Icon: {fileID: 0}

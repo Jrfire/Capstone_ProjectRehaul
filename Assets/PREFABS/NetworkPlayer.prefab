@@ -367,7 +367,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Mirror::Mirror.NetworkIdentity
   sceneId: 0
-  _assetId: 1952560444
+  _assetId: 0
   serverOnly: 0
   visibility: 0
   hasSpawned: 0
@@ -449,6 +449,7 @@ MonoBehaviour:
   movementSpeed: 5
   sprintMultiplier: 1.5
   gravity: 20
+  fallRespawnHeight: -100
 --- !u!114 &63311494271888338
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -503,6 +504,7 @@ MonoBehaviour:
   playerCamera: {fileID: 8864935223497675231}
   useDistance: 3.5
   nametagDistance: 12
+  obstacleNametagDistance: 5
   interactionLayers:
     serializedVersion: 2
     m_Bits: 4294967291
@@ -621,6 +623,12 @@ MonoBehaviour:
   occlusionMask:
     serializedVersion: 2
     m_Bits: 4294967291
+  toggleSound:
+    clips:
+    - {fileID: 8300000, guid: 063aa5dc5c3478a4ab80b54925d798a3, type: 3}
+    volume: 0.6
+    pitchRange: {x: 0.95, y: 1.05}
+  toggleSoundMaxDistance: 12
 --- !u!114 &5180342271938475501
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -712,13 +720,26 @@ MonoBehaviour:
   syncMode: 0
   syncInterval: 0
   solidSteps:
-    clips: []
-    volume: 1
-    pitchRange: {x: 0.95, y: 1.05}
+    clips:
+    - {fileID: 8300000, guid: 786d1afad617df34f8cdc7d7278c68aa, type: 3}
+    - {fileID: 8300000, guid: 62b770558c17dbf449332adece3f14c0, type: 3}
+    - {fileID: 8300000, guid: 9ba7059a2ab229a4890912db5f02dceb, type: 3}
+    - {fileID: 8300000, guid: d83d902b1c817c74abe15504448a3ab2, type: 3}
+    - {fileID: 8300000, guid: 72497d3e29064c14ca01112459beed98, type: 3}
+    - {fileID: 8300000, guid: 637f0548e21e605499ff6ea34ca26a1e, type: 3}
+    volume: 0.35
+    pitchRange: {x: 0.9, y: 1.1}
   dirtSteps:
-    clips: []
-    volume: 1
-    pitchRange: {x: 0.95, y: 1.05}
+    clips:
+    - {fileID: 8300000, guid: 51ea054bbd8b6764fb444f797a836820, type: 3}
+    - {fileID: 8300000, guid: 389166aa15fd7284ca31201a4fe02839, type: 3}
+    - {fileID: 8300000, guid: f0ff17ffe04b37a4aa6e0a2f8b915319, type: 3}
+    - {fileID: 8300000, guid: 97e4e5b74603b7944850d8442be5355a, type: 3}
+    - {fileID: 8300000, guid: c4b2a333b1d958a42ad556008681117a, type: 3}
+    - {fileID: 8300000, guid: 025ab92c465d4f049a1fedd1309f882b, type: 3}
+    - {fileID: 8300000, guid: 1bb42fa3f5fb07a4c96daacfc18cf809, type: 3}
+    volume: 0.35
+    pitchRange: {x: 0.9, y: 1.1}
   defaultSurface: 0
   walkStepInterval: 0.5
   runStepInterval: 0.32
@@ -730,9 +751,10 @@ MonoBehaviour:
     volume: 1
     pitchRange: {x: 0.95, y: 1.05}
   damagedSound:
-    clips: []
-    volume: 1
-    pitchRange: {x: 0.95, y: 1.05}
+    clips:
+    - {fileID: 8300000, guid: 0aebf95125581e54596d1d29d082f70a, type: 3}
+    volume: 0.85
+    pitchRange: {x: 0.85, y: 1.15}
 --- !u!114 &6902277361238436370
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -751,6 +773,7 @@ MonoBehaviour:
   inputActions: {fileID: -944628639613478452, guid: 052faaac586de48259a63d0c4782560b, type: 3}
   useCooldown: 0.35
   maxAimOriginOffset: 3
+  keyReach: 3.5
 --- !u!114 &1796714487108339411
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -791,6 +814,9 @@ MonoBehaviour:
   infernoLightIntensity: 4
   infernoLightRange: 22
   pocketTheme: {fileID: 0}
+  pocketFireVolume: {x: 0.6, y: 2.2}
+  pocketFireEndVolume: 0.15
+  pocketFireEcho: {x: 0.05, y: 0.75}
   serverMinimumSurviveSeconds: 55
   serverTimeoutSeconds: 80
 --- !u!1 &5437688195085614544

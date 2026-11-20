@@ -8,6 +8,7 @@ using UnityEngine;
 /// <see cref="walkStepInterval"/> or the faster <see cref="runStepInterval"/> while sprinting, as 3D sounds at the
 /// feet so others hear them too. Damaged: <see cref="damagedSound"/> whenever health drops. Attack: when the owner
 /// attacks with a weapon (<see cref="PlayerItemUse"/>, left mouse) <see cref="attackSound"/> plays locally and for everyone else.
+/// The damaged sound is skipped for a fatal hit with a killer, because the killer's jumpscare plays instead.
 /// </summary>
 [DisallowMultipleComponent]
 [RequireComponent(typeof(NetworkIdentity))]
@@ -81,7 +82,7 @@ public sealed class PlayerAudio : NetworkBehaviour
 
     private void OnHealthChanged(int current)
     {
-        if (current < lastHealth)
+        if (current < lastHealth && !DiesToJumpscare(current))
         {
             DamageSoundsPlayed++;
             AudioManager.PlayAt(damagedSound, transform.position + Vector3.up, AudioChannel.Sfx, 1f, 20f);
@@ -89,12 +90,14 @@ public sealed class PlayerAudio : NetworkBehaviour
         lastHealth = current;
     }
 
+    // A creature's killing blow is followed by its jumpscare (and its sound), so the hurt sound stays silent.
+    private bool DiesToJumpscare(int current) => current <= 0 && health != null && health.KillerAssetId != 0;
+
     private void Update()
     {
         UpdateFootsteps();
     }
 
-    /// <summary>Owner: plays the attack sound here and for everyone else.</summary>
     /// <summary>Plays the damaged sound without any damage (local only, e.g. the blood-moon Tiktik's fake rush).</summary>
     public void PlayFakeDamage()
     {
@@ -102,6 +105,7 @@ public sealed class PlayerAudio : NetworkBehaviour
         AudioManager.PlayAt(damagedSound, transform.position + Vector3.up, AudioChannel.Sfx, 1f, 20f);
     }
 
+    /// <summary>Owner: plays the attack sound here and for everyone else.</summary>
     public void Attack()
     {
         PlayAttackSound();

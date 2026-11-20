@@ -162,6 +162,36 @@ namespace Capstone.Audio
                 : null;
         }
 
+        /// <summary>
+        /// Like <see cref="PlayAt(AudioClipSet, Vector3, AudioChannel, float, float)"/> with an echo: the same clip repeats
+        /// <paramref name="echoRepeats"/> times every <paramref name="echoDelay"/> seconds, starting at
+        /// <paramref name="echo"/> (0..1) of the volume and halving each time, muffled by a low-pass filter.
+        /// <paramref name="volumeScale"/> scales the whole sound. Returns the dry (first) source.
+        /// </summary>
+        public static AudioSource PlayAtWithEcho(AudioClipSet set, Vector3 position, AudioChannel channel, float minDistance,
+            float maxDistance, float echo, float volumeScale = 1f, float echoDelay = 0.32f, int echoRepeats = 3)
+        {
+            if (set == null || !set.HasClips)
+                return null;
+            AudioClip clip = set.Pick();
+            float pitch = set.PickPitch();
+            float volume = Mathf.Clamp01(set.volume * volumeScale);
+            AudioSource dry = CreateTemporary(clip, position, channel, volume, pitch, 1f, minDistance, maxDistance);
+            if (echo <= 0f || echoRepeats <= 0)
+                return dry;
+            float level = Mathf.Clamp01(echo);
+            for (int repeat = 1; repeat <= echoRepeats; repeat++)
+            {
+                float delay = Mathf.Max(0.02f, echoDelay) * repeat;
+                AudioSource wet = CreateTemporary(clip, position, channel, volume * level, pitch, 1f, minDistance,
+                    maxDistance * 1.2f, delay, delay);
+                AudioLowPassFilter muffle = wet.gameObject.AddComponent<AudioLowPassFilter>();
+                muffle.cutoffFrequency = Mathf.Lerp(4000f, 1200f, repeat / (float)echoRepeats);
+                level *= 0.5f;
+            }
+            return dry;
+        }
+
         private readonly Dictionary<AudioChannel, AudioSource> channelSources = new Dictionary<AudioChannel, AudioSource>();
 
         private AudioSource SourceFor(AudioChannel channel)
@@ -178,7 +208,7 @@ namespace Capstone.Audio
         }
 
         private static AudioSource CreateTemporary(AudioClip clip, Vector3 position, AudioChannel channel, float volume,
-            float pitch, float spatialBlend, float minDistance, float maxDistance)
+            float pitch, float spatialBlend, float minDistance, float maxDistance, float tailSeconds = 0f, float delaySeconds = 0f)
         {
             var go = new GameObject($"Sound ({clip.name})");
             go.transform.position = position;
@@ -187,8 +217,11 @@ namespace Capstone.Audio
             source.clip = clip;
             source.volume = volume;
             source.pitch = Mathf.Approximately(pitch, 0f) ? 1f : pitch;
-            source.Play();
-            Destroy(go, clip.length / Mathf.Max(0.05f, Mathf.Abs(source.pitch)) + 0.1f);
+            if (delaySeconds > 0f)
+                source.PlayDelayed(delaySeconds);
+            else
+                source.Play();
+            Destroy(go, clip.length / Mathf.Max(0.05f, Mathf.Abs(source.pitch)) + 0.1f + Mathf.Max(0f, tailSeconds));
             return source;
         }
 

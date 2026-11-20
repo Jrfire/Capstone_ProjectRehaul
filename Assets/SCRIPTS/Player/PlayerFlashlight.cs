@@ -36,6 +36,11 @@ public sealed class PlayerFlashlight : NetworkBehaviour
     [SerializeField, Tooltip("Solid colliders on these layers stop the beam from reaching an enemy.")]
     private LayerMask occlusionMask = Physics.DefaultRaycastLayers;
 
+    [Header("Sound")]
+    [SerializeField, Tooltip("Click played (3D, everyone nearby) whenever the flashlight is switched on or off.")]
+    private Capstone.Audio.AudioClipSet toggleSound = new Capstone.Audio.AudioClipSet();
+    [SerializeField, Min(0.1f)] private float toggleSoundMaxDistance = 12f;
+
     [SyncVar] private bool isOn = true;
     [SyncVar] private float pitch;
 
@@ -54,6 +59,10 @@ public sealed class PlayerFlashlight : NetworkBehaviour
     public Texture2D Cookie => cookie;
     public bool OwnerFlickering { get; private set; }
     public bool RemoteFlickering { get; private set; }
+    public int ToggleSoundsPlayed { get; private set; }
+
+    // Last on/off value seen on this peer (null until the first frame, so spawning never clicks).
+    private bool? heardOn;
 
     private void Awake()
     {
@@ -129,8 +138,23 @@ public sealed class PlayerFlashlight : NetworkBehaviour
 
         if (remoteLight != null)
             remoteLight.transform.localRotation = Quaternion.Euler(pitch, 0f, 0f);
+        UpdateToggleSound();
         OwnerFlickering = Apply(ownerLight, ownerBaseIntensity);
         RemoteFlickering = Apply(remoteLight, remoteBaseIntensity);
+    }
+
+    // Every peer clicks when it sees the synced switch change (the owner at once, others when the SyncVar arrives).
+    private void UpdateToggleSound()
+    {
+        if (heardOn == isOn)
+            return;
+        bool first = !heardOn.HasValue;
+        heardOn = isOn;
+        if (first)
+            return;
+        ToggleSoundsPlayed++;
+        Vector3 position = playerCamera != null ? playerCamera.transform.position : transform.position + Vector3.up * 1.5f;
+        Capstone.Audio.AudioManager.PlayAt(toggleSound, position, Capstone.Audio.AudioChannel.Sfx, 1f, toggleSoundMaxDistance);
     }
 
     private bool Apply(Light beam, float baseIntensity)

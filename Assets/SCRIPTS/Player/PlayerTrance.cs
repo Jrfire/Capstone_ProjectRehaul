@@ -59,6 +59,12 @@ public sealed class PlayerTrance : NetworkBehaviour
     [SerializeField, Tooltip("Optional music override while in the pocket (Music channel, priority 20). Empty = the " +
         "trance source's ITranceSource.PocketTheme (the Santelmo's chase theme).")]
     private AudioClip pocketTheme;
+    [SerializeField, Tooltip("Pocket chaser's fire loop volume multiplier: (start, peak). It swells from start to peak until the final phase...")]
+    private Vector2 pocketFireVolume = new Vector2(0.6f, 2.2f);
+    [SerializeField, Min(0f), Tooltip("...then falls to this as the screen whitens.")]
+    private float pocketFireEndVolume = 0.15f;
+    [SerializeField, Tooltip("Pocket chaser's fire echo (start, peak), dropping to 0 as the screen whitens.")]
+    private Vector2 pocketFireEcho = new Vector2(0.05f, 0.75f);
 
     [Header("Server")]
     [SerializeField, Min(0f), Tooltip("Earliest elapsed trance time the server accepts as survived (anti-cheat slack).")]
@@ -80,6 +86,7 @@ public sealed class PlayerTrance : NetworkBehaviour
 
     private GameObject pocketRoot;
     private Transform chaser;
+    private Capstone.Audio.FireSound chaserFire;
     private Vector3 pocketAxis = Vector3.right;
     private Vector3 pocketCenter;
     private float segmentLength;
@@ -108,6 +115,8 @@ public sealed class PlayerTrance : NetworkBehaviour
     public NetworkIdentity TranceSource => tranceSource;
     public float PocketTime => pocketTime;
     public Transform PocketChaser => chaser;
+    /// <summary>The pocket chaser's fire loop (owner, while in the pocket), driven by <see cref="PocketFireLevels"/>.</summary>
+    public Capstone.Audio.FireSound PocketChaserFire => chaserFire;
     public GameObject PocketRoot => pocketRoot;
     public float CurrentChaserSpeed => pocketTime >= surviveSeconds - finalPhaseSeconds ? chaserSlowSpeed : chaserSpeed;
 
@@ -321,9 +330,25 @@ public sealed class PlayerTrance : NetworkBehaviour
         SpawnChaser(start - pocketAxis * chaserStartDistance);
         savedAmbient = RenderSettings.ambientLight;
         RenderSettings.ambientLight = infernoAmbient;
-        AudioClip theme = PocketMusic;
+        UpdatePocketChaseMusic();
+    }
+
+    /// <summary>True while the owner is in the pocket and its Santelmo is still hunting them (not caught, not survived).</summary>
+    public bool PocketChaseActive => pocketActive && pocketRoot != null && chaser != null && !resultSent;
+
+    // The chase theme plays only while the Santelmo actually chases the player inside its dimension.
+    private void UpdatePocketChaseMusic()
+    {
+        AudioClip theme = PocketChaseActive ? PocketMusic : null;
         if (theme != null)
-            AudioManager.RequestMusic(this, theme, 20);
+        {
+            if (!AudioManager.IsMusicRequested(this))
+                AudioManager.RequestMusic(this, theme, 20);
+        }
+        else if (AudioManager.IsMusicRequested(this))
+        {
+            AudioManager.ReleaseMusic(this);
+        }
     }
 
     /// <summary>The music played in the pocket: the override, else the trance source's pocket theme.</summary>
@@ -350,6 +375,7 @@ public sealed class PlayerTrance : NetworkBehaviour
             Destroy(pocketRoot);
         pocketRoot = null;
         chaser = null;
+        chaserFire = null;
         RenderSettings.ambientLight = savedAmbient;
         AudioManager.ReleaseMusic(this);
         MoveLocally(bodyPosition, bodyRotation);
@@ -381,6 +407,12 @@ public sealed class PlayerTrance : NetworkBehaviour
         pocketTime += deltaTime;
         WrapPlayer();
         TickBloodMoonFlash();
+        if (chaserFire != null)
+        {
+            PocketFireLevels(pocketTime, out float fireVolume, out float fireEcho);
+            chaserFire.VolumeMultiplier = fireVolume;
+            chaserFire.EchoAmount = fireEcho;
+        }
         if (chaser != null)
         {
             Vector3 target = transform.position + Vector3.up * chaserHeight;
@@ -410,6 +442,26 @@ public sealed class PlayerTrance : NetworkBehaviour
             if (NetworkClient.active)
                 CmdSurvived();
         }
+        UpdatePocketChaseMusic();
+    }
+
+    /// <summary>
+    /// Pocket fire loudness and echo at <paramref name="time"/>: they swell until the final phase, then fade as the
+    /// screen whitens before the return.
+    /// </summary>
+    public void PocketFireLevels(float time, out float volume, out float echo)
+    {
+        float buildEnd = Mathf.Max(0.01f, surviveSeconds - finalPhaseSeconds);
+        if (time < buildEnd || finalPhaseSeconds <= 0f)
+        {
+            float build = Mathf.Clamp01(time / buildEnd);
+            volume = Mathf.Lerp(pocketFireVolume.x, pocketFireVolume.y, build);
+            echo = Mathf.Lerp(pocketFireEcho.x, pocketFireEcho.y, build);
+            return;
+        }
+        float fade = Mathf.Clamp01((time - buildEnd) / finalPhaseSeconds);
+        volume = Mathf.Lerp(pocketFireVolume.y, pocketFireEndVolume, fade);
+        echo = Mathf.Lerp(pocketFireEcho.y, 0f, fade);
     }
 
     private float nextBloodMoonFlash = -1f;
@@ -471,6 +523,13 @@ public sealed class PlayerTrance : NetworkBehaviour
             Destroy(collider);
         chaser = visual.transform;
         chaser.position = feet + Vector3.up * chaserHeight;
+        chaserFire = visual.GetComponentInChildren<Capstone.Audio.FireSound>(true);
+        if (chaserFire != null)
+        {
+            PocketFireLevels(0f, out float fireVolume, out float fireEcho);
+            chaserFire.VolumeMultiplier = fireVolume;
+            chaserFire.EchoAmount = fireEcho;
+        }
     }
 
     private void BuildPocket(out Vector3 start)

@@ -2217,6 +2217,55 @@ MonoBehaviour:
     m_VarianceClampScale: 0.9
     m_ContrastAdaptiveSharpening: 0
   m_Version: 2
+--- !u!1 &951805105
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 951805107}
+  - component: {fileID: 951805106}
+  m_Layer: 0
+  m_Name: MenuMusic
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &951805106
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 951805105}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d94d09c8c42f0964e8e393d6bbbd03df, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Capstone.Audio::Capstone.Audio.MenuMusic
+  theme: {fileID: 8300000, guid: 4127672392c54b048a2a47e4141fe556, type: 3}
+  volume: 0.8
+  fadeInSeconds: 2
+  mixer: {fileID: 24100000, guid: 17e4730c59fc75f418bbb4aaf185e531, type: 2}
+  musicGroup: {fileID: -4162205978534682567, guid: 17e4730c59fc75f418bbb4aaf185e531, type: 2}
+--- !u!4 &951805107
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 951805105}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &952972060
 GameObject:
   m_ObjectHideFlags: 0
@@ -6584,3 +6633,4 @@ SceneRoots:
   - {fileID: 952972062}
   - {fileID: 1353873900}
   - {fileID: 1616896976}
+  - {fileID: 951805107}

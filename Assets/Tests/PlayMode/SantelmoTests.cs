@@ -2,6 +2,7 @@
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
+using Capstone.Audio;
 using Mirror;
 using NUnit.Framework;
 using UnityEditor;
@@ -255,11 +256,13 @@ public sealed class SantelmoTests : InputTestFixture
     public IEnumerator ItsChaseThemePlaysInThePocketInsteadOfTheStreet()
     {
         SpawnArena();
-        ConfigureTrance(localPlayer, chaserSpeed: 0f);
+        ConfigureTrance(localPlayer, chaserSpeed: 0f, survive: 1.5f, finalPhase: 0.5f);
         Place(localPlayer, new Vector3(5f, 0f, 5f));
         Place(remotePlayer, new Vector3(-40f, 0f, -40f));
         SantelmoBrain brain = CreateSantelmo(new Vector3(30f, 0f, -30f), enableBrain: false);
         AudioClip theme = AudioClip.Create("Santelmo Test Theme", 4410, 1, 44100, false);
+        var audioManagerObject = new GameObject("Test AudioManager");
+        audioManagerObject.AddComponent<AudioManager>();
         try
         {
             var audio = new SerializedObject(brain.GetComponent<EnemyAudio>());
@@ -268,15 +271,21 @@ public sealed class SantelmoTests : InputTestFixture
             Assert.That(brain.PlaysChaseTheme, Is.False, "No street chase music for the gaze.");
             Assert.That(brain.PlaysChaseSound, Is.False, "No street chase sound for the gaze either.");
             var trance = localPlayer.GetComponent<PlayerTrance>();
+            Assert.That(AudioManager.IsMusicRequested(trance), Is.False, "No theme before the trance.");
             Assert.That(trance.ServerStartTrance(brain.netIdentity), Is.True);
             yield return WaitUntil(() => trance.PocketActive, 1f, "The owner enters the pocket.");
             Assert.That(trance.TranceSource, Is.EqualTo(brain.netIdentity));
             Assert.That(trance.PocketMusic, Is.EqualTo(theme), "The Santelmo's chase theme plays in the pocket.");
+            Assert.That(trance.PocketChaseActive, Is.True);
+            Assert.That(AudioManager.IsMusicRequested(trance), Is.True, "The theme plays while the Santelmo chases in its dimension.");
+            yield return WaitUntil(() => !trance.PocketChaseActive, 3f, "The chase ends once the player survives.");
+            Assert.That(AudioManager.IsMusicRequested(trance), Is.False, "The theme stops once the Santelmo is no longer chasing.");
             trance.ServerEndTrance(false);
             yield return null;
         }
         finally
         {
+            Object.Destroy(audioManagerObject);
             Object.DestroyImmediate(theme);
         }
     }

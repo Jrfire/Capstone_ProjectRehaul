@@ -34,6 +34,15 @@ public sealed class FireZone : NetworkBehaviour
     [SerializeField] private Light[] lights = new Light[0];
     [SerializeField] private ParticleSystem[] particles = new ParticleSystem[0];
 
+    [Header("Sounds (every peer)")]
+    [SerializeField, Tooltip("Played once where the bottle breaks (bottle shatter).")]
+    private Capstone.Audio.AudioClipSet shatterSound = new Capstone.Audio.AudioClipSet();
+    [SerializeField, Tooltip("Played once as the fire catches (together with the shatter).")]
+    private Capstone.Audio.AudioClipSet igniteSound = new Capstone.Audio.AudioClipSet();
+    [SerializeField, Min(0.1f)] private float impactSoundMaxDistance = 30f;
+    [SerializeField, Tooltip("Looping crackle on this object; it fades out with the flames.")]
+    private Capstone.Audio.FireSound loopSound;
+
     [SyncVar] private double startTime;
 
     private static readonly List<FireZone> active = new List<FireZone>();
@@ -41,6 +50,13 @@ public sealed class FireZone : NetworkBehaviour
     private float[] lightIntensities;
     private Color[] flameColors;
     private bool stopped;
+    private bool impactPlayed;
+
+    /// <summary>Peers that saw the fire start play the shatter/ignite sounds; late joiners do not.</summary>
+    public const float ImpactSoundWindow = 1f;
+
+    public int ImpactSoundsPlayed { get; private set; }
+    public Capstone.Audio.FireSound LoopSound => loopSound;
 
     /// <summary>Fires currently burning (on every peer).</summary>
     public static IReadOnlyList<FireZone> Active => active;
@@ -188,6 +204,18 @@ public sealed class FireZone : NetworkBehaviour
             return; // a client before the spawn payload arrived
         float remaining = lifetime - age;
         float strength = fadeSeconds > 0f ? Mathf.Clamp01(remaining / fadeSeconds) : (remaining > 0f ? 1f : 0f);
+        if (!impactPlayed)
+        {
+            impactPlayed = true;
+            if (age <= ImpactSoundWindow)
+            {
+                ImpactSoundsPlayed++;
+                Capstone.Audio.AudioManager.PlayAt(shatterSound, transform.position, Capstone.Audio.AudioChannel.Sfx, 2f, impactSoundMaxDistance);
+                Capstone.Audio.AudioManager.PlayAt(igniteSound, transform.position, Capstone.Audio.AudioChannel.Sfx, 2f, impactSoundMaxDistance);
+            }
+        }
+        if (loopSound != null)
+            loopSound.VolumeMultiplier = strength;
         for (int index = 0; index < lights.Length; index++)
         {
             if (lights[index] == null)

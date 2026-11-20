@@ -411,6 +411,34 @@ public sealed class InventoryTests
         Assert.That(condition(), Is.True, message);
     }
 
+    [UnityTest]
+    public IEnumerator PlayersWalkThroughPickupsButCanStillAimAtThem(
+        [Values("Assets/PREFABS/ItemPickup.prefab", "Assets/PREFABS/AgimatPickup.prefab")] string pickupPath)
+    {
+        var pickup = Track(Object.Instantiate(AssetDatabase.LoadAssetAtPath<GameObject>(pickupPath),
+            new Vector3(0f, 0.2f, 3f), Quaternion.identity));
+        Collider pickupCollider = pickup.GetComponentsInChildren<Collider>(true)[0];
+        Assert.That(pickupCollider.isTrigger, Is.False, "E aims only at solid colliders.");
+        var playerPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(PlayerPath);
+        var walker = Track(new GameObject("Walker") { layer = playerPrefab.layer });
+        walker.transform.position = new Vector3(0f, 1f, 0f);
+        var controller = walker.AddComponent<CharacterController>();
+        controller.height = 2f;
+        controller.radius = 0.4f;
+        Physics.SyncTransforms();
+        yield return null;
+
+        for (int step = 0; step < 30; step++)
+            controller.Move(Vector3.forward * 0.2f);
+        Assert.That(walker.transform.position.z, Is.GreaterThan(5.5f), "The pickup must not block the player.");
+
+        Physics.SyncTransforms();
+        var ray = new Ray(new Vector3(0f, 0.3f, 0f), Vector3.forward);
+        Assert.That(Physics.Raycast(ray, out RaycastHit hit, 10f, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore),
+            Is.True, "The interaction raycast still hits the pickup.");
+        Assert.That(hit.collider.transform.IsChildOf(pickup.transform), Is.True);
+    }
+
     private T Track<T>(T obj) where T : Object
     {
         created.Add(obj);

@@ -161,10 +161,116 @@ public sealed class NightAudioSetupTests
         try
         {
             Assert.That(InScene<SceneMusic>(streets), Has.Length.EqualTo(1));
+            AmbientSoundscape ambience = InScene<AmbientSoundscape>(streets).Single();
+            Assert.That(ambience.Sets, Has.Length.EqualTo(4), "Crickets, wind, owls and wolves.");
+            Assert.That(ambience.Sets.All(set => set.HasClips), Is.True);
+            Assert.That(ambience.Distance.x, Is.GreaterThanOrEqualTo(20f), "Ambience plays far from the players.");
         }
         finally
         {
             EditorSceneManager.CloseScene(streets, true);
+        }
+        Scene menu = EditorSceneManager.OpenScene("Assets/Scenes/MainMenu.unity", OpenSceneMode.Additive);
+        try
+        {
+            MenuMusic music = InScene<MenuMusic>(menu).Single();
+            Assert.That(music.Theme, Is.SameAs(AssetDatabase.LoadAssetAtPath<AudioClip>("Assets/Audio/OST/MainMenuTheme.wav")));
+            Assert.That(music.MusicGroup, Is.Not.Null);
+            Assert.That(music.MusicGroup.name, Is.EqualTo("Music"));
+        }
+        finally
+        {
+            EditorSceneManager.CloseScene(menu, true);
+        }
+    }
+
+    [Test]
+    public void SoundHooksHaveTheirClips()
+    {
+        GameObject player = Prefab("Assets/PREFABS/NetworkPlayer.prefab");
+        AssertClips(player.GetComponent<PlayerAudio>(), "solidSteps", "dirtSteps", "damagedSound");
+        AssertClips(player.GetComponent<PlayerFlashlight>(), "toggleSound");
+
+        FireZone fire = Prefab("Assets/PREFABS/Items/MolotovFire.prefab").GetComponent<FireZone>();
+        AssertClips(fire, "shatterSound", "igniteSound");
+        Assert.That(fire.LoopSound, Is.Not.Null);
+        Assert.That(fire.LoopSound.Clip, Is.Not.Null);
+
+        foreach (string enemy in new[] { "Tikbalang", "Manananggal", "Santelmo", "Tiktik" })
+        {
+            GameObject prefab = Prefab($"Assets/PREFABS/Enemies/{enemy}.prefab");
+            AssertClips(prefab.GetComponent<EnemyJumpscare>(), "jumpscareSound");
+            Assert.That(prefab.GetComponent<EnemyAudio>().ChaseTheme, Is.Not.Null, enemy);
+        }
+        GameObject tikbalang = Prefab("Assets/PREFABS/Enemies/Tikbalang.prefab");
+        AssertClips(tikbalang.GetComponent<EnemyAudio>(), "movementSounds", "chaseLoopForAll");
+
+        var flaps = new SerializedObject(Prefab("Assets/PREFABS/Enemies/Manananggal.prefab").GetComponent<EnemyAudio>());
+        AssertClips(flaps.targetObject, "movementSounds");
+        Assert.That(flaps.FindProperty("movementEcho").floatValue, Is.GreaterThan(flaps.FindProperty("chaseMovementEcho").floatValue));
+        Assert.That(flaps.FindProperty("chaseMovementVolume").floatValue, Is.LessThan(1f), "Flaps quieten during a chase.");
+
+        GameObject tiktik = Prefab("Assets/PREFABS/Enemies/Tiktik.prefab");
+        AssertClips(tiktik.GetComponent<TiktikAudio>(), "taps");
+        Assert.That(new SerializedObject(tiktik.GetComponent<EnemyAudio>()).FindProperty("movementSounds.clips").arraySize, Is.Zero,
+            "TiktikAudio plays the taps instead.");
+
+        foreach (string path in new[] { "Assets/PREFABS/Enemies/Santelmo.prefab", "Assets/PREFABS/Enemies/SantelmoPocketChaser.prefab" })
+        {
+            GameObject prefab = Prefab(path);
+            Assert.That(prefab.GetComponentInChildren<FireSound>(true).Clip, Is.Not.Null, path);
+            Assert.That(prefab.GetComponentInChildren<IntervalSound>(true).Sounds.HasClips, Is.True, path);
+        }
+        Assert.That(Prefab("Assets/PREFABS/Enemies/SantelmoPocketChaser.prefab").GetComponentInChildren<IntervalSound>(true).Interval.y,
+            Is.LessThan(Prefab("Assets/PREFABS/Enemies/Santelmo.prefab").GetComponentInChildren<IntervalSound>(true).Interval.x),
+            "The voice repeats more often in the pocket.");
+
+        WhiteLady lady = Prefab("Assets/PREFABS/Enemies/WhiteLady.prefab").GetComponent<WhiteLady>();
+        AssertClips(lady, "laughSound", "vanishLaughSound", "jumpscareSound");
+        Assert.That(lady.LaughSound.volume, Is.LessThan(lady.JumpscareSound.volume), "Subtle laughs, loud jumpscare.");
+
+        foreach (string gate in new[] { "Gate 1 (Breakable)", "Gate 1 (Closed)", "Gate 2 (Breakable)", "Gate 2 (Closed)" })
+        {
+            EntranceObstacle obstacle = Prefab($"Assets/Prefab/_Prefab Walls & Gate/Gates/{gate}.prefab").GetComponent<EntranceObstacle>();
+            Assert.That(obstacle.ClearSound.HasClips, Is.True, gate);
+        }
+    }
+
+    [Test]
+    public void SoundLevelsFollowDistanceAndPocketTime()
+    {
+        TiktikAudio taps = Prefab("Assets/PREFABS/Enemies/Tiktik.prefab").GetComponent<TiktikAudio>();
+        Assert.That(taps.IntervalAt(1f), Is.LessThan(taps.IntervalAt(10f)));
+        Assert.That(taps.IntervalAt(10f), Is.LessThan(taps.IntervalAt(30f)), "Taps speed up as it closes in.");
+
+        WhiteLady lady = Prefab("Assets/PREFABS/Enemies/WhiteLady.prefab").GetComponent<WhiteLady>();
+        Assert.That(lady.LaughIntervalScale(3f), Is.LessThan(1f), "She laughs more often up close.");
+        Assert.That(lady.LaughIntervalScale(30f), Is.EqualTo(1f));
+
+        PlayerTrance trance = Prefab("Assets/PREFABS/NetworkPlayer.prefab").GetComponent<PlayerTrance>();
+        trance.PocketFireLevels(0f, out float startVolume, out float startEcho);
+        trance.PocketFireLevels(50f, out float peakVolume, out float peakEcho);
+        trance.PocketFireLevels(60f, out float endVolume, out float endEcho);
+        Assert.That(peakVolume, Is.GreaterThan(startVolume), "The fire swells in the pocket.");
+        Assert.That(peakEcho, Is.GreaterThan(startEcho));
+        Assert.That(endVolume, Is.LessThan(startVolume), "It falls away as the screen whitens.");
+        Assert.That(endEcho, Is.LessThan(peakEcho));
+    }
+
+    private static GameObject Prefab(string path) =>
+        AssetDatabase.LoadAssetAtPath<GameObject>(path) ?? throw new AssertionException("Missing " + path);
+
+    private static void AssertClips(Object component, params string[] fields)
+    {
+        Assert.That(component, Is.Not.Null);
+        var so = new SerializedObject(component);
+        foreach (string field in fields)
+        {
+            SerializedProperty clips = so.FindProperty(field + ".clips");
+            Assert.That(clips, Is.Not.Null, $"{component.GetType().Name}.{field}");
+            Assert.That(clips.arraySize, Is.GreaterThan(0), $"{component.name} {field} has no clips.");
+            for (int index = 0; index < clips.arraySize; index++)
+                Assert.That(clips.GetArrayElementAtIndex(index).objectReferenceValue, Is.Not.Null, $"{component.name} {field}[{index}]");
         }
     }
 

@@ -161,6 +161,46 @@ MonoBehaviour:
   lungeSeconds: 0.35
   lungeScale: 1.6
   lungeEndDistance: 0.35
+  flickerMinAlpha: 0.25
+  flickerSpeed: 2.5
+  flickerDropoutsPerSecond: 0.35
+  flickerDropoutSeconds: 0.08
+  farDespawnDistance: 25
+  farRespawnSeconds: 30
+  respawnMinDistance: 10
+  respawnMaxDistance: 18
+  spotAngle: 15
+  unseenRelocateSeconds: 40
+  peekChance: 0.4
+  peekSearchRadius: 18
+  peekMinDistance: 6
+  peekSpotAngle: 10
+  retreatSeconds: 0.25
+  peekTimeout: 45
+  laughSound:
+    clips:
+    - {fileID: 8300000, guid: 839537e3352b67e48bd5d4a046b561e8, type: 3}
+    - {fileID: 8300000, guid: f93a60ec911df75408ebbae6073fd220, type: 3}
+    volume: 0.3
+    pitchRange: {x: 0.95, y: 1.05}
+  minLaughInterval: 6
+  maxLaughInterval: 14
+  primedLaughInterval: 3.5
+  vanishLaughSound:
+    clips:
+    - {fileID: 8300000, guid: 839537e3352b67e48bd5d4a046b561e8, type: 3}
+    - {fileID: 8300000, guid: f93a60ec911df75408ebbae6073fd220, type: 3}
+    volume: 0.35
+    pitchRange: {x: 0.95, y: 1.05}
+  jumpscareSound:
+    clips:
+    - {fileID: 8300000, guid: de0b5ecd162241d4eb850851329ac0b9, type: 3}
+    volume: 1
+    pitchRange: {x: 1, y: 1}
+  laughMinDistance: 3
+  laughMaxDistance: 40
+  nearLaughDistance: 12
+  nearLaughIntervalScale: 0.4
 --- !u!114 &3372667190207352109
 MonoBehaviour:
   m_ObjectHideFlags: 0

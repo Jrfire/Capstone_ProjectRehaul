@@ -106,11 +106,25 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Capstone.Level::EntranceObstacle
   requirement: 1
+  gateId: 
+  requiredKeyId: 
   deactivateWhenCleared: 1
   clearedPrefab: {fileID: 4739940131018229224, guid: 0a595c06be579084296c8e7e5deb0ede, type: 3}
   cleared:
     m_PersistentCalls:
       m_Calls: []
+  openedSound:
+    clips:
+    - {fileID: 8300000, guid: 2d5372e681cdc354f9f1f0b2222a7092, type: 3}
+    volume: 1
+    pitchRange: {x: 0.95, y: 1.05}
+  destroyedSound:
+    clips:
+    - {fileID: 8300000, guid: 23f0b67b1ec0bf5408f34cd376b5def1, type: 3}
+    volume: 1
+    pitchRange: {x: 0.92, y: 1.08}
+  soundMinDistance: 2
+  soundMaxDistance: 35
 --- !u!64 &6663842238168018002
 MeshCollider:
   m_ObjectHideFlags: 0

@@ -115,6 +115,10 @@ public sealed class WhiteLady : MonoBehaviour
     private Capstone.Audio.AudioClipSet jumpscareSound = new Capstone.Audio.AudioClipSet();
     [SerializeField, Min(0.1f)] private float laughMinDistance = 3f;
     [SerializeField, Min(1f)] private float laughMaxDistance = 40f;
+    [SerializeField, Min(1f), Tooltip("Within this distance of the player she laughs more often...")]
+    private float nearLaughDistance = 12f;
+    [SerializeField, Range(0.1f, 1f), Tooltip("...down to this fraction of the usual interval when the player is right next to her.")]
+    private float nearLaughIntervalScale = 0.4f;
 
     private const float BodyRadius = 0.45f;
     private float nextLaughAt;
@@ -341,9 +345,16 @@ public sealed class WhiteLady : MonoBehaviour
         float interval = Current == Phase.Stalking
             ? primedLaughInterval
             : Mathf.Lerp(minLaughInterval, Mathf.Max(minLaughInterval, maxLaughInterval), random != null ? (float)random.NextDouble() : Random.value);
+        Camera eye = LocalCamera(out _);
+        if (eye != null)
+            interval *= LaughIntervalScale(Vector3.Distance(eye.transform.position, FacePosition));
         // The first laugh of an appearance comes quickly so she is noticed.
         nextLaughAt = Time.time + (first ? Mathf.Min(1.5f, interval) : interval);
     }
+
+    /// <summary>Laugh interval multiplier at <paramref name="distance"/> from the player: she laughs more often up close.</summary>
+    public float LaughIntervalScale(float distance) =>
+        Mathf.Lerp(nearLaughIntervalScale, 1f, Mathf.InverseLerp(laughMinDistance, nearLaughDistance, distance));
 
     private void PlayVanishLaugh()
     {

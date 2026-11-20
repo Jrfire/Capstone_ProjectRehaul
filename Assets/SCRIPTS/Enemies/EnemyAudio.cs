@@ -7,7 +7,9 @@ using UnityEngine;
 /// <see cref="movementSounds"/> (Tikbalang footsteps, Manananggal wing flaps) every <see cref="movementInterval"/>
 /// seconds while it moves, as a 3D sound everyone nearby hears; raise <see cref="movementMaxDistance"/> for loud,
 /// easy-to-locate sounds. Chase: only the chased player hears <see cref="chaseSound"/> (non-positional, once or looped)
-/// and the <see cref="chaseTheme"/> music, which outranks scene music until the chase ends.
+/// and the <see cref="chaseTheme"/> music, which outranks scene music until the chase ends. Movement sounds can echo
+/// (<see cref="movementEcho"/>) and get quieter/drier while chasing; <see cref="chaseLoopForAll"/> (e.g. the
+/// Tikbalang's laugh) loops at the enemy for everyone while it chases anyone.
 /// </summary>
 [DisallowMultipleComponent]
 [RequireComponent(typeof(EnemyBrain))]
@@ -30,6 +32,18 @@ public sealed class EnemyAudio : MonoBehaviour
     private float movementMinDistance = 2f;
     [SerializeField, Tooltip("Silent beyond this distance.")]
     private float movementMaxDistance = 25f;
+    [SerializeField, Range(0f, 1f), Tooltip("Echo of each movement sound (0 = none), e.g. Manananggal flaps echoing over the streets.")]
+    private float movementEcho;
+    [SerializeField, Range(0f, 2f), Tooltip("Movement volume multiplier while it chases someone (e.g. quieter flaps on a dive).")]
+    private float chaseMovementVolume = 1f;
+    [SerializeField, Range(0f, 1f), Tooltip("Movement echo while it chases someone.")]
+    private float chaseMovementEcho;
+
+    [Header("Chase (heard by everyone nearby)")]
+    [SerializeField, Tooltip("3D loop played from the enemy while it chases anyone (e.g. the Tikbalang's laughing).")]
+    private AudioClipSet chaseLoopForAll = new AudioClipSet();
+    [SerializeField] private float chaseLoopMinDistance = 3f;
+    [SerializeField] private float chaseLoopMaxDistance = 35f;
 
     [Header("Chase (heard only by the chased player)")]
     [SerializeField, Tooltip("Sound when the chase starts (or looping during it).")]
@@ -46,8 +60,15 @@ public sealed class EnemyAudio : MonoBehaviour
     private float stepTimer;
     private bool chasingLocal;
     private AudioSource chaseLoop;
+    private AudioSource publicChaseLoop;
 
     public bool ChasingLocalPlayer => chasingLocal;
+    /// <summary>True while it chases anyone (synced <see cref="EnemyBrain.ChasedPlayer"/>), on every peer.</summary>
+    public bool ChasingAnyone { get; private set; }
+    public bool PublicChaseLoopPlaying => publicChaseLoop != null && publicChaseLoop.isPlaying;
+    public float CurrentMovementVolume => ChasingAnyone ? chaseMovementVolume : 1f;
+    public float CurrentMovementEcho => ChasingAnyone ? chaseMovementEcho : movementEcho;
+    public float MovementMaxDistance => movementMaxDistance;
     public bool IsMovingAudibly { get; private set; }
     public int MovementSoundsPlayed { get; private set; }
     public int ChaseSoundsPlayed { get; private set; }
@@ -62,6 +83,7 @@ public sealed class EnemyAudio : MonoBehaviour
     private void OnDisable()
     {
         SetChasingLocal(false);
+        SetPublicChaseLoop(false);
     }
 
     private void OnDestroy() => AudioManager.ReleaseMusic(this);
@@ -69,9 +91,33 @@ public sealed class EnemyAudio : MonoBehaviour
     private void Update()
     {
         bool present = brain == null || brain.IsPresent;
+        ChasingAnyone = present && brain != null && brain.ChasedPlayer != null;
         UpdateMovement(present);
+        SetPublicChaseLoop(ChasingAnyone);
         NetworkIdentity local = NetworkClient.localPlayer;
         SetChasingLocal(present && NetworkClient.active && local != null && brain != null && brain.ChasedPlayer == local);
+    }
+
+    private void SetPublicChaseLoop(bool playing)
+    {
+        if (!playing || !chaseLoopForAll.HasClips)
+        {
+            if (publicChaseLoop != null && publicChaseLoop.isPlaying)
+                publicChaseLoop.Stop();
+            return;
+        }
+        if (publicChaseLoop == null)
+        {
+            publicChaseLoop = gameObject.AddComponent<AudioSource>();
+            AudioManager.Configure(publicChaseLoop, AudioChannel.Sfx, 1f, chaseLoopMinDistance, chaseLoopMaxDistance);
+            publicChaseLoop.loop = true;
+        }
+        if (publicChaseLoop.isPlaying)
+            return;
+        publicChaseLoop.clip = chaseLoopForAll.Pick();
+        publicChaseLoop.volume = chaseLoopForAll.volume;
+        publicChaseLoop.pitch = chaseLoopForAll.PickPitch();
+        publicChaseLoop.Play();
     }
 
     private void UpdateMovement(bool present)
@@ -94,7 +140,8 @@ public sealed class EnemyAudio : MonoBehaviour
             return;
         stepTimer = fastMovementInterval > 0f && smoothedSpeed >= fastSpeed ? fastMovementInterval : movementInterval;
         MovementSoundsPlayed++;
-        AudioManager.PlayAt(movementSounds, position, AudioChannel.Sfx, movementMinDistance, movementMaxDistance);
+        AudioManager.PlayAtWithEcho(movementSounds, position, AudioChannel.Sfx, movementMinDistance, movementMaxDistance,
+            CurrentMovementEcho, CurrentMovementVolume);
     }
 
     private void SetChasingLocal(bool chasing)

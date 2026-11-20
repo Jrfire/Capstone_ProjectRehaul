@@ -470,6 +470,77 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 22, y: 215, z: 0}
+--- !u!1 &1442213310
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1442213312}
+  - component: {fileID: 1442213311}
+  m_Layer: 0
+  m_Name: Ambience
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &1442213311
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1442213310}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 44598e7c3cad9db40a2ce2f2998c5ae6, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Capstone.Audio::Capstone.Audio.AmbientSoundscape
+  sets:
+  - clips:
+    - {fileID: 8300000, guid: 498b34c8b9bac4a4483dd0e1d27bd848, type: 3}
+    volume: 0.45
+    pitchRange: {x: 0.92, y: 1.06}
+  - clips:
+    - {fileID: 8300000, guid: 9de7d183a025a384bafbd5834f251ab8, type: 3}
+    volume: 0.45
+    pitchRange: {x: 0.92, y: 1.06}
+  - clips:
+    - {fileID: 8300000, guid: e31491c56417e99469e712f07a9990d8, type: 3}
+    - {fileID: 8300000, guid: 05a23e376bf17db43b89668c2f65332e, type: 3}
+    - {fileID: 8300000, guid: 4a2af3c2bd322144bbf9a10bbb523166, type: 3}
+    volume: 0.6
+    pitchRange: {x: 0.92, y: 1.06}
+  - clips:
+    - {fileID: 8300000, guid: f95a20639767d80418a3803985f22031, type: 3}
+    - {fileID: 8300000, guid: afb549eac20394e4bbdffde8c8db75a5, type: 3}
+    - {fileID: 8300000, guid: 770750154fb23c246bfa4e14491f4c1c, type: 3}
+    volume: 0.55
+    pitchRange: {x: 0.92, y: 1.06}
+  interval: {x: 8, y: 20}
+  firstDelay: {x: 3, y: 8}
+  distance: {x: 25, y: 45}
+  height: {x: 2, y: 10}
+  minDistance: 20
+  maxDistance: 90
+--- !u!4 &1442213312
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1442213310}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1853817355
 GameObject:
   m_ObjectHideFlags: 0
@@ -544,3 +615,4 @@ SceneRoots:
   - {fileID: 494850883}
   - {fileID: 564393578}
   - {fileID: 582414908}
+  - {fileID: 1442213312}

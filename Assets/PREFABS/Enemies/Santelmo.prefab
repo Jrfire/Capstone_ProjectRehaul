@@ -5108,6 +5108,7 @@ GameObject:
   - component: {fileID: 8685437849181698615}
   - component: {fileID: 5826647494194834687}
   - component: {fileID: 6101299321564972872}
+  - component: {fileID: 2896507947143758775}
   m_Layer: 0
   m_Name: Santelmo
   m_TagString: Untagged
@@ -5145,7 +5146,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Mirror::Mirror.NetworkIdentity
   sceneId: 0
-  _assetId: 2667298666
+  _assetId: 0
   serverOnly: 0
   visibility: 0
   hasSpawned: 0
@@ -5338,13 +5339,22 @@ MonoBehaviour:
   movingSpeed: 0.4
   movementMinDistance: 2
   movementMaxDistance: 25
+  movementEcho: 0
+  chaseMovementVolume: 1
+  chaseMovementEcho: 0
+  chaseLoopForAll:
+    clips: []
+    volume: 1
+    pitchRange: {x: 0.95, y: 1.05}
+  chaseLoopMinDistance: 3
+  chaseLoopMaxDistance: 35
   chaseSound:
     clips: []
     volume: 1
     pitchRange: {x: 0.95, y: 1.05}
   loopChaseSound: 0
-  chaseTheme: {fileID: 0}
-  chaseThemeVolume: 1
+  chaseTheme: {fileID: 8300000, guid: 2c362d6076f356148aed95437e0c9386, type: 3}
+  chaseThemeVolume: 0.85
 --- !u!114 &8685437849181698615
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -5357,10 +5367,10 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 666555ea5d0fcf640b232bdebd6d4ddc, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Capstone.Audio::Capstone.Audio.FireSound
-  clip: {fileID: 0}
-  volume: 0.8
+  clip: {fileID: 8300000, guid: 242857900d2949748adb228a845ab69f, type: 3}
+  volume: 0.7
   minDistance: 1
-  maxDistance: 15
+  maxDistance: 18
   randomStart: 1
 --- !u!114 &5826647494194834687
 MonoBehaviour:
@@ -5376,9 +5386,10 @@ MonoBehaviour:
   m_EditorClassIdentifier: Capstone.Player::EnemyJumpscare
   frontView: {fileID: 21300000, guid: c9009f4d702e85a4897c3161db775ffa, type: 3}
   jumpscareSound:
-    clips: []
+    clips:
+    - {fileID: 8300000, guid: 9ff6d1d8f3fd3b040938c67c068f4177, type: 3}
     volume: 1
-    pitchRange: {x: 0.95, y: 1.05}
+    pitchRange: {x: 1, y: 1}
   finalScreenHeight: 1.3
   focusPoint: {x: 0.494, y: 0.465}
 --- !u!114 &6101299321564972872
@@ -5400,3 +5411,25 @@ MonoBehaviour:
   - {fileID: 21300000, guid: e90a5ebe8470c7e4c864507de8723956, type: 3}
   framesPerSecond: 8
   displayHeight: 110
+--- !u!114 &2896507947143758775
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 9168828551597176545}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e5a73e142289e3d498032e80188b962b, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Capstone.Audio::Capstone.Audio.IntervalSound
+  sounds:
+    clips:
+    - {fileID: 8300000, guid: 7ba27f1765d8c2d4a9350e4178c9743a, type: 3}
+    volume: 0.9
+    pitchRange: {x: 0.92, y: 1.08}
+  interval: {x: 10, y: 25}
+  firstDelay: {x: 3, y: 10}
+  minDistance: 2
+  maxDistance: 30
+  channel: 1

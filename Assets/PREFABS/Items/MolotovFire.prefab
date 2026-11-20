@@ -135,6 +135,18 @@ MonoBehaviour:
   - {fileID: 5712288379408757444}
   particles:
   - {fileID: 239579976585127059}
+  shatterSound:
+    clips:
+    - {fileID: 8300000, guid: fb72ac63a85068d4b8338e0167157613, type: 3}
+    volume: 1
+    pitchRange: {x: 0.92, y: 1.08}
+  igniteSound:
+    clips:
+    - {fileID: 8300000, guid: 30152963b2f0e4240b7b0a8ad2e21b15, type: 3}
+    volume: 0.9
+    pitchRange: {x: 0.95, y: 1.05}
+  impactSoundMaxDistance: 30
+  loopSound: {fileID: 919760606509897262}
 --- !u!114 &919760606509897262
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -147,10 +159,10 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 666555ea5d0fcf640b232bdebd6d4ddc, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Capstone.Audio::Capstone.Audio.FireSound
-  clip: {fileID: 0}
-  volume: 0.8
-  minDistance: 1
-  maxDistance: 15
+  clip: {fileID: 8300000, guid: 242857900d2949748adb228a845ab69f, type: 3}
+  volume: 0.85
+  minDistance: 1.5
+  maxDistance: 22
   randomStart: 1
 --- !u!1 &3431471058214942567
 GameObject:
