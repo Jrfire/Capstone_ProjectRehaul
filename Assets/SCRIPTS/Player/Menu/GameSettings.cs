@@ -11,14 +11,17 @@ using UnityEngine.InputSystem;
 /// </summary>
 public static class GameSettings
 {
-    public const int MinPixelHeight = 60;
-    public const int MaxPixelHeight = 170;
+    public const int MinPixelHeight = 40;
+    public const int MaxPixelHeight = 1080;
     public const int DefaultPixelHeight = 170;
+    /// <summary>The Settings slider shows a pixelation level: 0 = finest (Max height), 100 = coarsest (Min height).</summary>
+    public const int MaxPixelationLevel = 100;
     /// <summary>Brightness is a post-exposure offset in EV stops.</summary>
     public const float MinBrightness = -1f;
     public const float MaxBrightness = 1.5f;
 
     private const string PixelHeightKey = "Capstone.PixelHeight";
+    private const string CameraBobKey = "Capstone.CameraBob";
     private const string BrightnessKey = "Capstone.Brightness";
     private const string ResolutionWidthKey = "Capstone.ResolutionWidth";
     private const string ResolutionHeightKey = "Capstone.ResolutionHeight";
@@ -36,6 +39,33 @@ public static class GameSettings
         set
         {
             PlayerPrefs.SetInt(PixelHeightKey, Mathf.Clamp(value, MinPixelHeight, MaxPixelHeight));
+            Changed?.Invoke();
+        }
+    }
+
+    /// <summary>Pixel height for a pixelation level (logarithmic, so each step changes the look evenly).</summary>
+    public static int PixelHeightForLevel(float level)
+    {
+        float t = Mathf.Clamp01(level / MaxPixelationLevel);
+        return Mathf.Clamp(Mathf.RoundToInt(MaxPixelHeight * Mathf.Pow((float)MinPixelHeight / MaxPixelHeight, t)),
+            MinPixelHeight, MaxPixelHeight);
+    }
+
+    /// <summary>Pixelation level (0 = finest, 100 = coarsest) for a pixel height.</summary>
+    public static int PixelationLevelForHeight(int height)
+    {
+        float clamped = Mathf.Clamp(height, MinPixelHeight, MaxPixelHeight);
+        float t = Mathf.Log(clamped / MaxPixelHeight) / Mathf.Log((float)MinPixelHeight / MaxPixelHeight);
+        return Mathf.Clamp(Mathf.RoundToInt(t * MaxPixelationLevel), 0, MaxPixelationLevel);
+    }
+
+    /// <summary>Camera bobbing while walking/sprinting (on by default).</summary>
+    public static bool CameraBob
+    {
+        get => PlayerPrefs.GetInt(CameraBobKey, 1) != 0;
+        set
+        {
+            PlayerPrefs.SetInt(CameraBobKey, value ? 1 : 0);
             Changed?.Invoke();
         }
     }

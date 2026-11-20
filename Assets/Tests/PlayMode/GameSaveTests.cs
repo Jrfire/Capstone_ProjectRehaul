@@ -153,6 +153,47 @@ public sealed class GameSaveTests
     }
 
     [UnityTest]
+    public IEnumerator WeaponDurabilitySurvivesReloadButKeysAreNeverSaved()
+    {
+        Track(GroundAt(Vector3.zero));
+        ItemCatalog catalog = AssetDatabase.LoadAssetAtPath<GameObject>(PlayerPath).GetComponent<PlayerInventory>().Catalog;
+        ItemDefinition weapon = Item(catalog, "save_test_bolo");
+        weapon.ConfigureWeapon(2.5f, 3f, true);
+        weapon.ConfigureDurability(true, 3);
+        ItemDefinition gateKey = Item(catalog, "save_test_gate_key");
+        gateKey.ConfigureKey(KeyCategory.Gate, "T1");
+
+        var data = new GameSaveData();
+        data.players.Add(new PlayerSaveData { key = "host", name = "Host", characterIndex = 0,
+            slots = new List<string> { weapon.Id, gateKey.Id }, slotUses = new List<int> { 1, 0 } });
+        data.baseItems.Add(new FloorItemSaveData { itemId = weapon.Id, position = new Vector3(3f, 0.5f, 0f), uses = 2 });
+        data.baseItems.Add(new FloorItemSaveData { itemId = gateKey.Id, position = new Vector3(-3f, 0.5f, 0f) });
+        Assert.That(SaveSystem.Write(0, data), Is.True);
+        MenuLaunch.SetActiveSaveSlot(0);
+
+        (_, _, GameSaveManager saves) = StartHost();
+        yield return WaitUntil(() => NetworkClient.localPlayer != null, 5f, "The host player did not spawn.");
+        var inventory = NetworkClient.localPlayer.GetComponent<PlayerInventory>();
+        Assert.That(inventory.SlotIds().Take(2), Is.EqualTo(new[] { weapon.Id, "" }), "Saved keys are not restored.");
+        Assert.That(inventory.GetDurability(0), Is.EqualTo(1), "The weapon keeps its remaining uses.");
+        ItemPickup pickup = ItemPickup.Active.Single();
+        Assert.That(pickup.ItemId, Is.EqualTo(weapon.Id), "Keys left on the floor are not restored.");
+        Assert.That(pickup.Uses, Is.EqualTo(2));
+
+        Assert.That(inventory.ServerTryAdd(gateKey), Is.True);
+        Assert.That(saves.SaveNow(), Is.True);
+        GameSaveData written = SaveSystem.Load(0);
+        PlayerSaveData profile = written.FindPlayer("host");
+        Assert.That(profile.slots.Take(2), Is.EqualTo(new[] { weapon.Id, "" }), "Held keys are never written.");
+        Assert.That(profile.slotUses[0], Is.EqualTo(1), "Remaining uses are written.");
+        Assert.That(written.baseItems.Single().uses, Is.EqualTo(2));
+
+        Assert.That(inventory.ServerRemoveKeys(), Is.EqualTo(1));
+        Assert.That(inventory.SlotIds().Contains(gateKey.Id), Is.False);
+        Assert.That(inventory.SlotIds()[0], Is.EqualTo(weapon.Id), "Only keys are removed.");
+    }
+
+    [UnityTest]
     public IEnumerator TheShopStockAndPurchasesAreSavedSoReloadingNeverRefreshesTheQuota()
     {
         Track(GroundAt(Vector3.zero));

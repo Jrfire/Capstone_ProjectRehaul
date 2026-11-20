@@ -1799,6 +1799,7 @@ MonoBehaviour:
   crossed: 1
   seed: 25
   generateIfMissing: 0
+  combinedMaterial: {fileID: 2100000, guid: 1c6b0b885c950dc4b98cf95c34960282, type: 2}
 --- !u!1 &4337280076381819311
 GameObject:
   m_ObjectHideFlags: 0

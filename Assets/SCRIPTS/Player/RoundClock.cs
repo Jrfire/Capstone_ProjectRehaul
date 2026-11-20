@@ -490,7 +490,15 @@ public sealed class RoundClock : MonoBehaviour
     {
         ClearAboard();
         if (sceneName == baseSceneName)
+        {
             RespawnDeadPlayers();
+            // Keys only open gates on the map they were found on.
+            foreach (NetworkConnectionToClient connection in NetworkServer.connections.Values)
+            {
+                if (connection?.identity != null && connection.identity.TryGetComponent(out PlayerInventory inventory))
+                    inventory.ServerRemoveKeys();
+            }
+        }
         if (sceneName != baseSceneName || serverElapsed < RoundSeconds)
         {
             Broadcast();

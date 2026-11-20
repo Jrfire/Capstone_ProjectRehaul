@@ -56,6 +56,23 @@ public sealed class PlayerFearEffectsTests
     }
 
     [UnityTest]
+    public IEnumerator SourcesThatDoNotNeedSightPanicThroughWallsAndBehindTheCamera()
+    {
+        source.requireSight = false;
+        GameObject wall = Track(GameObject.CreatePrimitive(PrimitiveType.Cube));
+        wall.transform.position = camera.transform.position + Vector3.forward;
+        wall.transform.localScale = new Vector3(4f, 4f, 0.2f);
+        yield return Frames();
+        Assert.That(fear.CurrentIntensity, Is.EqualTo(1f), "Walls do not block a sightless source.");
+        camera.transform.rotation = Quaternion.Euler(0f, 180f, 0f);
+        yield return Frames();
+        Assert.That(fear.CurrentIntensity, Is.EqualTo(1f), "Looking away keeps the panic.");
+        source.transform.position = camera.transform.position + Vector3.forward * 20f;
+        yield return Frames();
+        Assert.That(fear.CurrentIntensity, Is.Zero, "Distance still limits it.");
+    }
+
+    [UnityTest]
     public IEnumerator WallsBlockButTriggersAndPlayerCollidersDoNot()
     {
         GameObject wall = Track(GameObject.CreatePrimitive(PrimitiveType.Cube));

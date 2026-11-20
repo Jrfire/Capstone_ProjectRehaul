@@ -23,8 +23,10 @@ public sealed class PlayerTrance : NetworkBehaviour
 
     [Header("Pocket dimension")]
     [SerializeField, Min(10f)] private float surviveSeconds = 60f;
-    [SerializeField, Min(0f), Tooltip("Seconds before the end when the chaser slows and the screen starts turning white.")]
+    [SerializeField, Min(0f), Tooltip("Seconds before the end when the chaser slows down.")]
     private float finalPhaseSeconds = 10f;
+    [SerializeField, Min(0f), Tooltip("Seconds before the end when the screen starts turning white (capped at the final phase).")]
+    private float whiteFadeSeconds = 3f;
     [SerializeField, Tooltip("Where the owner's pocket street is built (far from any map).")]
     private Vector3 pocketOrigin = new Vector3(4000f, -800f, 4000f);
     [SerializeField, Range(3, 9), Tooltip("Repeated street blocks in the line (the player is kept in the middle one).")]
@@ -265,9 +267,7 @@ public sealed class PlayerTrance : NetworkBehaviour
             cameraEffects.FogAmbientOverride = infernoFog;
             cameraEffects.FogDensityMultiplier = infernoFogDensity;
             float black = fadeInSeconds > 0f ? 1f - Mathf.Clamp01(pocketTime / fadeInSeconds) : 0f;
-            float white = finalPhaseSeconds > 0f
-                ? Mathf.Clamp01((pocketTime - (surviveSeconds - finalPhaseSeconds)) / finalPhaseSeconds)
-                : (pocketTime >= surviveSeconds ? 1f : 0f);
+            float white = WhiteAmount(pocketTime);
             cameraEffects.ScreenFade = white > 0f ? new Color(1f, 1f, 1f, white) : new Color(0f, 0f, 0f, black);
             return;
         }
@@ -445,6 +445,15 @@ public sealed class PlayerTrance : NetworkBehaviour
         UpdatePocketChaseMusic();
     }
 
+    /// <summary>How white the pocket screen is <paramref name="time"/> seconds into the trance (0..1).</summary>
+    public float WhiteAmount(float time)
+    {
+        float seconds = Mathf.Min(whiteFadeSeconds, finalPhaseSeconds);
+        return seconds > 0f
+            ? Mathf.Clamp01((time - (surviveSeconds - seconds)) / seconds)
+            : (time >= surviveSeconds ? 1f : 0f);
+    }
+
     /// <summary>
     /// Pocket fire loudness and echo at <paramref name="time"/>: they swell until the final phase, then fade as the
     /// screen whitens before the return.
@@ -517,6 +526,7 @@ public sealed class PlayerTrance : NetworkBehaviour
             glow.intensity = 6f;
             EnemyFearSource source = visual.AddComponent<EnemyFearSource>();
             source.visibilityRenderer = visual.GetComponent<Renderer>();
+            source.requireSight = false;
         }
         visual.name = "Pocket Santelmo";
         foreach (Collider collider in visual.GetComponentsInChildren<Collider>(true))

@@ -5026,6 +5026,7 @@ MonoBehaviour:
   fullIntensityDistance: 2
   maxDistance: 25
   intensity: 1
+  requireSight: 0
   proximityFullDistance: 2
   proximityMaxDistance: 10
 --- !u!114 &4710486754661464560

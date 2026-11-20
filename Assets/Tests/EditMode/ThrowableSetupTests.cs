@@ -195,6 +195,35 @@ public sealed class ThrowableSetupTests
             Assert.That(leaves.LeafSprite, Is.Not.Null, path);
             Assert.That(leaves.Canopy, Is.Not.Null, path);
             Assert.That(leaves.Canopy.GetComponentsInChildren<SpriteRenderer>(true), Is.Not.Empty, path);
+            Assert.That(leaves.CombinedMaterial, Is.Not.Null, $"{path} merges its leaves at runtime.");
+            Assert.That(leaves.CombinedMaterial.shader.name, Is.EqualTo("Capstone/Leaf Cutout"), path);
+        }
+    }
+
+    [Test]
+    public void TreeLeavesCombineIntoOneMesh()
+    {
+        string path = AssetDatabase.FindAssets("t:Prefab Dark", new[] { "Assets/Prefab" })
+            .Select(AssetDatabase.GUIDToAssetPath)
+            .First(p => AssetDatabase.LoadAssetAtPath<GameObject>(p).GetComponent<TreeLeafAttachment>() != null);
+        GameObject tree = Object.Instantiate(AssetDatabase.LoadAssetAtPath<GameObject>(path));
+        try
+        {
+            var leaves = tree.GetComponent<TreeLeafAttachment>();
+            int cards = leaves.Canopy.GetComponentsInChildren<SpriteRenderer>(true).Length;
+            Assert.That(leaves.CombineLeaves(), Is.True);
+            Assert.That(leaves.Canopy.GetComponentsInChildren<SpriteRenderer>(true).Length, Is.Zero,
+                "The leaf cards are replaced by a single mesh.");
+            var filter = leaves.Canopy.GetComponent<MeshFilter>();
+            Assert.That(filter, Is.Not.Null);
+            Assert.That(filter.sharedMesh.vertexCount, Is.GreaterThanOrEqualTo(cards * 3));
+            Assert.That(leaves.Canopy.GetComponent<MeshRenderer>().shadowCastingMode,
+                Is.EqualTo(UnityEngine.Rendering.ShadowCastingMode.Off));
+            Object.DestroyImmediate(filter.sharedMesh);
+        }
+        finally
+        {
+            Object.DestroyImmediate(tree);
         }
     }
 

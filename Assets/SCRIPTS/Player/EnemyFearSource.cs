@@ -15,6 +15,8 @@ public sealed class EnemyFearSource : MonoBehaviour
     public float maxDistance = 25f;
     [Range(0f, 1f)]
     public float intensity = 1f;
+    [Tooltip("Off: full panic (including the FOV shudder) by distance alone, even when the player looks away or a wall is in between.")]
+    public bool requireSight = true;
 
     [Header("Proximity (vignette + vertical lines only, no line of sight needed)")]
     [Min(0f), Tooltip("Full proximity panic at or inside this distance, even when the enemy is behind the player or a wall.")]

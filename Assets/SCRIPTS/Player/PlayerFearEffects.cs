@@ -115,6 +115,8 @@ public sealed class PlayerFearEffects : MonoBehaviour
 
         Bounds bounds = body.bounds;
         float strength = source.StrengthAtDistance(Vector3.Distance(viewCamera.transform.position, bounds.center));
+        if (!source.requireSight)
+            return strength;
         if (strength <= VisibleIntensity || !GeometryUtility.TestPlanesAABB(frustum, bounds))
             return 0f;
 

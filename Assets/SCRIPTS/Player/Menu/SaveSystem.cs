@@ -14,6 +14,8 @@ public sealed class PlayerSaveData
     public int health = PlayerHealth.MaxHealth;
     public string passive = string.Empty;
     public List<string> slots = new List<string>();
+    /// <summary>Remaining weapon uses per slot (0 = full / no durability; old saves have none).</summary>
+    public List<int> slotUses = new List<int>();
 }
 
 /// <summary>An item lying on the base floor.</summary>
@@ -22,6 +24,7 @@ public sealed class FloorItemSaveData
 {
     public string itemId;
     public Vector3 position;
+    public int uses;
 }
 
 /// <summary>Everything a save slot stores: the shared progress, every player's profile and the base floor items.</summary>

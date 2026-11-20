@@ -151,6 +151,10 @@ public sealed class RoundClockTests
         PlayerPersistence player = NetworkClient.localPlayer.GetComponent<PlayerPersistence>();
         PlayerHealth health = player.GetComponent<PlayerHealth>();
         health.TakeDamage(1);
+        var inventory = player.GetComponent<PlayerInventory>();
+        ItemDefinition mapKey = inventory.Catalog.GetKey("G9");
+        Assert.That(mapKey, Is.Not.Null);
+        Assert.That(inventory.ServerTryAdd(mapKey), Is.True);
 
         Assert.That(clock.InBase, Is.False, $"'{hub}' stands in for a map away from base.");
         yield return new WaitForSeconds(0.2f);
@@ -174,6 +178,7 @@ public sealed class RoundClockTests
         Assert.That(clock.InBase, Is.True);
         Assert.That(player.IsAboard, Is.False);
         Assert.That(health.CurrentHealth, Is.EqualTo(5), "Players who boarded keep their health.");
+        Assert.That(System.Array.IndexOf(inventory.SlotIds(), mapKey.Id), Is.EqualTo(-1), "Keys from the map are destroyed at base.");
         Assert.That(clock.Round, Is.EqualTo(2), "Meeting the quota starts a new round.");
         Assert.That(clock.Elapsed, Is.Zero, "The timer resets at base.");
         Assert.That(clock.Phase, Is.EqualTo(RoundPhase.Running));

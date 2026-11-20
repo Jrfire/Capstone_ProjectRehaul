@@ -418,14 +418,39 @@ public sealed class PlayerInventory : NetworkBehaviour
         return ids;
     }
 
+    /// <summary>Remaining durability per active slot, in slot order (0 for empty slots), for save files.</summary>
+    public int[] SlotUses()
+    {
+        var uses = new int[slots.Count];
+        for (int index = 0; index < slots.Count; index++)
+            uses[index] = GetDurability(index);
+        return uses;
+    }
+
+    /// <summary>Server: removes every key (keys belong to the map they were found on). Returns how many were removed.</summary>
+    public int ServerRemoveKeys()
+    {
+        if (!NetworkServer.active)
+            return 0;
+        int removed = 0;
+        for (int index = 0; index < slots.Count; index++)
+        {
+            ItemDefinition item = GetItem(index);
+            if (item != null && item.UseKind == ItemUseKind.Key && ServerRemove(index) != null)
+                removed++;
+        }
+        return removed;
+    }
+
     /// <summary>Raw passive item id (empty = none), for save files.</summary>
     public string PassiveItemId => passiveItem ?? string.Empty;
 
     /// <summary>
-    /// Server: replaces the inventory with saved ids, keeping each item in its slot. Ids missing from the catalog and
-    /// slots beyond the restored capacity are dropped.
+    /// Server: replaces the inventory with saved ids, keeping each item in its slot. Ids missing from the catalog, keys
+    /// and slots beyond the restored capacity are dropped. <paramref name="slotUses"/> restores weapon durability
+    /// (missing or 0 = full).
     /// </summary>
-    public void ServerRestore(string passiveId, IReadOnlyList<string> slotIds)
+    public void ServerRestore(string passiveId, IReadOnlyList<string> slotIds, IReadOnlyList<int> slotUses = null)
     {
         if (!NetworkServer.active)
             return;
@@ -442,10 +467,11 @@ public sealed class PlayerInventory : NetworkBehaviour
         for (int index = 0; index < Mathf.Min(slotIds.Count, Capacity); index++)
         {
             ItemDefinition item = Resolve(slotIds[index]);
-            if (item != null && item.Kind != ItemSlotKind.Passive)
+            if (item != null && item.Kind != ItemSlotKind.Passive && item.UseKind != ItemUseKind.Key)
             {
                 slots[index] = item.Id;
-                durability[index] = item.Durability;
+                int uses = slotUses != null && index < slotUses.Count ? slotUses[index] : 0;
+                durability[index] = uses > 0 ? Mathf.Min(uses, item.Durability) : item.Durability;
             }
         }
     }

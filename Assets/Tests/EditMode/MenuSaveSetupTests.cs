@@ -113,6 +113,36 @@ public sealed class MenuSaveSetupTests
     }
 
     [Test]
+    public void CameraBobbingIsOnTheOwnerCameraAndInSettings()
+    {
+        GameObject player = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/PREFABS/NetworkPlayer.prefab");
+        PlayerCameraBob bob = player.GetComponentInChildren<PlayerCameraBob>(true);
+        Assert.That(bob, Is.Not.Null);
+        Assert.That(bob.GetComponent<Camera>(), Is.Not.Null);
+        var settings = new SerializedObject(AssetDatabase.LoadAssetAtPath<GameObject>(SettingsPath).GetComponent<SettingsPanel>());
+        Assert.That(settings.FindProperty("cameraBobToggle").objectReferenceValue, Is.Not.Null);
+        Assert.That(PlayerCameraBob.Offset(0f, 1f, 0.5f), Is.EqualTo(Vector3.zero));
+        Assert.That(PlayerCameraBob.Offset(Mathf.PI / 2f, 1f, 0.5f).y, Is.EqualTo(-1f).Within(0.0001f));
+    }
+
+    [Test]
+    public void PixelationLevelGrowsAsPixelHeightShrinksAndRoundTrips()
+    {
+        Assert.That(GameSettings.PixelHeightForLevel(0), Is.EqualTo(GameSettings.MaxPixelHeight), "Level 0 is the finest.");
+        Assert.That(GameSettings.PixelHeightForLevel(GameSettings.MaxPixelationLevel), Is.EqualTo(GameSettings.MinPixelHeight));
+        Assert.That(GameSettings.MinPixelHeight, Is.LessThan(60), "Coarser than the old minimum.");
+        Assert.That(GameSettings.MaxPixelHeight, Is.GreaterThan(170), "Finer than the old maximum.");
+        int previous = int.MaxValue;
+        for (int level = 0; level <= GameSettings.MaxPixelationLevel; level++)
+        {
+            int height = GameSettings.PixelHeightForLevel(level);
+            Assert.That(height, Is.LessThanOrEqualTo(previous), "Higher levels pixelate more.");
+            Assert.That(GameSettings.PixelationLevelForHeight(height), Is.EqualTo(level), $"Level {level} round trips.");
+            previous = height;
+        }
+    }
+
+    [Test]
     public void SettingsAndPauseMenuPrefabsAreWired()
     {
         GameObject settingsPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(SettingsPath);

@@ -48,10 +48,12 @@ public sealed class SettingsPanel : MonoBehaviour
 
     [Header("Graphics")]
     [SerializeField] private Dropdown resolutionDropdown;
-    [SerializeField] private Slider pixelSlider;
+    [SerializeField, Tooltip("Pixelation level slider: higher = bigger pixels (lower world pixel height).")]
+    private Slider pixelSlider;
     [SerializeField] private Text pixelValueText;
     [SerializeField] private Slider brightnessSlider;
     [SerializeField] private Text brightnessValueText;
+    [SerializeField] private Toggle cameraBobToggle;
 
     private sealed class BindingRow
     {
@@ -174,14 +176,16 @@ public sealed class SettingsPanel : MonoBehaviour
         if (pixelSlider != null)
         {
             pixelSlider.wholeNumbers = true;
-            pixelSlider.minValue = GameSettings.MinPixelHeight;
-            pixelSlider.maxValue = GameSettings.MaxPixelHeight;
+            pixelSlider.minValue = 0;
+            pixelSlider.maxValue = GameSettings.MaxPixelationLevel;
             pixelSlider.onValueChanged.AddListener(value =>
             {
-                GameSettings.PixelHeight = Mathf.RoundToInt(value);
+                GameSettings.PixelHeight = GameSettings.PixelHeightForLevel(value);
                 RefreshGraphicsTexts();
             });
         }
+        if (cameraBobToggle != null)
+            cameraBobToggle.onValueChanged.AddListener(value => GameSettings.CameraBob = value);
         if (brightnessSlider != null)
         {
             brightnessSlider.wholeNumbers = false;
@@ -223,8 +227,10 @@ public sealed class SettingsPanel : MonoBehaviour
         SetSlider(musicSlider, GameSettings.GetVolume(AudioChannel.Music));
         SetSlider(uiSlider, GameSettings.GetVolume(AudioChannel.UI));
         SetSlider(jumpscareSlider, GameSettings.GetVolume(AudioChannel.Jumpscare));
-        SetSlider(pixelSlider, GameSettings.PixelHeight);
+        SetSlider(pixelSlider, GameSettings.PixelationLevelForHeight(GameSettings.PixelHeight));
         SetSlider(brightnessSlider, GameSettings.Brightness);
+        if (cameraBobToggle != null)
+            cameraBobToggle.SetIsOnWithoutNotify(GameSettings.CameraBob);
         if (resolutionDropdown != null)
         {
             int index = resolutions.IndexOf(GameSettings.Resolution);
@@ -299,7 +305,7 @@ public sealed class SettingsPanel : MonoBehaviour
     private void RefreshGraphicsTexts()
     {
         if (pixelValueText != null)
-            pixelValueText.text = GameSettings.PixelHeight.ToString();
+            pixelValueText.text = GameSettings.PixelationLevelForHeight(GameSettings.PixelHeight).ToString();
         if (brightnessValueText != null)
         {
             float brightness = GameSettings.Brightness;

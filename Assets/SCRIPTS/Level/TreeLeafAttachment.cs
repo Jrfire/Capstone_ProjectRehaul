@@ -4,7 +4,8 @@ using UnityEngine;
 /// <summary>
 /// Dresses a bare (dead-branch) tree with a leaf sprite: crossed, static leaf cards are placed at seeded points sampled
 /// from the upper part of the tree's own mesh, so the leaves sit on the branches. Use the context menu
-/// <b>Regenerate Leaves</b> (prefabs are baked in the Editor; the cards are plain child SpriteRenderers, no runtime cost).
+/// <b>Regenerate Leaves</b> (prefabs are baked in the Editor as child SpriteRenderers; in Play Mode they are merged
+/// into one mesh per tree for performance).
 /// </summary>
 [DisallowMultipleComponent]
 public sealed class TreeLeafAttachment : MonoBehaviour
@@ -27,9 +28,15 @@ public sealed class TreeLeafAttachment : MonoBehaviour
     [SerializeField] private int seed = 1;
     [SerializeField, Tooltip("Generate at Awake when no baked leaves exist (needs a Read/Write enabled mesh in builds).")]
     private bool generateIfMissing;
+    [SerializeField, Tooltip("In Play Mode the baked leaf cards are merged into one mesh drawn with this material " +
+        "(Capstone/Leaf Cutout; its texture is set from the leaf sprite). Empty = keep the individual cards.")]
+    private Material combinedMaterial;
+
+    private static readonly Dictionary<(Material, Texture), Material> RuntimeMaterials = new Dictionary<(Material, Texture), Material>();
 
     public Sprite LeafSprite { get => leafSprite; set => leafSprite = value; }
     public Material LeafMaterial { get => leafMaterial; set => leafMaterial = value; }
+    public Material CombinedMaterial { get => combinedMaterial; set => combinedMaterial = value; }
     public int Clusters { get => clusters; set => clusters = Mathf.Max(1, value); }
     public int Seed { get => seed; set => seed = value; }
     public Transform Canopy => transform.Find(CanopyName);
@@ -38,6 +45,103 @@ public sealed class TreeLeafAttachment : MonoBehaviour
     {
         if (generateIfMissing && Canopy == null)
             RegenerateLeaves();
+        if (Application.isPlaying)
+            CombineLeaves();
+    }
+
+    /// <summary>
+    /// Merges every leaf card under the canopy into one mesh renderer (one draw call per tree instead of one per card)
+    /// and removes the cards. Returns false when nothing was combined.
+    /// </summary>
+    public bool CombineLeaves()
+    {
+        Transform canopy = Canopy;
+        if (canopy == null || combinedMaterial == null)
+            return false;
+        SpriteRenderer[] cards = canopy.GetComponentsInChildren<SpriteRenderer>(true);
+        if (cards.Length == 0)
+            return false;
+
+        var vertices = new List<Vector3>();
+        var uvs = new List<Vector2>();
+        var colors = new List<Color>();
+        var triangles = new List<int>();
+        Texture texture = null;
+        Matrix4x4 toCanopy = canopy.worldToLocalMatrix;
+        foreach (SpriteRenderer card in cards)
+        {
+            Sprite sprite = card.sprite;
+            if (sprite == null || !card.enabled || !card.gameObject.activeInHierarchy)
+                continue;
+            if (texture == null)
+                texture = sprite.texture;
+            if (sprite.texture != texture)
+                continue;
+            Matrix4x4 matrix = toCanopy * card.transform.localToWorldMatrix;
+            int start = vertices.Count;
+            Vector2[] spriteVertices = sprite.vertices;
+            Vector2[] spriteUvs = sprite.uv;
+            Color color = card.color;
+            for (int index = 0; index < spriteVertices.Length; index++)
+            {
+                Vector2 vertex = spriteVertices[index];
+                if (card.flipX)
+                    vertex.x = -vertex.x;
+                if (card.flipY)
+                    vertex.y = -vertex.y;
+                vertices.Add(matrix.MultiplyPoint3x4(vertex));
+                uvs.Add(spriteUvs[index]);
+                colors.Add(color);
+            }
+            foreach (ushort triangle in sprite.triangles)
+                triangles.Add(start + triangle);
+        }
+        if (triangles.Count == 0 || texture == null)
+            return false;
+
+        var mesh = new Mesh { name = "Leaves (Combined)" };
+        if (vertices.Count > 65535)
+            mesh.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
+        mesh.SetVertices(vertices);
+        mesh.SetUVs(0, uvs);
+        mesh.SetColors(colors);
+        mesh.SetTriangles(triangles, 0);
+        mesh.RecalculateBounds();
+
+        for (int index = canopy.childCount - 1; index >= 0; index--)
+        {
+            GameObject child = canopy.GetChild(index).gameObject;
+            child.SetActive(false);
+            if (Application.isPlaying)
+                Destroy(child);
+            else
+                DestroyImmediate(child);
+        }
+        canopy.gameObject.AddComponent<MeshFilter>().sharedMesh = mesh;
+        var renderer = canopy.gameObject.AddComponent<MeshRenderer>();
+        renderer.sharedMaterial = RuntimeMaterial(combinedMaterial, texture);
+        renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+        renderer.receiveShadows = false;
+        renderer.lightProbeUsage = UnityEngine.Rendering.LightProbeUsage.Off;
+        renderer.reflectionProbeUsage = UnityEngine.Rendering.ReflectionProbeUsage.Off;
+        return true;
+    }
+
+    private static Material RuntimeMaterial(Material template, Texture texture)
+    {
+        if (RuntimeMaterials.TryGetValue((template, texture), out Material material) && material != null)
+            return material;
+        material = new Material(template) { name = $"{template.name} ({texture.name})", mainTexture = texture };
+        RuntimeMaterials[(template, texture)] = material;
+        return material;
+    }
+
+    private void OnDestroy()
+    {
+        Transform canopy = Canopy;
+        if (Application.isPlaying && canopy != null && canopy.TryGetComponent(out MeshFilter filter) && filter.sharedMesh != null &&
+            filter.sharedMesh.name == "Leaves (Combined)")
+            Destroy(filter.sharedMesh);
     }
 
     [ContextMenu("Regenerate Leaves")]

@@ -165,7 +165,7 @@ public sealed class GameSaveManager : MonoBehaviour
         if (profile.health > 0 && player.TryGetComponent(out PlayerHealth health))
             health.SetHealth(profile.health);
         if (player.TryGetComponent(out PlayerInventory inventory))
-            inventory.ServerRestore(profile.passive, profile.slots);
+            inventory.ServerRestore(profile.passive, profile.slots, profile.slotUses);
     }
 
     /// <summary>Server: remembers a leaving player's profile (written to disk with the next base save).</summary>
@@ -191,6 +191,16 @@ public sealed class GameSaveManager : MonoBehaviour
         {
             profile.passive = inventory.PassiveItemId;
             profile.slots = new List<string>(inventory.SlotIds());
+            profile.slotUses = new List<int>(inventory.SlotUses());
+            for (int index = 0; index < profile.slots.Count; index++)
+            {
+                ItemDefinition item = inventory.GetItem(index);
+                if (item != null && item.UseKind == ItemUseKind.Key)
+                {
+                    profile.slots[index] = string.Empty;
+                    profile.slotUses[index] = 0;
+                }
+            }
         }
         profiles[key] = profile;
     }
@@ -256,8 +266,8 @@ public sealed class GameSaveManager : MonoBehaviour
         var items = new List<FloorItemSaveData>();
         foreach (ItemPickup pickup in ItemPickup.Active)
         {
-            if (pickup != null && !pickup.Collected && pickup.Item != null)
-                items.Add(new FloorItemSaveData { itemId = pickup.ItemId, position = pickup.transform.position });
+            if (pickup != null && !pickup.Collected && pickup.Item != null && pickup.Item.UseKind != ItemUseKind.Key)
+                items.Add(new FloorItemSaveData { itemId = pickup.ItemId, position = pickup.transform.position, uses = pickup.Uses });
         }
         return items;
     }
@@ -269,8 +279,8 @@ public sealed class GameSaveManager : MonoBehaviour
         foreach (FloorItemSaveData item in items)
         {
             ItemDefinition definition = item != null ? itemPickupPrefab.Catalog.Find(item.itemId) : null;
-            if (definition != null)
-                ItemPickup.ServerSpawn(itemPickupPrefab, definition, item.position);
+            if (definition != null && definition.UseKind != ItemUseKind.Key)
+                ItemPickup.ServerSpawn(itemPickupPrefab, definition, item.position, item.uses);
         }
     }
 
